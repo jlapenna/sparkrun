@@ -309,7 +309,7 @@ metadata:
 |-------|---------|
 | `description` | Human-readable summary shown in `sparkrun list` and `sparkrun show`. Also accepted as a top-level key (takes precedence over `metadata.description`). |
 | `maintainer` | Contact info for the recipe author. |
-| `name` | Override the recipe display name (defaults to filename stem) — (not currently implemented — recipe name always uses the filename stem). |
+| `name` | Reserved for future use. Recipe display name currently always uses the filename stem. |
 
 ##### VRAM estimation fields
 
