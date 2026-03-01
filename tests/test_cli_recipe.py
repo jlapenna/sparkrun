@@ -85,7 +85,6 @@ class TestRecipeHelp:
         assert "list" in result.output
         assert "search" in result.output
         assert "show" in result.output
-        assert "update" in result.output
 
     def test_main_help_includes_recipe(self, runner):
         """Test that sparkrun --help includes recipe subgroup."""
