@@ -142,8 +142,12 @@ class LlamaBenchyFramework(BenchmarkingPlugin):
         def _len(v: Any) -> int:
             return len(v) if isinstance(v, list) else 1
 
-        combos = _len(pp) * _len(tg) * _len(depth) * _len(concurrency)
-        return combos * int(runs) if combos > 0 else None
+        # noinspection PyBroadException
+        try:
+            combos = _len(pp) * _len(tg) * _len(depth) * _len(concurrency)
+            return combos * int(runs) if combos > 0 else None
+        except:
+            return None
 
     def parse_results(self, stdout: str, stderr: str, result_file: str | None = None) -> dict[str, Any]:
         """Parse llama-benchy JSON output into structured results.
