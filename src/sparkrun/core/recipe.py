@@ -603,6 +603,9 @@ class Recipe:
         if self.command:
             d["command"] = self.command
 
+        # TODO: consider if we include embedded benchmarks in export or not!
+        #       (currently we do not)
+
         return d
 
     def export(self, path: Optional[str | Path]) -> Optional[str]:
