@@ -37,7 +37,7 @@ _KNOWN_KEYS = {
     "runtime", "runtime_version", "mode", "min_nodes", "max_nodes",
     "container", "defaults", "env", "command", "runtime_config",
     "cluster_only", "solo_only",
-    "metadata",
+    "benchmark", "metadata",
 }
 
 
