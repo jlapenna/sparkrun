@@ -108,6 +108,7 @@ def _run_benchmark(
         build_ssh_kwargs,
         detect_host_ip,
         find_available_port,
+        wait_for_healthy,
         wait_for_port,
     )
 
@@ -455,6 +456,20 @@ def _run_benchmark(
             )
             if not ready:
                 click.echo("Error: inference server did not become ready", err=True)
+                if launched and not no_stop:
+                    _stop_inference(runtime, host_list, cluster_id, config, dry_run)
+                sys.exit(1)
+
+            # Port is open — now confirm server is available.
+            # Some inference servers (e.g., llama.cpp) bind the port immediately but
+            # only return HTTP 200 on /v1/models once the model is loaded.
+            health_url = "http://%s:%d/v1/models" % (target_ip, serve_port)
+            click.echo("Waiting for model to finish loading (%s)..." % health_url)
+            healthy = wait_for_healthy(
+                health_url, max_retries=360, retry_interval=5, dry_run=dry_run,
+            )
+            if not healthy:
+                click.echo("Error: inference server health check timed out", err=True)
                 if launched and not no_stop:
                     _stop_inference(runtime, host_list, cluster_id, config, dry_run)
                 sys.exit(1)

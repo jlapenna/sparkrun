@@ -97,17 +97,26 @@ class LlamaCppRuntime(RuntimePlugin):
         """
         tp = config.get("tensor_parallel")
         pp = config.get("pipeline_parallel")
+
         if tp is not None and pp is not None:
-            raise ValueError(
-                "llama.cpp does not support tensor_parallel and pipeline_parallel "
-                "simultaneously; use --tp for row splitting or --pp for layer "
-                "splitting, not both"
-            )
-        if tp is not None:
-            return "row"
-        if pp is not None:
+            tp_val, pp_val = int(tp), int(pp)
+            # Both > 1 is genuinely mutually exclusive
+            if tp_val > 1 and pp_val > 1:
+                raise ValueError(
+                    "llama.cpp does not support tensor_parallel and pipeline_parallel "
+                    "simultaneously; use --tp for row splitting or --pp for layer "
+                    "splitting, not both"
+                )
+            # One > 1 and the other == 1: the 1 is a no-op, use the active one
+            if tp_val > 1:
+                return "row"
+            # pp > 1, or both are 1 — layer is the default
             return "layer"
-        return None
+
+        if tp is not None and int(tp) > 1:
+            return "row"
+        # pp set, or neither set — default to layer
+        return "layer"
 
     def compute_required_nodes(self, recipe, overrides=None):
         """Compute required nodes from TP or PP (mutually exclusive).
@@ -127,6 +136,16 @@ class LlamaCppRuntime(RuntimePlugin):
 
         tp = config.get("tensor_parallel")
         pp = config.get("pipeline_parallel")
+
+        if tp is not None and pp is not None:
+            # Both set — use whichever is > 1; if both are 1, return 1
+            tp_val, pp_val = int(tp), int(pp)
+            if tp_val > 1:
+                return tp_val
+            if pp_val > 1:
+                return pp_val
+            return 1
+
         if tp is not None:
             return int(tp)
         if pp is not None:
@@ -158,6 +177,20 @@ class LlamaCppRuntime(RuntimePlugin):
         TP/PP parallelism settings are resolved into ``--split-mode``
         automatically (row for TP, layer for PP).
         """
+        # Translate max_model_len → ctx_size so the cross-runtime CLI flag
+        # works transparently (vLLM/SGLang use max_model_len, llama.cpp uses ctx_size).
+        # This covers both CLI overrides and recipe defaults, and applies to
+        # both template-rendered and structured command paths.
+        if "ctx_size" not in overrides:
+            if "max_model_len" in overrides:
+                overrides = {**overrides, "ctx_size": overrides["max_model_len"]}
+            else:
+                # Check recipe defaults for max_model_len
+                config = recipe.build_config_chain(overrides)
+                max_model_len = config.get("max_model_len")
+                if max_model_len is not None and config.get("ctx_size") is None:
+                    overrides = {**overrides, "ctx_size": max_model_len}
+
         config = recipe.build_config_chain(overrides)
         split_mode = self._resolve_split_mode(config)
         gguf_path = config.get("_gguf_model_path")
@@ -240,7 +273,9 @@ class LlamaCppRuntime(RuntimePlugin):
         """Validate llama.cpp-specific recipe fields."""
         issues = super().validate_recipe(recipe)
         defaults = recipe.defaults or {}
-        if defaults.get("tensor_parallel") and defaults.get("pipeline_parallel"):
+        tp = defaults.get("tensor_parallel")
+        pp = defaults.get("pipeline_parallel")
+        if tp and pp and int(tp) > 1 and int(pp) > 1:
             issues.append(
                 "[llama-cpp] tensor_parallel and pipeline_parallel are mutually "
                 "exclusive; use one for --split-mode row (TP) or layer (PP), not both"

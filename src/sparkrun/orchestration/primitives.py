@@ -75,12 +75,12 @@ def build_volumes(
 # ---------------------------------------------------------------------------
 
 def sync_resource_to_hosts(
-    script: str,
-    hosts: list[str],
-    resource_label: str,
-    ssh_user: str | None = None,
-    ssh_key: str | None = None,
-    dry_run: bool = False,
+        script: str,
+        hosts: list[str],
+        resource_label: str,
+        ssh_user: str | None = None,
+        ssh_key: str | None = None,
+        dry_run: bool = False,
 ) -> list[str]:
     """Run a sync script on all hosts in parallel and return failures.
 
@@ -113,9 +113,9 @@ def sync_resource_to_hosts(
 
 
 def map_transfer_failures(
-    results: list[RemoteResult],
-    transfer_hosts: list[str],
-    management_hosts: list[str],
+        results: list[RemoteResult],
+        transfer_hosts: list[str],
+        management_hosts: list[str],
 ) -> list[str]:
     """Map failed transfer-host results back to management hostnames.
 
@@ -494,6 +494,72 @@ def wait_for_port(
             logger.info(
                 "  Still waiting for port %d (%ds elapsed)...",
                 port, attempt * retry_interval,
+            )
+        time.sleep(retry_interval)
+
+    return False
+
+
+def wait_for_healthy(
+        url: str,
+        max_retries: int = 120,
+        retry_interval: int = 5,
+        dry_run: bool = False,
+        max_consecutive_refused=2,
+) -> bool:
+    """Poll an HTTP endpoint until it returns 200.
+
+    Inference servers (vLLM, SGLang, llama-server) bind their port
+    immediately on startup but only return HTTP 200 on ``/v1/models``
+    once the model is fully loaded and the server is ready to serve
+    requests.
+
+    Args:
+        url: Full URL to poll (e.g. ``http://host:port/v1/models``).
+        max_retries: Maximum number of retries.
+        retry_interval: Seconds between retries.
+        dry_run: Skip waiting in dry-run mode.
+        max_consecutive_refused: Maximum number of consecutive refused connections before giving up.
+
+    Returns:
+        True if the endpoint returned 200, False if timed out.
+    """
+    if dry_run:
+        return True
+
+    import urllib.request
+    import urllib.error
+
+    consecutive_refused = 0
+    for attempt in range(1, max_retries + 1):
+        try:
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    logger.info(
+                        "  Health check passed after %ds",
+                        attempt * retry_interval,
+                    )
+                    return True
+            # Got a response but not 200 — server is alive, reset counter
+            consecutive_refused = 0
+        except urllib.error.HTTPError:
+            # Server responded with an error status — alive but not ready
+            consecutive_refused = 0
+        except (urllib.error.URLError, OSError):
+            # Connection refused / unreachable — port may have closed
+            consecutive_refused += 1
+            if consecutive_refused >= max_consecutive_refused:
+                logger.error(
+                    "  Server appears to have died (%d consecutive connection failures)",
+                    consecutive_refused,
+                )
+                return False
+
+        if attempt % 12 == 0:
+            logger.info(
+                "  Still waiting for server to be ready (%ds elapsed)...",
+                attempt * retry_interval,
             )
         time.sleep(retry_interval)
 
