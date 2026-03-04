@@ -98,21 +98,25 @@ class LlamaCppRuntime(RuntimePlugin):
         tp = config.get("tensor_parallel")
         pp = config.get("pipeline_parallel")
 
-        # Treat a value of 1 as "not set" — single-node is the default.
-        tp_active = tp is not None and int(tp) > 1
-        pp_active = pp is not None and int(pp) > 1
-
-        if tp_active and pp_active:
-            raise ValueError(
-                "llama.cpp does not support tensor_parallel and pipeline_parallel "
-                "simultaneously; use --tp for row splitting or --pp for layer "
-                "splitting, not both"
-            )
-        if tp_active:
-            return "row"
-        if pp_active:
+        if tp is not None and pp is not None:
+            tp_val, pp_val = int(tp), int(pp)
+            # Both > 1 is genuinely mutually exclusive
+            if tp_val > 1 and pp_val > 1:
+                raise ValueError(
+                    "llama.cpp does not support tensor_parallel and pipeline_parallel "
+                    "simultaneously; use --tp for row splitting or --pp for layer "
+                    "splitting, not both"
+                )
+            # One > 1 and the other == 1: the 1 is a no-op, use the active one
+            if tp_val > 1:
+                return "row"
+            # pp > 1, or both are 1 — layer is the default
             return "layer"
-        return None
+
+        if tp is not None and int(tp) > 1:
+            return "row"
+        # pp set, or neither set — default to layer
+        return "layer"
 
     def compute_required_nodes(self, recipe, overrides=None):
         """Compute required nodes from TP or PP (mutually exclusive).
@@ -132,10 +136,19 @@ class LlamaCppRuntime(RuntimePlugin):
 
         tp = config.get("tensor_parallel")
         pp = config.get("pipeline_parallel")
-        # Only count values > 1 as meaningful parallelism
-        if tp is not None and int(tp) > 1:
+
+        if tp is not None and pp is not None:
+            # Both set — use whichever is > 1; if both are 1, return 1
+            tp_val, pp_val = int(tp), int(pp)
+            if tp_val > 1:
+                return tp_val
+            if pp_val > 1:
+                return pp_val
+            return 1
+
+        if tp is not None:
             return int(tp)
-        if pp is not None and int(pp) > 1:
+        if pp is not None:
             return int(pp)
         return None
 
