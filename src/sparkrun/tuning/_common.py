@@ -162,6 +162,7 @@ class BaseTuner:
                 rc = self._clone_benchmarks()
                 if rc != 0:
                     return rc
+                self._apply_patches()
             else:
                 logger.info("Step 2/5: Skipping clone (--skip-clone)")
 
@@ -384,6 +385,13 @@ class BaseTuner:
             )
 
         return version
+
+    def _apply_patches(self) -> None:
+        """Apply post-clone patches to benchmark scripts.
+
+        Called after cloning benchmark scripts into the container.
+        Subclasses override to fix known upstream issues.
+        """
 
     def _pre_check_tp(self, tp_size: int, triton_version: str) -> bool:
         """Check if tuning configs already exist for this TP size.
