@@ -197,7 +197,7 @@ def run(
 
     # Derive deterministic cluster_id from recipe + (trimmed) hosts
     from sparkrun.orchestration.job_metadata import generate_cluster_id, save_job_metadata
-    cluster_id = generate_cluster_id(recipe, host_list)
+    cluster_id = generate_cluster_id(recipe, host_list, overrides=overrides)
 
     # Cache job metadata for later lookup by cluster status
     if not dry_run:
