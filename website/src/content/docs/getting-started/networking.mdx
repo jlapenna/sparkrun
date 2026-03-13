@@ -335,10 +335,10 @@ The control machine distributes directly to all hosts over the high-speed CX-7 n
 └──────┬──────┘
       │ CX-7 (up to 200 Gbps)
       ├────────────────┐
-      ▼                ▼
+      ▼               ▼
 ┌─────────────┐  ┌─────────────┐
-│    Head     │  │   Worker    │
-│  (Spark 1)  │  │  (Spark 2)  │
+│    Head    │  │   Worker   │
+│  (Spark 1) │  │  (Spark 2) │
 └─────────────┘  └─────────────┘
 ```
 
@@ -352,14 +352,14 @@ The control machine pushes resources to the head node over the management networ
 │   Machine  │ ◀───▶ Internet
 │ (external) │       (registry/HF)
 └──────┬──────┘
-       │ Management (10 Gbps)
-       ▼
+      │ Management (up to 10 Gbps)
+      ▼
 ┌─────────────┐
 │    Head    │
 │  (Spark 1) │
 └──────┬──────┘
-       │ CX-7 (up to 200 Gbps)
-       ▼
+      │ CX-7 (up to 200 Gbps)
+      ▼
 ┌─────────────┐
 │   Worker   │
 │  (Spark 2) │
@@ -373,14 +373,14 @@ The head node downloads resources directly (e.g., pulls the container image from
 ```
 ┌─────────────┐
 │   Control  │
-│   Machine  │─── SSH only (orchestration) ──┐
+│   Machine  │─── SSH only (orchestration) ───┐
 │ (external) │                               │
 └─────────────┘                               │
-                                              ▼
-                                       ┌─────────────┐         ┌─────────────┐
-                       Internet ◀────▶│    Head     │ ──────▶ │   Worker    │
-                       (registry/HF)   │  (Spark 1) │  CX-7   │  (Spark 2)  │
-                                       └─────────────┘         └─────────────┘
+                                             ▼
+                                        ┌─────────────┐         ┌─────────────┐
+                       Internet <────>  │    Head    │ ──────>  │   Worker   │
+                       (registry/HF)    │  (Spark 1) │  CX-7   │  (Spark 2) │
+                                        └─────────────┘         └─────────────┘
 ```
 
 ### When to use each mode
