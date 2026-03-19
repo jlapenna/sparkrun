@@ -1339,6 +1339,7 @@ class TestSetupSshCommand:
                 "--hosts", "10.0.0.1,10.0.0.2",
                 "--user", "testuser",
                 "--no-include-self",
+                "--no-discover-ips",
             ])
 
             assert result.exit_code == 0
@@ -1475,6 +1476,120 @@ class TestSetupSshCommand:
         # 10.0.0.1 should appear only once
         assert cmd_line.count("10.0.0.1") == 1
         assert "10.0.0.3" in result.output
+
+    def test_setup_ssh_resolves_loopback(self, runner, tmp_path, monkeypatch):
+        """Test that 127.0.0.1 in host list gets resolved to routable IP."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        with mock.patch("sparkrun.orchestration.primitives.local_ip_for", return_value="192.168.1.100"):
+            result = runner.invoke(main, [
+                "setup", "ssh",
+                "--hosts", "127.0.0.1,10.0.0.2",
+                "--user", "testuser",
+                "--no-include-self",
+                "--dry-run",
+            ])
+        assert result.exit_code == 0
+        assert "Resolved 127.0.0.1 -> 192.168.1.100" in result.output
+        assert "192.168.1.100" in result.output
+        # 127.0.0.1 should NOT appear in the command
+        cmd_line = result.output.split("Would run:\n")[-1].strip()
+        assert "127.0.0.1" not in cmd_line
+
+    def test_setup_ssh_discover_ips_flag_in_help(self, runner):
+        """Test that --discover-ips appears in help."""
+        result = runner.invoke(main, ["setup", "ssh", "--help"])
+        assert result.exit_code == 0
+        assert "--discover-ips" in result.output
+
+    def test_setup_ssh_no_discover_ips(self, runner, tmp_path, monkeypatch):
+        """Test that Phase 2 is skipped with --no-discover-ips."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        with mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)):
+            result = runner.invoke(main, [
+                "setup", "ssh",
+                "--hosts", "10.0.0.1,10.0.0.2",
+                "--user", "testuser",
+                "--no-include-self",
+                "--no-discover-ips",
+            ])
+        assert result.exit_code == 0
+        assert "Discovering additional" not in result.output
+
+    def test_setup_ssh_dry_run_skips_discovery(self, runner, tmp_path, monkeypatch):
+        """Test that dry-run notes Phase 2 would run but doesn't execute it."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        result = runner.invoke(main, [
+            "setup", "ssh",
+            "--hosts", "10.0.0.1,10.0.0.2",
+            "--user", "testuser",
+            "--no-include-self",
+            "--dry-run",
+        ])
+        assert result.exit_code == 0
+        assert "Phase 2" in result.output
+        assert "Discovering additional" not in result.output
+
+    def test_setup_ssh_phase2_discovers_and_distributes(self, runner, tmp_path, monkeypatch):
+        """Test full Phase 2 flow: mesh success -> discover -> distribute."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        from sparkrun.orchestration.ssh import RemoteResult
+
+        mock_ks_results = [
+            RemoteResult(host="10.0.0.1", returncode=0, stdout="KEYSCAN_ADDED=2", stderr=""),
+            RemoteResult(host="10.0.0.2", returncode=0, stdout="KEYSCAN_ADDED=2", stderr=""),
+        ]
+
+        with (
+            mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)),
+            mock.patch(
+                "sparkrun.orchestration.networking.discover_host_network_ips",
+                return_value={"10.0.0.1": ["192.168.11.1"], "10.0.0.2": ["192.168.11.2"]},
+            ),
+            mock.patch(
+                "sparkrun.orchestration.primitives.check_tcp_reachability",
+                return_value={"192.168.11.1": True, "192.168.11.2": False},
+            ),
+            mock.patch(
+                "sparkrun.orchestration.networking.distribute_host_keys",
+                return_value=mock_ks_results,
+            ) as mock_dist,
+        ):
+            result = runner.invoke(main, [
+                "setup", "ssh",
+                "--hosts", "10.0.0.1,10.0.0.2",
+                "--user", "testuser",
+                "--no-include-self",
+                "--discover-ips",
+            ])
+
+        assert result.exit_code == 0
+        assert "Discovering additional" in result.output
+        assert "192.168.11.1" in result.output
+        assert "192.168.11.2" in result.output
+        assert "Reachable" in result.output
+        assert "Not reachable" in result.output
+        assert "Distributing host keys" in result.output
+        # distribute_host_keys should have been called with all discovered IPs
+        mock_dist.assert_called_once()
+        call_ips = mock_dist.call_args[0][0]
+        assert "192.168.11.1" in call_ips
+        assert "192.168.11.2" in call_ips
 
 
 class TestSetupFixPermissions:
