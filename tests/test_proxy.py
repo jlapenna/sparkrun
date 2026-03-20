@@ -84,6 +84,7 @@ def _make_recipe(name="test", model="Qwen/Qwen3-1.7B", runtime="vllm", defaults=
     """Create a mock Recipe object for testing."""
     recipe = MagicMock()
     recipe.name = name
+    recipe.qualified_name = name
     recipe.model = model
     recipe.runtime = runtime
     recipe.defaults = defaults or {}

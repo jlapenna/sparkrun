@@ -6,7 +6,7 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING
 
-from sparkrun.core.hosts import is_local_host
+from sparkrun.core.hosts import is_control_in_cluster, is_local_host
 
 if TYPE_CHECKING:
     from sparkrun.core.config import SparkrunConfig
@@ -187,9 +187,11 @@ def distribute_resources(
     determined by *transfer_mode*.
 
     Transfer modes:
-        - ``auto`` (default): Auto-detect based on IB connectivity.
-          Resolves to ``local`` when the control node can reach cluster
-          IB IPs, otherwise falls back to ``push``.
+        - ``auto`` (default): Auto-detect based on cluster membership
+          and IB connectivity.  Resolves to ``local`` when the control
+          node is a cluster member or can reach cluster IB IPs,
+          otherwise falls back to ``delegated`` (with ``push`` as
+          secondary fallback on failure).
         - ``local``: Control node distributes directly to all hosts.
           Uses IB network for transfers when reachable from the control node.
         - ``push``: Control node pushes to head over management network,
@@ -270,13 +272,19 @@ def distribute_resources(
             ib_result.ib_ip_map, ssh_kwargs=ssh_kwargs, dry_run=dry_run,
         )
 
+    _auto_delegated = False
     if transfer_mode == "auto":
-        if _ib_validated:
+        _in_cluster = is_control_in_cluster(host_list)
+        if _in_cluster or _ib_validated:
             transfer_mode = "local"
-            logger.info("Auto-detected transfer mode: local (IB reachable from control node)")
+            if _in_cluster:
+                logger.info("Auto-detected transfer mode: local (control is cluster member)")
+            else:
+                logger.info("Auto-detected transfer mode: local (IB reachable from control node)")
         else:
-            transfer_mode = "push"
-            logger.info("Auto-detected transfer mode: push (no IB connectivity from control node)")
+            transfer_mode = "delegated"
+            _auto_delegated = True
+            logger.info("Auto-detected transfer mode: delegated (external control, no IB connectivity)")
 
     if transfer_mode == "local":
         # Local mode: use validated IB IPs for direct transfers
@@ -323,6 +331,13 @@ def distribute_resources(
                 worker_transfer_hosts=worker_transfer_hosts,
                 dry_run=dry_run, **ssh_kwargs,
             )
+            if img_failed and _auto_delegated:
+                logger.info("Delegated image distribution failed, falling back to push mode")
+                img_failed = _distribute_image_push(
+                    image, host_list,
+                    worker_transfer_hosts=worker_transfer_hosts,
+                    ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+                )
         else:
             logger.warning("Unknown transfer_mode '%s', falling back to local", transfer_mode)
             img_failed = distribute_image_from_local(
@@ -362,6 +377,16 @@ def distribute_resources(
                     worker_transfer_hosts=worker_transfer_hosts,
                     dry_run=dry_run, **ssh_kwargs,
                 )
+                if mdl_failed and _auto_delegated:
+                    logger.info("Delegated model distribution failed, falling back to push mode")
+                    mdl_failed = _distribute_model_push(
+                        model, host_list,
+                        cache_dir=cache_dir,
+                        worker_transfer_hosts=worker_transfer_hosts,
+                        ssh_kwargs=ssh_kwargs,
+                        model_revision=model_revision,
+                        dry_run=dry_run,
+                    )
             else:
                 mdl_failed = distribute_model_from_local(
                     model, host_list,
