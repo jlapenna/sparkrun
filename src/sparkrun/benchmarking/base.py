@@ -199,6 +199,7 @@ def export_results(
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "recipe": {
                 "name": recipe.name,
+                "qualified_name": recipe.qualified_name,
                 "type": "sparkrun",
                 "model": recipe.model,
                 "container": recipe.container,

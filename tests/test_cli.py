@@ -3099,11 +3099,11 @@ class TestStopLogsClusterIdAndOverrides:
             assert "stopped" in result.output.lower()
             mock_cleanup.assert_called_once()
 
-    def test_stop_by_cluster_id_not_found(self, runner, config_setup):
-        """Stop by unknown cluster ID shows helpful error."""
+    def test_stop_by_cluster_id_no_metadata_no_hosts(self, runner, config_setup):
+        """Stop by unknown cluster ID with no resolvable hosts shows helpful error."""
         result = runner.invoke(main, ["stop", "deadbeef1234"])
         assert result.exit_code != 0
-        assert "Unknown job ID" in result.output
+        assert "No job metadata" in result.output
 
     def test_logs_with_port_override(self, runner, config_setup, reset_bootstrap):
         """Verify --port is passed through to generate_cluster_id in logs."""

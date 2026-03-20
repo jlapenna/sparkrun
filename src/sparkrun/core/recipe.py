@@ -247,6 +247,8 @@ class Recipe:
         self.source_registry: str | None = None  # set by _load_recipe after resolution
         self.source_registry_url: str | None = None  # set by _load_recipe after resolution
 
+        self._qualified_name_override: str | None = None  # optional override for qualified_name
+
         # Detect version
         self.recipe_version = str(data.get("recipe_version", "2"))
 
@@ -329,6 +331,26 @@ class Recipe:
         # Post-init resolver chain — all runtime/migration logic lives here
         for resolver in _RECIPE_RESOLVERS:
             resolver(self)
+
+    @property
+    def qualified_name(self) -> str:
+        """Fully qualified name for unambiguous CLI display.
+
+        Returns @registry/name for registry recipes, source_path for
+        path/URL recipes, or bare name for bundled/CWD recipes.
+        """
+        if self._qualified_name_override:
+            return self._qualified_name_override
+        if self.source_registry:
+            return "@%s/%s" % (self.source_registry, self.name)
+        if self.source_path:
+            p = self.source_path
+            if p.startswith(("http://", "https://")):
+                return p
+            sp = Path(p)
+            if sp.is_absolute() or "/" in p:
+                return p
+        return self.name
 
     @property
     def slug(self) -> str:
@@ -795,8 +817,9 @@ def recipe_summary(path: Path, registry_name: str | None = None) -> dict[str, An
         return None
     stem = path.stem
     defaults = data.get("defaults", {})
+    qualified = ("@%s/%s" % (registry_name, stem)) if registry_name else stem
     entry: dict[str, Any] = {
-        "name": stem,
+        "name": qualified,
         "file": stem,
         "path": str(path),
         "model": data.get("model", ""),

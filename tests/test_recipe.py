@@ -10,7 +10,7 @@ import yaml
 
 from sparkrun.core.recipe import (
     Recipe, RecipeError,
-    find_recipe, list_recipes, resolve_runtime,
+    find_recipe, list_recipes, recipe_summary, resolve_runtime,
     is_recipe_file, discover_cwd_recipes,
 )
 
@@ -152,6 +152,60 @@ def test_recipe_name_explicit_overrides_filename(tmp_path):
     recipe_file.write_text("name: My Custom Name\nmodel: test-model\nruntime: vllm\n")
     recipe = Recipe.load(recipe_file)
     assert recipe.name == "some-file"
+
+
+def test_qualified_name_bare():
+    """qualified_name returns bare name when no source info."""
+    recipe = Recipe.from_dict({"model": "test-model"})
+    assert recipe.qualified_name == "unnamed"
+
+
+def test_qualified_name_with_registry():
+    """qualified_name returns @registry/name when source_registry is set."""
+    recipe = Recipe.from_dict({"model": "test-model"})
+    recipe.source_registry = "my-registry"
+    assert recipe.qualified_name == "@my-registry/unnamed"
+
+
+def test_qualified_name_with_path(tmp_path):
+    """qualified_name returns filesystem path for path-loaded recipes."""
+    recipe_file = tmp_path / "my-recipe.yaml"
+    recipe_file.write_text("model: test-model\nruntime: vllm\n")
+    recipe = Recipe.load(recipe_file)
+    assert recipe.qualified_name == str(recipe_file)
+
+
+def test_qualified_name_registry_takes_priority(tmp_path):
+    """source_registry takes priority over source_path."""
+    recipe_file = tmp_path / "my-recipe.yaml"
+    recipe_file.write_text("model: test-model\nruntime: vllm\n")
+    recipe = Recipe.load(recipe_file)
+    recipe.source_registry = "official"
+    assert recipe.qualified_name == "@official/my-recipe"
+
+
+def test_qualified_name_url():
+    """qualified_name returns URL for URL-sourced recipes."""
+    recipe = Recipe.from_dict({"model": "test-model"})
+    recipe.source_path = "https://example.com/recipe.yaml"
+    assert recipe.qualified_name == "https://example.com/recipe.yaml"
+
+
+def test_recipe_summary_qualified_name(tmp_path):
+    """recipe_summary produces @registry/name when registry_name is given."""
+    recipe_file = tmp_path / "my-recipe.yaml"
+    recipe_file.write_text("model: test-model\nruntime: vllm\n")
+    summary = recipe_summary(recipe_file, registry_name="spark-arena")
+    assert summary["name"] == "@spark-arena/my-recipe"
+    assert summary["file"] == "my-recipe"
+
+
+def test_recipe_summary_bare_name(tmp_path):
+    """recipe_summary produces bare name when no registry_name."""
+    recipe_file = tmp_path / "my-recipe.yaml"
+    recipe_file.write_text("model: test-model\nruntime: vllm\n")
+    summary = recipe_summary(recipe_file)
+    assert summary["name"] == "my-recipe"
 
 
 def test_recipe_slug(tmp_path):

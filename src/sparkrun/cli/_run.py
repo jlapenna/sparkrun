@@ -173,7 +173,7 @@ def run(
             click.echo(
                 "Error: runtime requires %d nodes (from parallelism settings), "
                 "but recipe '%s' specifies max_nodes=%d"
-                % (required, recipe.name, recipe.max_nodes),
+                % (required, recipe.qualified_name, recipe.max_nodes),
                 err=True,
             )
             sys.exit(1)

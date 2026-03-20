@@ -133,7 +133,7 @@ def format_host_display(host: str, meta: dict[str, Any] | None) -> str:
 
 def display_recipe_detail(recipe, show_vram=True, registry_name=None, cli_overrides=None, cache_dir=None):
     """Display recipe details (shared by show and recipe show commands)."""
-    click.echo(f"Name:         {recipe.name}")
+    click.echo(f"Name:         {recipe.qualified_name}")
     click.echo(f"Description:  {recipe.description}")
     if recipe.maintainer:
         click.echo(f"Maintainer:   {recipe.maintainer}")
@@ -142,8 +142,8 @@ def display_recipe_detail(recipe, show_vram=True, registry_name=None, cli_overri
     click.echo(f"Container:    {recipe.container}")
     max_nodes = recipe.max_nodes or "unlimited"
     click.echo(f"Nodes:        {recipe.min_nodes} - {max_nodes}")
-    click.echo(f"Repository:   {registry_name or 'Local'}")
-    click.echo(f"File Path:    {recipe.source_path}")
+    # click.echo(f"Registry:     {registry_name or 'N/A'}")
+    # click.echo(f"File Path:    {recipe.source_path}")
 
     if recipe.defaults:
         click.echo("\nDefaults:")
@@ -209,8 +209,8 @@ def display_vram_estimate(recipe, cli_overrides=None, auto_detect=True, cache_di
 
 
 def format_monitor_table(
-    data: dict[str, HostMonitorState],
-    hosts: list[str],
+        data: dict[str, HostMonitorState],
+        hosts: list[str],
 ) -> str:
     """Format cluster monitor data as a text table.
 

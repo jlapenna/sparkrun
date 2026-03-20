@@ -137,12 +137,12 @@ def recipe_validate(ctx, recipe_name, config_path=None):
         issues.append(f"Unknown runtime: {recipe.runtime}")
 
     if issues:
-        click.echo(f"Recipe '{recipe.name}' has {len(issues)} issue(s):")
+        click.echo(f"Recipe '{recipe.qualified_name}' has {len(issues)} issue(s):")
         for issue in issues:
             click.echo(f"  - {issue}")
         sys.exit(1)
     else:
-        click.echo(f"Recipe '{recipe.name}' is valid.")
+        click.echo(f"Recipe '{recipe.qualified_name}' is valid.")
 
 
 @recipe.command("vram")
@@ -173,7 +173,7 @@ def recipe_vram(ctx, recipe_name, tensor_parallel, max_model_len, gpu_mem, cache
     config, _ = _get_config_and_registry(config_path)
     recipe, _recipe_path, _registry_mgr = _load_recipe(config, recipe_name)
 
-    click.echo(f"Recipe:  {recipe.name}")
+    click.echo(f"Recipe:  {recipe.qualified_name}")
     click.echo(f"Model:   {recipe.model}")
     click.echo(f"Runtime: {recipe.runtime}")
 

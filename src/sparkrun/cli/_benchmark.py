@@ -252,7 +252,7 @@ def _run_benchmark(
             click.echo(
                 "Error: runtime requires %d nodes (from parallelism settings), "
                 "but recipe '%s' specifies max_nodes=%d"
-                % (_req, recipe.name, recipe.max_nodes),
+                % (_req, recipe.qualified_name, recipe.max_nodes),
                 err=True,
             )
             sys.exit(1)
@@ -295,7 +295,7 @@ def _run_benchmark(
     click.echo("=" * 60)
     click.echo("sparkrun benchmark")
     click.echo("=" * 60)
-    click.echo("Recipe:                %s" % recipe.name)
+    click.echo("Recipe:                %s" % recipe.qualified_name)
     click.echo("Model:                 %s" % recipe.model)
     click.echo("Runtime:               %s" % runtime.runtime_name)
     click.echo("Image:                 %s" % container_image)

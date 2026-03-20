@@ -82,7 +82,7 @@ def save_job_metadata(
 
     meta = {
         "cluster_id": cluster_id,
-        "recipe": recipe.name,
+        "recipe": recipe.qualified_name,
         "model": recipe.model,
         "runtime": recipe.runtime,
         "hosts": hosts,
