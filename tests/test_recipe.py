@@ -10,7 +10,7 @@ import yaml
 
 from sparkrun.core.recipe import (
     Recipe, RecipeError,
-    find_recipe, list_recipes, recipe_summary, resolve_runtime,
+    find_recipe, list_recipes, recipe_summary, resolve_runtime, resolve_builder,
     is_recipe_file, discover_cwd_recipes,
 )
 
@@ -46,7 +46,7 @@ def test_load_v2_recipe(tmp_recipe_dir: Path):
 
 
 def test_load_v1_recipe_migrates_to_eugr(tmp_recipe_dir: Path):
-    """Load a v1 recipe with mods/build_args and verify it migrates to eugr-vllm runtime.
+    """Load a v1 recipe with mods/build_args and verify it auto-sets eugr builder.
 
     Tests the v1->v2 migration path for eugr-style recipes that require
     custom build arguments and patches.
@@ -58,8 +58,9 @@ def test_load_v1_recipe_migrates_to_eugr(tmp_recipe_dir: Path):
     assert recipe.model == "meta-llama/Llama-2-7b-hf"
     assert recipe.recipe_version == "1"
 
-    # Should migrate to eugr-vllm because of build_args and mods
-    assert recipe.runtime == "eugr-vllm"
+    # Should auto-set eugr builder and resolve to vllm-distributed
+    assert recipe.runtime == "vllm-distributed"
+    assert recipe.builder == "eugr"
 
     # build_args and mods should be in runtime_config
     assert recipe.runtime_config["build_args"] == ["ARG1=value1"]
@@ -67,10 +68,10 @@ def test_load_v1_recipe_migrates_to_eugr(tmp_recipe_dir: Path):
 
 
 def test_load_v1_recipe_no_mods_still_eugr(tmp_recipe_dir: Path):
-    """Load a v1 recipe without mods and verify runtime is eugr-vllm.
+    """Load a v1 recipe without mods and verify eugr builder is auto-set.
 
     The v1 format is the eugr native format, so all v1 vllm recipes
-    should resolve to eugr-vllm regardless of whether build_args or
+    should auto-set eugr builder regardless of whether build_args or
     mods are present.
     """
     recipe_path = tmp_recipe_dir / "test-plain-v1.yaml"
@@ -80,8 +81,9 @@ def test_load_v1_recipe_no_mods_still_eugr(tmp_recipe_dir: Path):
     assert recipe.model == "meta-llama/Llama-2-7b-hf"
     assert recipe.recipe_version == "1"
 
-    # v1 format always maps to eugr-vllm
-    assert recipe.runtime == "eugr-vllm"
+    # v1 format auto-sets eugr builder with standard vllm variant resolution
+    assert recipe.runtime == "vllm-distributed"
+    assert recipe.builder == "eugr"
 
     # No runtime_config should be set for these keys
     assert recipe.runtime_config.get("build_args", []) == []
@@ -928,33 +930,36 @@ class TestResolverChain:
     """Test the resolver chain and resolve_runtime() function."""
 
     def test_resolve_v1_sets_eugr(self):
-        """v1 recipe resolves to eugr-vllm."""
+        """v1 recipe auto-sets eugr builder and resolves to vllm-distributed."""
         recipe = Recipe.from_dict({
             "recipe_version": "1",
             "name": "Test",
             "model": "test-model",
         })
-        assert recipe.runtime == "eugr-vllm"
+        assert recipe.runtime == "vllm-distributed"
+        assert recipe.builder == "eugr"
 
     def test_resolve_eugr_signals_build_args(self):
-        """build_args triggers eugr-vllm."""
+        """build_args triggers eugr builder, runtime resolves to vllm-distributed."""
         recipe = Recipe.from_dict({
             "name": "Test",
             "model": "test-model",
             "runtime": "vllm",
             "build_args": ["--pre-tf"],
         })
-        assert recipe.runtime == "eugr-vllm"
+        assert recipe.runtime == "vllm-distributed"
+        assert recipe.builder == "eugr"
 
     def test_resolve_eugr_signals_mods(self):
-        """mods triggers eugr-vllm."""
+        """mods triggers eugr builder, runtime resolves to vllm-distributed."""
         recipe = Recipe.from_dict({
             "name": "Test",
             "model": "test-model",
             "runtime": "vllm",
             "mods": ["mods/fix.patch"],
         })
-        assert recipe.runtime == "eugr-vllm"
+        assert recipe.runtime == "vllm-distributed"
+        assert recipe.builder == "eugr"
 
     def test_resolve_vllm_defaults_to_distributed(self):
         """Bare vllm -> vllm-distributed."""
@@ -995,8 +1000,8 @@ class TestResolverChain:
         })
         assert recipe.runtime == runtime
 
-    def test_resolve_eugr_takes_priority_over_vllm_variant(self):
-        """v1 with ray hints still gets eugr-vllm (not vllm-ray)."""
+    def test_resolve_eugr_with_ray_hints_respects_variant(self):
+        """v1 with ray hints gets vllm-ray + eugr builder (ray hints respected)."""
         recipe = Recipe.from_dict({
             "recipe_version": "1",
             "name": "Test",
@@ -1004,14 +1009,15 @@ class TestResolverChain:
             "runtime": "vllm",
             "defaults": {"distributed_executor_backend": "ray"},
         })
-        assert recipe.runtime == "eugr-vllm"
+        assert recipe.runtime == "vllm-ray"
+        assert recipe.builder == "eugr"
 
     @pytest.mark.parametrize("data,expected", [
         ({"runtime": "vllm"}, "vllm-distributed"),
         ({"runtime": "sglang"}, "sglang"),
-        ({"recipe_version": "1"}, "eugr-vllm"),
-        ({"runtime": "vllm", "build_args": ["a"]}, "eugr-vllm"),
-        ({"runtime": "vllm", "mods": ["m"]}, "eugr-vllm"),
+        ({"recipe_version": "1"}, "vllm-distributed"),
+        ({"runtime": "vllm", "build_args": ["a"]}, "vllm-distributed"),
+        ({"runtime": "vllm", "mods": ["m"]}, "vllm-distributed"),
         ({"runtime": "vllm", "defaults": {"distributed_executor_backend": "ray"}}, "vllm-ray"),
         ({"runtime": "vllm", "command": "vllm serve --distributed-executor-backend ray"}, "vllm-ray"),
         ({"runtime": "llama-cpp"}, "llama-cpp"),
@@ -1028,7 +1034,7 @@ class TestResolverChain:
         """resolve_runtime() works on raw dicts without Recipe construction."""
         assert resolve_runtime({"runtime": "vllm"}) == "vllm-distributed"
         assert resolve_runtime({"runtime": "sglang"}) == "sglang"
-        assert resolve_runtime({"recipe_version": "1"}) == "eugr-vllm"
+        assert resolve_runtime({"recipe_version": "1"}) == "vllm-distributed"
         assert resolve_runtime({}) == "vllm-distributed"
 
     @pytest.mark.parametrize("cmd", [
@@ -1792,3 +1798,77 @@ class TestResolveWithOverrides:
         data = {"model": "test-model", "container": "img:latest"}
         assert resolve_runtime(data) == "vllm-distributed"
         assert resolve_runtime(data, overrides={"distributed_executor_backend": "ray"}) == "vllm-ray"
+
+    def test_v1_recipe_with_ray_hints_gets_vllm_ray(self):
+        """v1 recipe with Ray hints resolves to vllm-ray + eugr builder."""
+        recipe = Recipe.from_dict({
+            "recipe_version": "1",
+            "name": "Test",
+            "model": "test-model",
+            "runtime": "vllm",
+            "defaults": {"distributed_executor_backend": "ray"},
+        })
+        assert recipe.runtime == "vllm-ray"
+        assert recipe.builder == "eugr"
+
+    def test_explicit_builder_not_overwritten_by_v1(self):
+        """Explicit builder: custom is not overwritten by v1 migration."""
+        recipe = Recipe.from_dict({
+            "recipe_version": "1",
+            "name": "Test",
+            "model": "test-model",
+            "builder": "custom",
+        })
+        assert recipe.builder == "custom"
+
+    def test_explicit_builder_not_overwritten_by_eugr_signals(self):
+        """Explicit builder: custom is not overwritten by build_args/mods."""
+        recipe = Recipe.from_dict({
+            "name": "Test",
+            "model": "test-model",
+            "runtime": "vllm",
+            "builder": "custom",
+            "build_args": ["--pre-tf"],
+        })
+        assert recipe.builder == "custom"
+        assert recipe.runtime == "vllm-distributed"
+
+
+class TestResolveBuilder:
+    """Test the resolve_builder() standalone function."""
+
+    def test_explicit_builder(self):
+        """Explicit builder field is returned as-is."""
+        assert resolve_builder({"builder": "custom"}) == "custom"
+
+    def test_v1_recipe(self):
+        """v1 recipe returns eugr."""
+        assert resolve_builder({"recipe_version": "1"}) == "eugr"
+
+    def test_v1_recipe_non_vllm(self):
+        """v1 recipe with non-vllm runtime returns empty."""
+        assert resolve_builder({"recipe_version": "1", "runtime": "sglang"}) == ""
+
+    def test_build_args(self):
+        """build_args returns eugr."""
+        assert resolve_builder({"runtime": "vllm", "build_args": ["a"]}) == "eugr"
+
+    def test_mods(self):
+        """mods returns eugr."""
+        assert resolve_builder({"runtime": "vllm", "mods": ["m"]}) == "eugr"
+
+    def test_runtime_config_build_args(self):
+        """build_args in runtime_config returns eugr."""
+        assert resolve_builder({"runtime": "vllm", "runtime_config": {"build_args": ["a"]}}) == "eugr"
+
+    def test_plain_vllm(self):
+        """Plain vllm recipe returns empty."""
+        assert resolve_builder({"runtime": "vllm"}) == ""
+
+    def test_empty_data(self):
+        """Empty data returns empty."""
+        assert resolve_builder({}) == ""
+
+    def test_explicit_builder_takes_priority(self):
+        """Explicit builder takes priority over v1 signals."""
+        assert resolve_builder({"recipe_version": "1", "builder": "custom"}) == "custom"

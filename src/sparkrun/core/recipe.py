@@ -122,20 +122,22 @@ def _resolve_runtime_from_command_hint(recipe: Recipe) -> None:
 
 
 def _resolve_v1_migration(recipe: Recipe) -> None:
-    """v1 format recipes -> eugr-vllm runtime."""
+    """v1 format recipes -> eugr builder (runtime left for vllm variant resolution)."""
     if recipe.recipe_version != "1":
         return
     if recipe.runtime in ("vllm", ""):
-        recipe.runtime = "eugr-vllm"
+        if not recipe.builder:
+            recipe.builder = "eugr"
 
 
 def _resolve_eugr_signals(recipe: Recipe) -> None:
-    """build_args or mods present -> eugr-vllm."""
+    """build_args or mods present -> eugr builder (runtime left for vllm variant resolution)."""
     if recipe.runtime not in ("vllm", ""):
         return
     rc = recipe.runtime_config
     if rc.get("build_args") or rc.get("mods"):
-        recipe.runtime = "eugr-vllm"
+        if not recipe.builder:
+            recipe.builder = "eugr"
 
 
 def _resolve_vllm_variant(recipe: Recipe) -> None:
@@ -185,23 +187,12 @@ def resolve_runtime(data: dict[str, Any], overrides: dict[str, Any] | None = Non
             return "trtllm"
         # vllm serve or unrecognised → fall through to vllm variant resolution
 
-    # v1 migration and eugr detection (mirror _resolve_v1_migration and _resolve_eugr_signals)
-    version = str(data.get("sparkrun_version", data.get("recipe_version", "2")))
-    if runtime in ("vllm", "") and version == "1":
-        return "eugr-vllm"
+    # v1 migration and eugr detection now only affect builder, not runtime.
+    # Runtime falls through to vllm variant resolution below.
 
-    # In Recipe.__init__, unknown keys are swept into runtime_config, and
-    # _resolve_eugr_signals inspects recipe.runtime_config for build_args/mods.
     runtime_config = data.get("runtime_config") or {}
     if runtime_config is not None and not isinstance(runtime_config, dict):
         raise RecipeError("Recipe 'runtime_config' field must be a mapping, got %s" % type(runtime_config).__name__)
-    if runtime in ("vllm", "") and (
-            data.get("build_args")
-            or data.get("mods")
-            or runtime_config.get("build_args")
-            or runtime_config.get("mods")
-    ):
-        return "eugr-vllm"
     if runtime in ("vllm", ""):
         effective = dict(overrides or {})
         defaults = data.get("defaults")
@@ -216,6 +207,31 @@ def resolve_runtime(data: dict[str, Any], overrides: dict[str, Any] | None = Non
             return "vllm-ray"
         return "vllm-distributed"
     return runtime
+
+
+def resolve_builder(data: dict[str, Any]) -> str:
+    """Lightweight builder resolution from raw data (for listing/display).
+
+    Detects eugr signals (v1 version, build_args, mods) and returns
+    ``"eugr"`` or ``""`` without constructing a full Recipe.
+    """
+    builder = data.get("builder", "")
+    if builder:
+        return builder
+    version = str(data.get("sparkrun_version", data.get("recipe_version", "2")))
+    if version == "1":
+        runtime = data.get("runtime", "")
+        if runtime in ("vllm", ""):
+            return "eugr"
+    runtime_config = data.get("runtime_config") or {}
+    runtime = data.get("runtime", "")
+    if runtime in ("vllm", "") and (
+            data.get("build_args")
+            or data.get("mods")
+            or (isinstance(runtime_config, dict) and (runtime_config.get("build_args") or runtime_config.get("mods")))
+    ):
+        return "eugr"
+    return ""
 
 
 def is_recipe_file(path: Path) -> bool:
@@ -388,6 +404,7 @@ class Recipe:
         """
         self._applied_overrides = dict(overrides) if overrides else {}
         self.runtime = self._raw.get("runtime", "")
+        self.builder = self._raw.get("builder", "")
         for resolver in _RECIPE_RESOLVERS:
             resolver(self)
         return self
@@ -898,6 +915,7 @@ def recipe_summary(path: Path, registry_name: str | None = None) -> dict[str, An
     stem = path.stem
     defaults = data.get("defaults", {})
     qualified = ("@%s/%s" % (registry_name, stem)) if registry_name else stem
+    builder = resolve_builder(data)
     entry: dict[str, Any] = {
         "name": qualified,
         "file": stem,
@@ -909,6 +927,8 @@ def recipe_summary(path: Path, registry_name: str | None = None) -> dict[str, An
         "tp": defaults.get("tensor_parallel", "") if isinstance(defaults, dict) else "",
         "gpu_mem": defaults.get("gpu_memory_utilization", "") if isinstance(defaults, dict) else "",
     }
+    if builder:
+        entry["builder"] = builder
     if registry_name:
         entry["registry"] = registry_name
     return entry
