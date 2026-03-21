@@ -68,8 +68,9 @@ def launch_inference(
         init_port: int | None = None,
         # Executor config (dict for config chain layering)
         executor_config: dict | None = None,
-        rootless: bool = False,
-        auto_user: bool = False,
+        # note: transition to rootless by default
+        rootless: bool = True,
+        auto_user: bool = True,
 ) -> LaunchResult:
     """Launch an inference workload.
 

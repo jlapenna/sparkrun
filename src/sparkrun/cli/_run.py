@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 @click.option("--no-follow", is_flag=True, help="Don't follow container logs after launch")
 @click.option("--no-sync-tuning", is_flag=True, help="Skip syncing tuning configs from registries")
 @click.option("--no-rm", is_flag=True, help="Don't auto-remove containers on exit (keeps containers after stop)")
-@click.option("--rootless", is_flag=True, help="Run without --privileged, as non-root user inside container", hidden=True)
+@click.option("--rootful", is_flag=True, help="Run with --privileged as root inside container (legacy behavior)")
 @click.option("--restart", "restart_policy", default=None,
               help="Docker restart policy (no, always, unless-stopped, on-failure[:N])")
 @click.option("--transfer-mode", default=None,
@@ -57,7 +57,7 @@ def run(
         ctx, recipe_name, hosts, hosts_file, cluster_name, solo, port, tensor_parallel,
         pipeline_parallel, gpu_mem, served_model_name, max_model_len, image, cache_dir,
         ray_port, init_port, dashboard, dashboard_port, dry_run, foreground, no_follow,
-        no_sync_tuning, no_rm, rootless, restart_policy, transfer_mode, options,
+        no_sync_tuning, no_rm, rootful, restart_policy, transfer_mode, options,
         extra_args, config_path=None, setup=True,
 ):
     """Run an inference recipe.
@@ -232,25 +232,8 @@ def run(
             click.echo("  Workers: %s" % ", ".join(host_list[1:]))
     click.echo()
 
-    # TODO: rootless should shift into being part of launch_inference to enable common usage without repeat
     # Build executor config from CLI flags
     cli_executor_opts: dict[str, Any] = {}
-    if rootless:
-        cli_executor_opts["privileged"] = False
-        cli_executor_opts["security_opt"] = ["no-new-privileges"]
-        cli_executor_opts["cap_add"] = [
-            # ~~~ INTERESTING CAPS ~~~
-            # "IPC_LOCK", # pinned memory for NCCL/RDMA
-            # "SYS_PTRACE", # cross-process GPU memory access
-            # "SYS_NICE", # real-time scheduling priorities
-            # "SYS_RESOURCE", # override ulimit enforcement
-            # "NET_ADMIN", # InfiniBand / network device access
-            # "DAC_OVERRIDE", # file access across uid boundaries (NCCL shm)
-        ]
-        cli_executor_opts["ulimit"] = ["memlock=-1:-1"]  # TODO: stack size
-        cli_executor_opts["devices"] = [
-            "/dev/infiniband",  # RDMA/IB verbs for NCCL inter-node communication
-        ]
     if no_rm:
         cli_executor_opts["auto_remove"] = False
     if restart_policy:
@@ -277,8 +260,8 @@ def run(
         dashboard=dashboard,
         init_port=init_port,
         executor_config=cli_executor_opts,
-        rootless=rootless,
-        auto_user=True,  # TODO: configurable (disable if we add --rootful later)
+        rootless=not rootful,
+        auto_user=not rootful,
     )
 
     click.echo("Cluster:   %s" % result.cluster_id)
