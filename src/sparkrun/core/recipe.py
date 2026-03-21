@@ -12,8 +12,8 @@ from typing import Any, TYPE_CHECKING, Optional
 import yaml
 
 from vpd.next.util import read_yaml
-from vpd.legacy.yaml_dict import vpd_chain, VirtualPathDictChain
 from vpd.legacy.arguments import arg_substitute
+from scitrera_app_framework.api import Variables, EnvPlacement
 
 if TYPE_CHECKING:
     from sparkrun.core.registry import RegistryManager
@@ -422,16 +422,16 @@ class Recipe:
         return self.defaults.get(key, fallback)
 
     def build_config_chain(self, cli_overrides: dict[str, Any] | None = None,
-                           user_config: dict[str, Any] | None = None) -> VirtualPathDictChain:
+                           user_config: dict[str, Any] | None = None) -> Variables:
         """Build cascading config: CLI overrides -> user config -> recipe defaults.
 
         Also injects 'model' into the chain for template substitution.
         """
         base = dict(self.defaults)
         base.setdefault("model", self.model)
-        return vpd_chain(cli_overrides or {}, user_config or {}, base)
+        return Variables(sources=(cli_overrides or {}, user_config or {}, base), env_placement=EnvPlacement.IGNORED)
 
-    def render_command(self, config_chain: VirtualPathDictChain) -> str | None:
+    def render_command(self, config_chain: Variables) -> str | None:
         """Render the command template with values from the config chain.
 
         Returns None if no command template is defined.

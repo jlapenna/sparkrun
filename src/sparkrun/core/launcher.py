@@ -66,7 +66,7 @@ def launch_inference(
         dashboard_port: int | None = None,
         dashboard: bool = False,
         init_port: int | None = None,
-        # Executor config (dict for VPD chain layering)
+        # Executor config (dict for config chain layering)
         executor_config: dict | None = None,
         rootless: bool = False,
         auto_user: bool = False,
@@ -279,7 +279,7 @@ def launch_inference(
         run_kwargs["init_port"] = init_port
 
     # Build executor from layered config: CLI → recipe → defaults
-    from vpd.legacy.yaml_dict import vpd_chain as _vpd_chain
+    from scitrera_app_framework.api import Variables, EnvPlacement
     from sparkrun.orchestration.executor import EXECUTOR_DEFAULTS, ExecutorConfig
     from sparkrun.orchestration.executor_docker import DockerExecutor
 
@@ -302,11 +302,14 @@ def launch_inference(
     if not isinstance(recipe_executor_config, dict):
         recipe_executor_config = {}
     cli_exec_opts = executor_config if isinstance(executor_config, dict) else {}
-    exec_chain = _vpd_chain(
-        cli_exec_opts,  # CLI flags (highest priority)
-        recipe_executor_config,  # recipe YAML
-        exec_adjustments,  # executor adjustments
-        EXECUTOR_DEFAULTS,  # hardcoded defaults
+    exec_chain = Variables(
+        sources=(
+            cli_exec_opts,  # CLI flags (highest priority)
+            recipe_executor_config,  # recipe YAML
+            exec_adjustments,  # executor adjustments
+            EXECUTOR_DEFAULTS,  # hardcoded defaults
+        ),
+        env_placement=EnvPlacement.IGNORED,
     )
     exec_cfg = ExecutorConfig.from_chain(exec_chain)
     executor = DockerExecutor(exec_cfg)

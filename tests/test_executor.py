@@ -111,13 +111,13 @@ class TestExecutorConfig:
         cfg = ExecutorConfig.from_chain(chain)
         assert cfg.user is None
 
-    def test_vpd_chain_layering(self):
-        """Verify VPD chain resolution: CLI > recipe > defaults."""
-        from vpd.legacy.yaml_dict import vpd_chain
+    def test_config_chain_layering(self):
+        """Verify config chain resolution: CLI > recipe > defaults."""
+        from scitrera_app_framework.api import Variables, EnvPlacement
 
         cli_opts = {"auto_remove": False}
         recipe_opts = {"restart_policy": "always", "shm_size": "20gb"}
-        chain = vpd_chain(cli_opts, recipe_opts, EXECUTOR_DEFAULTS)
+        chain = Variables(sources=(cli_opts, recipe_opts, EXECUTOR_DEFAULTS), env_placement=EnvPlacement.IGNORED)
         cfg = ExecutorConfig.from_chain(chain)
 
         assert cfg.auto_remove is False  # CLI wins
@@ -125,9 +125,9 @@ class TestExecutorConfig:
         assert cfg.shm_size == "20gb"  # recipe
         assert cfg.gpus == "all"  # default
 
-    def test_vpd_chain_privileged_false(self):
-        """Verify privileged=False survives VPD chain (falsy value not clobbered)."""
-        from vpd.legacy.yaml_dict import vpd_chain
+    def test_config_chain_privileged_false(self):
+        """Verify privileged=False survives config chain (falsy value preserved)."""
+        from scitrera_app_framework.api import Variables, EnvPlacement
 
         cli_opts = {
             "privileged": False, "user": "$SHELL_USER",
@@ -135,7 +135,7 @@ class TestExecutorConfig:
             "cap_add": ["IPC_LOCK", "SYS_PTRACE"],
             "ulimit": ["memlock=-1:-1"],
         }
-        chain = vpd_chain(cli_opts, {}, EXECUTOR_DEFAULTS)
+        chain = Variables(sources=(cli_opts, {}, EXECUTOR_DEFAULTS), env_placement=EnvPlacement.IGNORED)
         cfg = ExecutorConfig.from_chain(chain)
 
         assert cfg.privileged is False

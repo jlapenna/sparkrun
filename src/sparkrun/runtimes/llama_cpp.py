@@ -228,11 +228,15 @@ class LlamaCppRuntime(RuntimePlugin):
                        skip_keys: set[str] | frozenset[str] = frozenset(),
                        split_mode_override: str | None = None) -> str:
         """Build the llama-server command from structured config."""
-        from vpd.legacy.yaml_dict import vpd_chain
+        from scitrera_app_framework.api import Variables, EnvPlacement
 
-        # TP/PP → split_mode takes highest priority, then config, then defaults
+        # TP/PP → split_mode takes highest priority, then config, then defaults.
+        # Export config to dict first — Variables cannot nest as a source
+        # because its .get() returns None for missing keys instead of raising
+        # KeyError, which stops the outer chain from checking later sources.
+        config_dict = config.export_all_variables() if isinstance(config, Variables) else config
         parallelism_layer = {"split_mode": split_mode_override} if split_mode_override else {}
-        config = vpd_chain(parallelism_layer, config, _LLAMA_CPP_DEFAULTS)
+        config = Variables(sources=(parallelism_layer, config_dict, _LLAMA_CPP_DEFAULTS), env_placement=EnvPlacement.IGNORED)
 
         model = recipe.model
 

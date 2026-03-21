@@ -1,6 +1,6 @@
 """Executor abstraction for container engine operations.
 
-Provides ``ExecutorConfig`` (typed config from VPD chain resolution)
+Provides ``ExecutorConfig`` (typed config from config chain resolution)
 and ``Executor`` (abstract base for container engines like Docker/Podman).
 
 Runtimes call ``self.executor.*`` instead of importing ``docker.py``
@@ -18,7 +18,7 @@ from scitrera_app_framework.util import ext_parse_bool
 logger = logging.getLogger(__name__)
 
 # Default executor settings for DGX Spark GPU workloads.
-# Lowest priority in the VPD chain: CLI → recipe → these defaults.
+# Lowest priority in the config chain: CLI → recipe → these defaults.
 EXECUTOR_DEFAULTS = {
     "auto_remove": True,
     "restart_policy": None,
@@ -39,7 +39,7 @@ EXECUTOR_DEFAULTS = {
 class ExecutorConfig:
     """Typed view of resolved executor settings.
 
-    Constructed from a VPD chain (or plain dict) after CLI → recipe →
+    Constructed from a config chain (or plain dict) after CLI → recipe →
     defaults layering.
     """
 
@@ -58,7 +58,7 @@ class ExecutorConfig:
 
     @classmethod
     def from_chain(cls, chain) -> ExecutorConfig:
-        """Build from a VPD chain or plain dict."""
+        """Build from a config chain or plain dict."""
         raw_sec = chain.get("security_opt")
         if isinstance(raw_sec, str):
             raw_sec = [raw_sec]
@@ -71,9 +71,10 @@ class ExecutorConfig:
         raw_devices = chain.get("devices")
         if isinstance(raw_devices, str):
             raw_devices = [raw_devices]
-        # NOTE: Do not pass default values to chain.get() — VPD treats
-        # falsy values (False, 0) as missing and returns the default instead.
-        # EXECUTOR_DEFAULTS is already in the chain, so keys are always present.
+
+        # Fallback to EXECUTOR_DEFAULTS for None values. With Variables,
+        # falsy values like False/0 are preserved correctly, but None
+        # still means "not set" and should fall back.
         def _get(key):
             v = chain.get(key)
             return v if v is not None else EXECUTOR_DEFAULTS.get(key)
@@ -381,6 +382,7 @@ class Executor(ABC):
             extra_opts=extra_docker_opts,
         )
 
+        # TODO: shift into scripts rather than inline
         return (
             "#!/bin/bash\n"
             "set -uo pipefail\n"
