@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import Any
 
 import click
 
@@ -31,14 +32,14 @@ logger = logging.getLogger(__name__)
 @click.argument("recipe_name", type=RECIPE_NAME)
 @host_options
 @recipe_override_options
-@click.option("--solo", is_flag=True, help="Force single-node mode")
+@click.option("--solo", is_flag=True, help="Force single-node mode", hidden=True)
 @click.option("--port", type=int, default=None, help="Override serve port")
 @click.option("--served-model-name", default=None, help="Override served model name")
 @click.option("--cache-dir", default=None, help="HuggingFace cache directory")
-@click.option("--ray-port", type=int, default=46379, help="Ray GCS port (vllm-ray)")
-@click.option("--init-port", type=int, default=25000, help="vllm/SGLang distributed init port")
-@click.option("--dashboard", is_flag=True, help="Enable Ray dashboard on head node")
-@click.option("--dashboard-port", type=int, default=8265, help="Ray dashboard port")
+@click.option("--ray-port", type=int, default=46379, help="Ray GCS port (vllm-ray)", hidden=True)
+@click.option("--init-port", type=int, default=25000, help="vllm/SGLang distributed init port", hidden=True)
+@click.option("--dashboard", is_flag=True, help="Enable Ray dashboard on head node", hidden=True)
+@click.option("--dashboard-port", type=int, default=8265, help="Ray dashboard port", hidden=True)
 @dry_run_option
 @click.option("--foreground", is_flag=True, help="Run in foreground (don't detach)")
 @click.option("--no-follow", is_flag=True, help="Don't follow container logs after launch")
@@ -56,8 +57,8 @@ def run(
         ctx, recipe_name, hosts, hosts_file, cluster_name, solo, port, tensor_parallel,
         pipeline_parallel, gpu_mem, served_model_name, max_model_len, image, cache_dir,
         ray_port, init_port, dashboard, dashboard_port, dry_run, foreground, no_follow,
-        no_sync_tuning, no_rm, restart_policy, transfer_mode, options,
-        extra_args, config_path=None, setup=True, rootless=False,
+        no_sync_tuning, no_rm, rootless, restart_policy, transfer_mode, options,
+        extra_args, config_path=None, setup=True,
 ):
     """Run an inference recipe.
 
@@ -85,7 +86,15 @@ def run(
     _setup_logging(ctx.obj["verbose"])
     config = SparkrunConfig(config_path) if config_path else SparkrunConfig()
 
-    # TODO: warn that --solo flag is not recommended if solo==True at this point
+    # warn that --solo flag is not recommended if solo==True at this point
+    if solo:
+        click.echo(
+            'Notice: --solo flag is not recommended; it is better to explicitly specify parallelism via e.g. --tp 1',
+            err=True
+        )
+
+    # Determine hosts
+    host_list, cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, v)
 
     # Find and load recipe
     recipe, _recipe_path, registry_mgr = _load_recipe(config, recipe_name)
@@ -104,11 +113,9 @@ def run(
     overrides = _apply_recipe_overrides(
         options, tensor_parallel=tensor_parallel, pipeline_parallel=pipeline_parallel,
         gpu_mem=gpu_mem, max_model_len=max_model_len, image=image, recipe=recipe,
+        # custom overrides
+        port=port, served_model_name=served_model_name,
     )
-    if port is not None:
-        overrides["port"] = port
-    if served_model_name is not None:
-        overrides["served_model_name"] = served_model_name
 
     # Resolve runtime
     try:
@@ -121,9 +128,6 @@ def run(
     runtime_issues = runtime.validate_recipe(recipe)
     for issue in runtime_issues:
         click.echo("Warning: %s" % issue, err=True)
-
-    # Determine hosts
-    host_list, cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, v)
 
     # Determine host source for display
     if hosts:
@@ -228,12 +232,27 @@ def run(
             click.echo("  Workers: %s" % ", ".join(host_list[1:]))
     click.echo()
 
+    # TODO: rootless should shift into being part of launch_inference to enable common usage without repeat
     # Build executor config from CLI flags
-    cli_executor_opts = {}
+    cli_executor_opts: dict[str, Any] = {
+        'user': '$SHELL_USER',  # we're going to switch to non-root user inside containers always regardless of privileges configuration
+    }
     if rootless:
         cli_executor_opts["privileged"] = False
-        cli_executor_opts["user"] = "$SHELL_USER"
         cli_executor_opts["security_opt"] = ["no-new-privileges"]
+        cli_executor_opts["cap_add"] = [
+            # ~~~ INTERESTING CAPS ~~~
+            # "IPC_LOCK", # pinned memory for NCCL/RDMA
+            # "SYS_PTRACE", # cross-process GPU memory access
+            # "SYS_NICE", # real-time scheduling priorities
+            # "SYS_RESOURCE", # override ulimit enforcement
+            # "NET_ADMIN", # InfiniBand / network device access
+            # "DAC_OVERRIDE", # file access across uid boundaries (NCCL shm)
+        ]
+        cli_executor_opts["ulimit"] = ["memlock=-1:-1"]
+        cli_executor_opts["devices"] = [
+            "/dev/infiniband",  # RDMA/IB verbs for NCCL inter-node communication
+        ]
     if no_rm:
         cli_executor_opts["auto_remove"] = False
     if restart_policy:

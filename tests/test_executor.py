@@ -125,6 +125,25 @@ class TestExecutorConfig:
         assert cfg.shm_size == "20gb"  # recipe
         assert cfg.gpus == "all"  # default
 
+    def test_vpd_chain_privileged_false(self):
+        """Verify privileged=False survives VPD chain (falsy value not clobbered)."""
+        from vpd.legacy.yaml_dict import vpd_chain
+
+        cli_opts = {
+            "privileged": False, "user": "$SHELL_USER",
+            "security_opt": ["no-new-privileges"],
+            "cap_add": ["IPC_LOCK", "SYS_PTRACE"],
+            "ulimit": ["memlock=-1:-1"],
+        }
+        chain = vpd_chain(cli_opts, {}, EXECUTOR_DEFAULTS)
+        cfg = ExecutorConfig.from_chain(chain)
+
+        assert cfg.privileged is False
+        assert cfg.user == "$SHELL_USER"
+        assert cfg.security_opt == ["no-new-privileges"]
+        assert cfg.cap_add == ["IPC_LOCK", "SYS_PTRACE"]
+        assert cfg.ulimit == ["memlock=-1:-1"]
+
 
 # ---------------------------------------------------------------------------
 # DockerExecutor command parity tests
@@ -339,18 +358,42 @@ class TestDockerExecutorConfig:
 
     def test_rootless_config(self):
         """Verify the combination of settings that --rootless would produce."""
-        cfg = ExecutorConfig(privileged=False, user="$SHELL_USER", security_opt=["no-new-privileges"])
+        cfg = ExecutorConfig(
+            privileged=False, user="$SHELL_USER",
+            security_opt=["no-new-privileges"],
+            cap_add=["IPC_LOCK", "SYS_PTRACE", "SYS_NICE", "NET_ADMIN"],
+            ulimit=["memlock=-1:-1"],
+        )
         executor = DockerExecutor(cfg)
         cmd = executor.run_cmd("img:latest")
         assert "--privileged" not in cmd
         assert "--user $(id -u):$(id -g)" in cmd
         assert "--security-opt no-new-privileges" in cmd
+        assert "--cap-add IPC_LOCK" in cmd
+        assert "--cap-add SYS_PTRACE" in cmd
+        assert "--cap-add SYS_NICE" in cmd
+        assert "--cap-add NET_ADMIN" in cmd
+        assert "--ulimit memlock=-1:-1" in cmd
+
+    def test_cap_add_single(self):
+        cfg = ExecutorConfig(cap_add=["SYS_PTRACE"])
+        executor = DockerExecutor(cfg)
+        cmd = executor.run_cmd("img:latest")
+        assert "--cap-add SYS_PTRACE" in cmd
+
+    def test_ulimit_single(self):
+        cfg = ExecutorConfig(ulimit=["memlock=-1:-1"])
+        executor = DockerExecutor(cfg)
+        cmd = executor.run_cmd("img:latest")
+        assert "--ulimit memlock=-1:-1" in cmd
 
     def test_no_user_by_default(self):
         executor = DockerExecutor()
         cmd = executor.run_cmd("img:latest")
         assert "--user" not in cmd
         assert "--security-opt" not in cmd
+        assert "--cap-add" not in cmd
+        assert "--ulimit" not in cmd
 
 
 # ---------------------------------------------------------------------------

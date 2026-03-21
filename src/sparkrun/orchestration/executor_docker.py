@@ -40,6 +40,15 @@ class DockerExecutor(Executor):
         if cfg.security_opt:
             for opt in cfg.security_opt:
                 opts.extend(["--security-opt", opt])
+        if cfg.cap_add:
+            for cap in cfg.cap_add:
+                opts.extend(["--cap-add", cap])
+        if cfg.ulimit:
+            for ul in cfg.ulimit:
+                opts.extend(["--ulimit", ul])
+        if cfg.devices:
+            for dev in cfg.devices:
+                opts.extend(["--device", dev])
 
         return opts
 

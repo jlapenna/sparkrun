@@ -104,6 +104,7 @@ def launch_inference(
         dashboard_port: Ray dashboard port (forwarded to runtime.run).
         dashboard: Enable Ray dashboard (forwarded to runtime.run).
         init_port: Distributed init port (forwarded to runtime.run).
+        executor_config: Executor config
 
     Returns:
         LaunchResult with the outcome and all resolved context.

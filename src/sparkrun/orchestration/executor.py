@@ -29,6 +29,9 @@ EXECUTOR_DEFAULTS = {
     "network": "host",
     "user": None,
     "security_opt": None,
+    "cap_add": None,
+    "ulimit": None,
+    "devices": None,
 }
 
 
@@ -49,6 +52,9 @@ class ExecutorConfig:
     network: str = "host"
     user: str | None = None
     security_opt: list[str] | None = None
+    cap_add: list[str] | None = None
+    ulimit: list[str] | None = None
+    devices: list[str] | None = None
 
     @classmethod
     def from_chain(cls, chain) -> ExecutorConfig:
@@ -56,16 +62,35 @@ class ExecutorConfig:
         raw_sec = chain.get("security_opt")
         if isinstance(raw_sec, str):
             raw_sec = [raw_sec]
+        raw_cap = chain.get("cap_add")
+        if isinstance(raw_cap, str):
+            raw_cap = [raw_cap]
+        raw_ulimit = chain.get("ulimit")
+        if isinstance(raw_ulimit, str):
+            raw_ulimit = [raw_ulimit]
+        raw_devices = chain.get("devices")
+        if isinstance(raw_devices, str):
+            raw_devices = [raw_devices]
+        # NOTE: Do not pass default values to chain.get() — VPD treats
+        # falsy values (False, 0) as missing and returns the default instead.
+        # EXECUTOR_DEFAULTS is already in the chain, so keys are always present.
+        def _get(key):
+            v = chain.get(key)
+            return v if v is not None else EXECUTOR_DEFAULTS.get(key)
+
         return cls(
-            auto_remove=ext_parse_bool(chain.get("auto_remove", True)),
+            auto_remove=ext_parse_bool(_get("auto_remove")),
             restart_policy=chain.get("restart_policy") or None,
-            privileged=ext_parse_bool(chain.get("privileged", True)),
-            gpus=str(chain.get("gpus", "all")),
-            ipc=str(chain.get("ipc", "host")),
-            shm_size=str(chain.get("shm_size", "10.24gb")),
-            network=str(chain.get("network", "host")),
+            privileged=ext_parse_bool(_get("privileged")),
+            gpus=str(_get("gpus")),
+            ipc=str(_get("ipc")),
+            shm_size=str(_get("shm_size")),
+            network=str(_get("network")),
             user=chain.get("user") or None,
             security_opt=raw_sec or None,
+            cap_add=raw_cap or None,
+            ulimit=raw_ulimit or None,
+            devices=raw_devices or None,
         )
 
     def __post_init__(self):

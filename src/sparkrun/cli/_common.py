@@ -827,7 +827,7 @@ def recipe_override_options(f):
 
 
 def _apply_recipe_overrides(options, tensor_parallel=None, pipeline_parallel=None,
-                            gpu_mem=None, max_model_len=None, image=None, recipe=None):
+                            gpu_mem=None, max_model_len=None, image=None, recipe=None, **kwargs):
     """Build overrides dict from recipe_override_options parameters.
 
     Returns the merged overrides dict.  When *recipe* is provided and
@@ -844,6 +844,11 @@ def _apply_recipe_overrides(options, tensor_parallel=None, pipeline_parallel=Non
         overrides["max_model_len"] = max_model_len
     if image and recipe is not None:
         recipe.container = image
+
+    for k, v in kwargs.items():
+        if v is not None:
+            overrides[k] = v
+
     return overrides
 
 
