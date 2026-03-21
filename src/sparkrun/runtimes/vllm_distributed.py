@@ -28,7 +28,7 @@ class VllmDistributedRuntime(RuntimePlugin):
     """
 
     runtime_name = "vllm-distributed"
-    default_image_prefix = "scitrera/dgx-spark-vllm"
+    default_image_prefix = "ghcr.io/spark-arena/dgx-vllm-eugr-nightly-tf5"
 
     def cluster_strategy(self) -> str:
         """vLLM distributed uses native multi-node distribution, not Ray."""

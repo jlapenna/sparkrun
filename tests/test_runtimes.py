@@ -85,7 +85,7 @@ def test_vllm_resolve_container_default():
     runtime = VllmRayRuntime()
 
     container = runtime.resolve_container(recipe)
-    assert container == "scitrera/dgx-spark-vllm:latest"
+    assert container == "ghcr.io/spark-arena/dgx-vllm-eugr-nightly-tf5:latest"
 
 
 def test_vllm_generate_command_from_template():
@@ -321,7 +321,7 @@ def test_vllm_distributed_resolve_container():
     runtime = VllmDistributedRuntime()
 
     container = runtime.resolve_container(recipe)
-    assert container == "scitrera/dgx-spark-vllm:latest"
+    assert container == "ghcr.io/spark-arena/dgx-vllm-eugr-nightly-tf5:latest"
 
 
 def test_vllm_distributed_generate_command_structured():

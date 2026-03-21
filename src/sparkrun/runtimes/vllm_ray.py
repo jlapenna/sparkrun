@@ -48,7 +48,7 @@ class VllmRayRuntime(RuntimePlugin):
     """
 
     runtime_name = "vllm-ray"
-    default_image_prefix = "scitrera/dgx-spark-vllm"
+    default_image_prefix = "ghcr.io/spark-arena/dgx-vllm-eugr-nightly-tf5"
 
     def generate_command(self, recipe: Recipe, overrides: dict[str, Any],
                          is_cluster: bool, num_nodes: int = 1,

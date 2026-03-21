@@ -988,11 +988,12 @@ class RuntimePlugin(Plugin):
         # Pipe the inner script into `docker exec <container> bash -s`
         # via a here-document.  This avoids quoting issues that arise
         # when embedding complex shell commands in bash -c '...'.
+        # TODO: using 'docker exec' implies executor should be involved
         outer_script = (
-            "docker exec -i %s bash -s <<'SPARKRUN_VER_EOF'\n"
-            "%s\n"
-            "SPARKRUN_VER_EOF"
-        ) % (container_name, inner_script)
+                           "docker exec -i %s bash -s <<'SPARKRUN_VER_EOF'\n"
+                           "%s\n"
+                           "SPARKRUN_VER_EOF"
+                       ) % (container_name, inner_script)
 
         try:
             from sparkrun.orchestration.primitives import run_script_on_host
