@@ -20,7 +20,7 @@ from ._common import (
 @click.group()
 @click.pass_context
 def recipe(ctx):
-    """Manage recipe registries and search for recipes."""
+    """ Find and manage inference recipes."""
     pass
 
 
@@ -203,48 +203,12 @@ def recipe_vram(ctx, recipe_name, tensor_parallel, max_model_len, gpu_mem, cache
 
 @recipe.command("update", hidden=True)
 @click.option("--registry", default=None, help="Update specific registry")
-# @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
-def recipe_update(ctx, registry, config_path=None, ):
+def recipe_update(ctx, registry):
     """Update recipe registries from git."""
-    click.echo("Warning: 'sparkrun recipe update' is deprecated. Use 'sparkrun registry update' instead.", err=True)
-    from sparkrun.core.registry import RegistryError
-
-    config, registry_mgr = _get_config_and_registry(config_path)
-
-    try:
-        # Count how many registries will be updated
-        if registry:
-            entry = registry_mgr.get_registry(registry)
-            if not getattr(entry, "enabled", True):
-                click.echo(
-                    f"Error: Registry '{registry}' is disabled; enable it in the config before updating.",
-                    err=True,
-                )
-                sys.exit(1)
-            entries = [entry]
-        else:
-            entries = [e for e in registry_mgr.list_registries() if e.enabled]
-
-        count = len(entries)
-        if count == 0:
-            click.echo("No enabled registries to update.")
-            return
-
-        click.echo(f"Updating {count} registr{'y' if count == 1 else 'ies'}...")
-
-        def _progress(name: str, success: bool) -> None:
-            status = "done" if success else "FAILED"
-            click.echo(f"  Updating {name}... {status}")
-
-        results = registry_mgr.update(registry, progress=_progress)
-        succeeded = sum(1 for v in results.values() if v)
-        failed = sum(1 for v in results.values() if not v)
-
-        if failed:
-            click.echo(f"{succeeded} of {count} registries updated ({failed} failed).")
-        else:
-            click.echo(f"{succeeded} registr{'y' if succeeded == 1 else 'ies'} updated.")
-    except RegistryError as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+    click.echo(
+        "Warning: 'sparkrun recipe update' is deprecated. Use 'sparkrun registry update' or 'sparkrun update' instead.",
+        err=True
+    )
+    from sparkrun.cli._registry import registry_update
+    ctx.invoke(registry_update, name=registry)
