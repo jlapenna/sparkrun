@@ -66,7 +66,7 @@ See the [full CLI reference](https://sparkrun.dev/cli/overview/) for all command
 
 ## Sponsored by
 
-[scitrera.ai](https://scitrera.ai)
+<a href="https://scitrera.ai"><img src="https://scitrera.com/logo2.png" alt="scitrera.ai" height="40" /></a>
 
 ## License
 
