@@ -23,6 +23,7 @@ from ._common import (
     dry_run_option,
     host_options,
     recipe_override_options,
+    resolve_cluster_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -219,11 +220,11 @@ def run(
                 click.echo("  Hosts:  %s" % ", ".join(_status.hosts))
             sys.exit(0)
 
-    # Resolve cache dir and transfer mode
-    cluster_cache_dir = _resolve_cluster_cache_dir(cluster_name, hosts, hosts_file, cluster_mgr)
-    effective_cache_dir = cache_dir or cluster_cache_dir or str(config.hf_cache_dir)
-    cluster_transfer_mode = _resolve_transfer_mode(cluster_name, hosts, hosts_file, cluster_mgr)
-    effective_transfer_mode = transfer_mode or cluster_transfer_mode or "auto"
+    # Resolve cache dir, transfer mode, and transfer interface from cluster config
+    cluster_cfg = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr)
+    effective_cache_dir = cache_dir or cluster_cfg.cache_dir or str(config.hf_cache_dir)
+    effective_transfer_mode = transfer_mode or cluster_cfg.transfer_mode or "auto"
+    effective_transfer_interface = cluster_cfg.transfer_interface
 
     # Display summary before launch
     container_image = runtime.resolve_container(recipe, overrides)
@@ -268,6 +269,7 @@ def run(
         is_solo=is_solo,
         cache_dir=effective_cache_dir,
         transfer_mode=effective_transfer_mode,
+        transfer_interface=effective_transfer_interface,
         recipe_ref=recipe_ref,
         registry_mgr=registry_mgr,
         sync_tuning=not no_sync_tuning,

@@ -54,6 +54,7 @@ def launch_inference(
         is_solo: bool = False,
         cache_dir: str | None = None,
         transfer_mode: str | None = None,
+        transfer_interface: str | None = None,
         recipe_ref: str | None = None,
         registry_mgr: RegistryManager | None = None,
         auto_port: bool = False,
@@ -97,6 +98,7 @@ def launch_inference(
         is_solo: Whether to launch in solo mode.
         cache_dir: Explicit cache dir override (None = resolve from config).
         transfer_mode: Resource transfer mode override (None = "auto").
+        transfer_interface: Network interface for transfers (cx7 or mgmt; None = cx7 default).
         recipe_ref: Simplified recipe reference for display (e.g. @spark-arena/UUID).
         registry_mgr: Registry manager for tuning config sync.
         auto_port: If True, auto-increment port when the desired port is in use.
@@ -193,6 +195,7 @@ def launch_inference(
             model_revision=recipe.model_revision,
             recipe_name=recipe.name,
             transfer_mode=effective_transfer_mode,
+            transfer_interface=transfer_interface,
         )
         # Re-save job metadata with IP maps from IB detection
         if not dry_run and (ib_ip_map or mgmt_ip_map):

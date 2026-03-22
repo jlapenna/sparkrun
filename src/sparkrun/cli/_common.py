@@ -174,6 +174,7 @@ class ResolvedClusterConfig:
     user: str | None = None
     cache_dir: str | None = None
     transfer_mode: str | None = None
+    transfer_interface: str | None = None
 
 
 def resolve_cluster_config(
@@ -211,9 +212,10 @@ def resolve_cluster_config(
     # User is always resolved (even with explicit --hosts, if --cluster given)
     cfg.user = cluster_def.user
 
-    # transfer_mode and cache_dir only apply when hosts come from the cluster
+    # transfer_mode, transfer_interface, and cache_dir only apply when hosts come from the cluster
     if not hosts and not hosts_file:
         cfg.transfer_mode = cluster_def.transfer_mode
+        cfg.transfer_interface = cluster_def.transfer_interface
         cfg.cache_dir = cluster_def.cache_dir
 
     return cfg

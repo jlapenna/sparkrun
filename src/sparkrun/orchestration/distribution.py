@@ -179,6 +179,7 @@ def distribute_resources(
         model_revision: str | None = None,
         recipe_name: str = "",
         transfer_mode: str = "auto",
+        transfer_interface: str | None = None,
 ) -> tuple[dict[str, str] | None, dict[str, str], dict[str, str]]:
     """Detect IB, distribute container image and model to target hosts.
 
@@ -213,6 +214,9 @@ def distribute_resources(
         recipe_name: Recipe name for pending-op lock display.
         transfer_mode: Distribution strategy (``"local"``, ``"push"``, or
             ``"delegated"``).
+        transfer_interface: Network interface for transfers.  ``"cx7"``
+            (default) uses IB IPs when available; ``"mgmt"`` forces
+            management IPs regardless of IB availability.
 
     Returns:
         Tuple of (nccl_env, ib_ip_map, mgmt_ip_map).  ``nccl_env`` is
@@ -286,10 +290,15 @@ def distribute_resources(
             _auto_delegated = True
             logger.info("Auto-detected transfer mode: delegated (external control, no IB connectivity)")
 
+    # Determine effective transfer interface (default: cx7)
+    _use_mgmt = (transfer_interface == "mgmt")
+    if _use_mgmt:
+        logger.info("Transfer interface: mgmt — using management IPs for transfers")
+
     if transfer_mode == "local":
         # Local mode: use validated IB IPs for direct transfers
         ib_ip_map = _ib_validated or {}
-        if ib_ip_map:
+        if ib_ip_map and not _use_mgmt:
             transfer_hosts = [
                 ib_result.ib_ip_map.get(h, h) for h in host_list
             ]
@@ -300,7 +309,7 @@ def distribute_resources(
     else:
         # Push/delegated: control is external, skip IB validation for
         # control→host transfers.  Use IB IPs only for head→worker transfers.
-        if len(host_list) > 1 and ib_result.ib_ip_map:
+        if len(host_list) > 1 and ib_result.ib_ip_map and not _use_mgmt:
             worker_transfer_hosts = [
                 ib_result.ib_ip_map.get(h, h) for h in host_list[1:]
             ]

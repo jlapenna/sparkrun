@@ -34,8 +34,12 @@ def cluster(ctx):
 @click.option("--transfer-mode", default=None,
               type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
               help="Resource transfer mode (auto, local, push, delegated)")
+@click.option("--transfer-interface", default=None,
+              type=click.Choice(["cx7", "mgmt"], case_sensitive=False),
+              help="Network interface for transfers (cx7=InfiniBand, mgmt=management)")
 @click.pass_context
-def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode):
+def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode,
+                   transfer_interface):
     """Create a new named cluster."""
     from sparkrun.core.cluster_manager import ClusterError
     from sparkrun.core.hosts import parse_hosts_file
@@ -51,7 +55,7 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
     mgr = _get_cluster_manager()
     try:
         mgr.create(name, host_list, description, user=user, cache_dir=cache_dir,
-                    transfer_mode=transfer_mode)
+                    transfer_mode=transfer_mode, transfer_interface=transfer_interface)
         click.echo(f"Cluster '{name}' created with {len(host_list)} host(s).")
     except ClusterError as e:
         click.echo(f"Error: {e}", err=True)
@@ -68,8 +72,12 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
 @click.option("--transfer-mode", default=None,
               type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
               help="Resource transfer mode (auto, local, push, delegated)")
+@click.option("--transfer-interface", default=None,
+              type=click.Choice(["cx7", "mgmt"], case_sensitive=False),
+              help="Network interface for transfers (cx7=InfiniBand, mgmt=management)")
 @click.pass_context
-def cluster_update(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode):
+def cluster_update(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode,
+                   transfer_interface):
     """Update an existing cluster."""
     from sparkrun.core.cluster_manager import ClusterError
     from sparkrun.core.hosts import parse_hosts_file
@@ -85,11 +93,13 @@ def cluster_update(ctx, name, hosts, hosts_file, description, user, cache_dir, t
     user_provided = ctx.get_parameter_source("user") == ParameterSource.COMMANDLINE
     cache_dir_provided = ctx.get_parameter_source("cache_dir") == ParameterSource.COMMANDLINE
     transfer_mode_provided = ctx.get_parameter_source("transfer_mode") == ParameterSource.COMMANDLINE
+    transfer_interface_provided = ctx.get_parameter_source("transfer_interface") == ParameterSource.COMMANDLINE
 
     if (host_list is None and description is None and not user_provided
-            and not cache_dir_provided and not transfer_mode_provided):
+            and not cache_dir_provided and not transfer_mode_provided
+            and not transfer_interface_provided):
         click.echo("Error: Nothing to update. Provide --hosts, --hosts-file, -d, --user, "
-                    "--cache-dir, or --transfer-mode.", err=True)
+                    "--cache-dir, --transfer-mode, or --transfer-interface.", err=True)
         sys.exit(1)
 
     update_kwargs = {}
@@ -99,6 +109,8 @@ def cluster_update(ctx, name, hosts, hosts_file, description, user, cache_dir, t
         update_kwargs["cache_dir"] = cache_dir
     if transfer_mode_provided:
         update_kwargs["transfer_mode"] = transfer_mode
+    if transfer_interface_provided:
+        update_kwargs["transfer_interface"] = transfer_interface
 
     mgr = _get_cluster_manager()
     try:
@@ -162,6 +174,8 @@ def cluster_show(ctx, name):
         click.echo(f"Cache dir:   {c.cache_dir}")
     if c.transfer_mode:
         click.echo(f"Transfer:    {c.transfer_mode}")
+    if c.transfer_interface:
+        click.echo(f"Xfer iface:  {c.transfer_interface}")
     click.echo(f"Default:     {'yes' if c.name == default_name else 'no'}")
     click.echo(f"Hosts ({len(c.hosts)}):")
     for h in c.hosts:

@@ -657,6 +657,76 @@ class TestClusterCommands:
         assert "dgxuser" in result.output
         assert "/mnt/models" in result.output
 
+    def test_cluster_create_with_transfer_interface(self, runner, tmp_path, monkeypatch):
+        """Test creating a cluster with --transfer-interface."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        result = runner.invoke(main, [
+            "cluster", "create", "mgmt-cluster",
+            "--hosts", "host1,host2",
+            "--transfer-interface", "mgmt",
+        ])
+        assert result.exit_code == 0
+
+        # Verify transfer_interface is stored and shown
+        result = runner.invoke(main, ["cluster", "show", "mgmt-cluster"])
+        assert result.exit_code == 0
+        assert "mgmt" in result.output
+        assert "Xfer iface:" in result.output
+
+    def test_cluster_show_no_transfer_interface(self, runner, tmp_path, monkeypatch):
+        """Test that cluster show omits Xfer iface when not set."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        runner.invoke(main, [
+            "cluster", "create", "no-iface",
+            "--hosts", "host1",
+        ])
+        result = runner.invoke(main, ["cluster", "show", "no-iface"])
+        assert result.exit_code == 0
+        assert "Xfer iface:" not in result.output
+
+    def test_cluster_update_transfer_interface(self, runner, cluster_setup):
+        """Test updating cluster transfer_interface."""
+        result = runner.invoke(main, [
+            "cluster", "update", "test-cluster",
+            "--transfer-interface", "cx7",
+        ])
+        assert result.exit_code == 0
+        assert "updated" in result.output.lower()
+
+        # Verify transfer_interface is shown
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Xfer iface:  cx7" in result.output
+
+    def test_cluster_create_invalid_transfer_interface(self, runner, tmp_path, monkeypatch):
+        """Test that invalid --transfer-interface value is rejected by Click."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        result = runner.invoke(main, [
+            "cluster", "create", "bad-iface",
+            "--hosts", "host1",
+            "--transfer-interface", "foo",
+        ])
+        assert result.exit_code != 0
+
+    def test_cluster_update_nothing_to_update_includes_transfer_interface(self, runner, cluster_setup):
+        """Test that 'nothing to update' error mentions --transfer-interface."""
+        result = runner.invoke(main, [
+            "cluster", "update", "test-cluster",
+        ])
+        assert result.exit_code != 0
+        assert "--transfer-interface" in result.output
+
 
 class TestClusterMonitor:
     """Test cluster monitor subcommand."""
