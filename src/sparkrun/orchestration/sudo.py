@@ -88,7 +88,7 @@ def run_sudo_script_on_host(
     Returns:
         RemoteResult with the original host label preserved.
     """
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
 
     if is_local_host(host):
         r = _run_local_sudo_script(script, password=password, timeout=timeout, dry_run=dry_run)
@@ -134,7 +134,7 @@ def run_with_sudo_fallback(
         {host: SSHResult} and still_failed_hosts is a list of hosts
         that failed even after password-based sudo.
     """
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
 
     # Separate local and remote hosts
     local_hosts = [h for h in host_list if is_local_host(h)]

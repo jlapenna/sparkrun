@@ -349,7 +349,7 @@ def _run_copy_command(
         RuntimeError: If the copy fails.
     """
     from sparkrun.orchestration.primitives import run_script_on_host
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
 
     source = cmd["copy"]
     source_path = Path(source)

@@ -10,13 +10,9 @@ import socket
 from pathlib import Path
 
 from sparkrun.core.cluster_manager import ClusterError, ClusterManager
+from sparkrun.utils import is_local_host  # noqa: F401 re-exported for backward compat
 
 logger = logging.getLogger(__name__)
-
-
-def is_local_host(host: str) -> bool:
-    """Check if a host string refers to the local machine."""
-    return host in ("localhost", "127.0.0.1", "")
 
 
 def _get_local_identifiers() -> set[str]:
@@ -45,13 +41,6 @@ def _get_local_identifiers() -> set[str]:
                 identifiers.add(info[4][0])
         except (OSError, socket.gaierror):
             pass
-
-    # Get all local interface IPs via binding trick
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None):
-            identifiers.add(info[4][0])
-    except (OSError, socket.gaierror):
-        pass
 
     return identifiers
 

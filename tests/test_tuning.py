@@ -773,10 +773,11 @@ class TestEugrVllmAutoMount:
 class TestPreCheckTp:
     """Test that _pre_check_tp is called and can skip tuning."""
 
-    def test_base_pre_check_returns_false(self):
-        """BaseTuner._pre_check_tp always returns False (tune anyway)."""
+    def test_base_pre_check_returns_false_in_dry_run(self):
+        """BaseTuner._pre_check_tp returns False in dry-run mode."""
         from sparkrun.tuning._common import BaseTuner
         tuner = BaseTuner.__new__(BaseTuner)
+        tuner.dry_run = True
         assert tuner._pre_check_tp(1, "3.6.0") is False
 
     def test_sglang_pre_check_returns_false_in_dry_run(self):

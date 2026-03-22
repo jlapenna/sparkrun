@@ -287,7 +287,7 @@ class BaseTuner:
         """Step 1: Launch a tuning container with sleep infinity."""
         import time
         from sparkrun.orchestration.primitives import build_volumes, run_script_on_host
-        from sparkrun.orchestration.scripts import generate_container_launch_script
+        from sparkrun.orchestration.executor_docker import DockerExecutor
 
         t0 = time.monotonic()
         logger.info("Step 1/5: Launching tuning container on %s...", self.host)
@@ -309,7 +309,7 @@ class BaseTuner:
         # Mount tuning output directory
         volumes[self.output_dir] = self.output_path
 
-        launch_script = generate_container_launch_script(
+        launch_script = DockerExecutor().generate_launch_script(
             image=self.image,
             container_name=self.container_name,
             command="sleep infinity",
@@ -396,24 +396,101 @@ class BaseTuner:
         Subclasses override to fix known upstream issues.
         """
 
+    def _pre_check_output_dir(self, tp_size: int, triton_version: str) -> str:
+        """Return the container-side output directory for pre-check.
+
+        Subclasses override to apply versioning (e.g. SGLang uses
+        ``triton_X_Y_Z`` subdirectories).  The default returns
+        :attr:`output_path`.
+        """
+        return self.output_path
+
     def _pre_check_tp(self, tp_size: int, triton_version: str) -> bool:
         """Check if tuning configs already exist for this TP size.
 
-        Runs a lightweight check inside the container to determine if
-        the expected output files already exist.  Subclasses override
-        to implement runtime-specific checks.
+        Runs a lightweight script inside the container that loads the model
+        config to determine MoE shape params (E, N), then checks whether
+        matching config files already exist in the output directory.
 
-        Returns:
-            ``True`` if configs exist (skip tuning), ``False`` if needed.
+        Returns ``True`` if configs exist (skip tuning), ``False`` otherwise.
+        On any error, returns ``False`` (safe default — tune anyway).
         """
-        return False  # default: always tune
+        from sparkrun.orchestration.primitives import run_command_on_host
+        from sparkrun.orchestration.docker import docker_exec_cmd
 
-    def _run_tune_for_tp(self, tp_size: int, triton_version: str) -> int:
-        """Step 4 (per-TP): Run the tuning script for a given TP size.
+        if self.dry_run:
+            return False
+
+        output_dir = self._pre_check_output_dir(tp_size, triton_version)
+
+        check_script = (
+            "python3 -c \""
+            "import sys, os, glob; "
+            "from transformers import AutoConfig; "
+            "c = AutoConfig.from_pretrained('%s', trust_remote_code=True); "
+            "E = getattr(c, 'num_local_experts', getattr(c, 'num_experts', 0)); "
+            "I = getattr(c, 'intermediate_size', getattr(c, 'moe_intermediate_size', 0)); "
+            "N = (I * 2) // %d; "
+            "pattern = os.path.join('%s', 'E=%%d,N=%%d,*' %% (E, N)); "
+            "matches = glob.glob(pattern); "
+            "sys.exit(0 if matches else 1)"
+            "\""
+        ) % (self.model, tp_size, output_dir)
+
+        exec_cmd = docker_exec_cmd(self.container_name, check_script)
+        try:
+            result = run_command_on_host(
+                self.host, exec_cmd,
+                ssh_kwargs=self.ssh_kwargs, timeout=60, dry_run=False,
+            )
+            return result.success
+        except Exception:
+            logger.debug("Pre-check failed for TP=%d, will proceed with tuning", tp_size)
+            return False
+
+    def _build_tune_command(self, tp_size: int, triton_version: str) -> str:
+        """Build the tuning command for a given TP size.
 
         Subclasses must override this — each runtime builds a different command.
         """
         raise NotImplementedError
+
+    def _run_tune_for_tp(self, tp_size: int, triton_version: str) -> int:
+        """Step 4 (per-TP): Run the tuning script for a given TP size."""
+        import time
+        from sparkrun.orchestration.primitives import run_command_on_host
+        from sparkrun.orchestration.docker import docker_exec_cmd
+
+        t0 = time.monotonic()
+        tune_cmd = self._build_tune_command(tp_size, triton_version)
+        exec_cmd = docker_exec_cmd(self.container_name, tune_cmd)
+
+        # Tuning can take many hours (e.g. 4+ hours for TP=4 on large
+        # models).  Use an 8-hour timeout so remote SSH sessions aren't
+        # killed prematurely.
+        result = run_command_on_host(
+            self.host, exec_cmd,
+            ssh_kwargs=self.ssh_kwargs, timeout=28800, dry_run=self.dry_run,
+        )
+
+        if self.dry_run:
+            logger.info("  [dry-run] Would run tuning for TP=%d", tp_size)
+            return 0
+
+        elapsed = time.monotonic() - t0
+        if not result.success:
+            logger.error(
+                "  Tuning for TP=%d failed (exit %d, %.1fs)",
+                tp_size, result.returncode, elapsed,
+            )
+            if result.stdout and result.stdout.strip():
+                logger.error("  stdout:\n%s", result.stdout.rstrip())
+            if result.stderr and result.stderr.strip():
+                logger.error("  stderr:\n%s", result.stderr.rstrip())
+            return result.returncode
+
+        logger.info("  TP=%d tuning complete (%.1fs)", tp_size, elapsed)
+        return 0
 
     def _print_timing_summary(
             self,
@@ -449,7 +526,7 @@ class BaseTuner:
 
         No-op when the host is localhost (same filesystem).
         """
-        from sparkrun.core.hosts import is_local_host
+        from sparkrun.utils import is_local_host
 
         if is_local_host(self.host):
             return

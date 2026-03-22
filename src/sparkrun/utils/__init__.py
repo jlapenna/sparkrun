@@ -104,6 +104,11 @@ def merge_env(*env_dicts: dict[str, str] | None) -> dict[str, str]:
     return merged
 
 
+def is_local_host(host: str) -> bool:
+    """Check if a host string refers to the local machine."""
+    return host in ("localhost", "127.0.0.1", "")
+
+
 def format_duration(seconds: float) -> str:
     """Format a duration in seconds to a human-readable string.
 

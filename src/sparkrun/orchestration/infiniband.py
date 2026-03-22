@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, field
 
 from sparkrun.scripts import read_script
-from sparkrun.utils import parse_kv_output  # noqa: F401 — re-exported for callers
+from sparkrun.utils import parse_kv_output
 
 logger = logging.getLogger(__name__)
 

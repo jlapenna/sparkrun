@@ -354,10 +354,6 @@ class TrtllmRuntime(RuntimePlugin):
 
         return issues
 
-    def _head_container_name(self, cluster_id: str) -> str:
-        """TRT-LLM names the head container ``{cluster_id}_node_0``."""
-        return self.executor.node_container_name(cluster_id, 0)
-
     def _cluster_log_mode(self) -> str:
         """TRT-LLM cluster uses docker logs (mpirun output goes to stdout)."""
         return "docker"

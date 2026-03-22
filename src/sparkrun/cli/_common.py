@@ -4,97 +4,18 @@ from __future__ import annotations
 
 import logging
 import sys
-from pathlib import Path
+from dataclasses import dataclass
 
 import click
 
+from sparkrun.core.recipe import (
+    _expand_recipe_shortcut,
+    _fetch_and_cache_recipe,
+    _is_recipe_url,
+    _simplify_recipe_ref,  # noqa: F401 — re-exported for cli/_run.py, cli/_benchmark.py
+)
+
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Remote recipe helpers (spark-arena URL support)
-# ---------------------------------------------------------------------------
-
-SPARK_ARENA_PREFIX = "@spark-arena/"
-SPARK_ARENA_API_URL = "https://spark-arena.com/api/recipes/%s/raw"
-
-
-def _expand_recipe_shortcut(name: str) -> str:
-    """Expand known recipe shortcuts to full URLs.
-
-    Currently supports:
-        @spark-arena/UUID  ->  https://spark-arena.com/api/recipes/UUID/raw
-    """
-    if name.startswith(SPARK_ARENA_PREFIX):
-        recipe_id = name[len(SPARK_ARENA_PREFIX):]
-        return SPARK_ARENA_API_URL % recipe_id
-    return name
-
-
-def _simplify_recipe_ref(url: str) -> str:
-    """Simplify a recipe URL to a shortcut if possible (inverse of expand).
-
-    Currently supports:
-        https://spark-arena.com/api/recipes/UUID/raw  ->  @spark-arena/UUID
-
-    Returns the original string unchanged if no simplification applies.
-    """
-    import re
-
-    m = re.match(r"https?://spark-arena\.com/api/recipes/([^/]+)/raw$", url)
-    if m:
-        return "%s%s" % (SPARK_ARENA_PREFIX, m.group(1))
-    return url
-
-
-def _is_recipe_url(name: str) -> bool:
-    """Check if recipe_name looks like an HTTP(S) URL."""
-    return name.startswith(("http://", "https://"))
-
-
-def _url_cache_path(url: str) -> Path:
-    """Return the local cache path for a remote recipe URL."""
-    import hashlib
-
-    from sparkrun.core.config import DEFAULT_CACHE_DIR
-
-    url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
-    return DEFAULT_CACHE_DIR / "remote-recipes" / ("%s.yaml" % url_hash)
-
-
-def _fetch_and_cache_recipe(url: str) -> Path:
-    """Fetch a recipe from URL and cache it locally.
-
-    On success, writes/updates the cache file and returns its path.
-    On network failure, falls back to cached copy if available.
-    Raises click.ClickException if fetch fails and no cache exists.
-    """
-    from urllib.error import HTTPError, URLError
-    from urllib.request import Request, urlopen
-
-    cache_path = _url_cache_path(url)
-
-    try:
-        req = Request(url, headers={"User-Agent": "sparkrun"})
-        with urlopen(req, timeout=30) as resp:
-            content = resp.read()
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_bytes(content)
-        return cache_path
-    except (HTTPError, URLError, OSError) as e:
-        if cache_path.exists():
-            reason = e.code if isinstance(e, HTTPError) else e.reason
-            logger.warning(
-                "Failed to fetch recipe (using cached copy): %s", reason,
-            )
-            return cache_path
-        if isinstance(e, HTTPError):
-            raise click.ClickException(
-                "Failed to fetch recipe from %s: HTTP %d" % (url, e.code)
-            )
-        raise click.ClickException(
-            "Failed to fetch recipe from %s: %s"
-            % (url, e.reason if isinstance(e, URLError) else e)
-        )
 
 
 # TODO: converge logging with SAF logging
@@ -242,84 +163,73 @@ def _apply_tp_trimming(
     )
 
 
-def _resolve_cluster_user(
+@dataclass
+class ResolvedClusterConfig:
+    """Effective cluster configuration resolved from CLI args + cluster definition.
+
+    Populated by :func:`resolve_cluster_config` which resolves the cluster
+    definition once and extracts all properties in a single pass.
+    """
+    name: str | None = None
+    user: str | None = None
+    cache_dir: str | None = None
+    transfer_mode: str | None = None
+
+
+def resolve_cluster_config(
         cluster_name: str | None,
         hosts: str | None,
         hosts_file: str | None,
         cluster_mgr,
-) -> str | None:
-    """Resolve the SSH user from a cluster definition, if applicable.
+) -> ResolvedClusterConfig:
+    """Resolve cluster configuration properties in a single pass.
 
-    Returns the cluster's configured user, or None if no cluster is
-    resolved or the cluster has no user set.
+    When *hosts* or *hosts_file* is provided, the cluster definition
+    is not used for transfer_mode or cache_dir (matching the priority
+    chain of ``core.hosts.resolve_hosts``).  The SSH user is still
+    resolved from the cluster when *cluster_name* is given explicitly.
+
+    Returns a :class:`ResolvedClusterConfig` with all resolved properties.
     """
+    cfg = ResolvedClusterConfig()
+
+    # Determine which cluster to resolve
     resolved = cluster_name
     if not resolved and not hosts and not hosts_file:
         resolved = cluster_mgr.get_default() if cluster_mgr else None
-    if resolved:
-        try:
-            cluster_def = cluster_mgr.get(resolved)
-            return cluster_def.user
-        except Exception:
-            logger.debug("Failed to resolve cluster '%s'", resolved, exc_info=True)
-    return None
 
-
-def _resolve_transfer_mode(
-        cluster_name: str | None,
-        hosts: str | None,
-        hosts_file: str | None,
-        cluster_mgr,
-) -> str | None:
-    """Resolve transfer_mode from a cluster definition, if applicable.
-
-    Returns the cluster's configured transfer_mode, or None if no cluster is
-    resolved or the cluster has no transfer_mode set.
-
-    Mirrors the priority chain of core.hosts.resolve_hosts(): if hosts or
-    hosts_file is provided, the cluster is not used, so neither should
-    transfer_mode.
-    """
-    if hosts or hosts_file:
-        return None
-    resolved = cluster_name
     if not resolved:
-        resolved = cluster_mgr.get_default() if cluster_mgr else None
-    if resolved:
-        try:
-            cluster_def = cluster_mgr.get(resolved)
-            return cluster_def.transfer_mode
-        except Exception:
-            logger.debug("Failed to resolve cluster '%s'", resolved, exc_info=True)
-    return None
+        return cfg
+
+    cfg.name = resolved
+    try:
+        cluster_def = cluster_mgr.get(resolved)
+    except Exception:
+        logger.debug("Failed to resolve cluster '%s'", resolved, exc_info=True)
+        return cfg
+
+    # User is always resolved (even with explicit --hosts, if --cluster given)
+    cfg.user = cluster_def.user
+
+    # transfer_mode and cache_dir only apply when hosts come from the cluster
+    if not hosts and not hosts_file:
+        cfg.transfer_mode = cluster_def.transfer_mode
+        cfg.cache_dir = cluster_def.cache_dir
+
+    return cfg
 
 
-def _resolve_cluster_cache_dir(
-        cluster_name: str | None,
-        hosts: str | None,
-        hosts_file: str | None,
-        cluster_mgr,
-) -> str | None:
-    """Resolve cache_dir from a cluster definition, if applicable.
+# Backward-compatible aliases
+def _resolve_cluster_user(cluster_name, hosts, hosts_file, cluster_mgr):
+    return resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).user
 
-    Returns the cluster's configured cache_dir, or None if no cluster is
-    resolved or the cluster has no cache_dir set.
 
-    Mirrors the priority chain of core.hosts.resolve_hosts(): if hosts or
-    hosts_file is provided, the cluster is not used, so neither should cache_dir.
-    """
-    if hosts or hosts_file:
-        return None
-    resolved = cluster_name
-    if not resolved:
-        resolved = cluster_mgr.get_default() if cluster_mgr else None
-    if resolved:
-        try:
-            cluster_def = cluster_mgr.get(resolved)
-            return cluster_def.cache_dir
-        except Exception:
-            logger.debug("Failed to resolve cluster '%s'", resolved, exc_info=True)
-    return None
+def _resolve_transfer_mode(cluster_name, hosts, hosts_file, cluster_mgr):
+    return resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).transfer_mode
+
+
+def _resolve_cluster_cache_dir(cluster_name, hosts, hosts_file, cluster_mgr):
+    return resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).cache_dir
 
 
 def _get_cluster_manager(v=None):

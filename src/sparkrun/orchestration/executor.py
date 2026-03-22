@@ -207,7 +207,7 @@ class Executor(ABC):
 
         Absorbs ``scripts.py::generate_container_launch_script``.
         """
-        from sparkrun.orchestration.primitives import merge_env
+        from sparkrun.utils import merge_env
         from sparkrun.scripts import read_script
 
         all_env = merge_env(nccl_env, env)
@@ -273,7 +273,7 @@ class Executor(ABC):
 
         Absorbs ``scripts.py::generate_ray_head_script``.
         """
-        from sparkrun.orchestration.primitives import merge_env
+        from sparkrun.utils import merge_env
         from sparkrun.scripts import read_script
 
         all_env = merge_env({"RAY_memory_monitor_refresh_ms": "0"}, nccl_env, env)
@@ -322,7 +322,7 @@ class Executor(ABC):
 
         Absorbs ``scripts.py::generate_ray_worker_script``.
         """
-        from sparkrun.orchestration.primitives import merge_env
+        from sparkrun.utils import merge_env
         from sparkrun.scripts import read_script
 
         all_env = merge_env({"RAY_memory_monitor_refresh_ms": "0"}, nccl_env, env)
@@ -368,7 +368,7 @@ class Executor(ABC):
 
         Absorbs ``base.py::_generate_node_script``.
         """
-        from sparkrun.orchestration.primitives import merge_env
+        from sparkrun.utils import merge_env
 
         all_env = merge_env(nccl_env, env)
         cleanup = self.stop_cmd(container_name)
@@ -382,7 +382,6 @@ class Executor(ABC):
             extra_opts=extra_docker_opts,
         )
 
-        # TODO: shift into scripts rather than inline
         return (
             "#!/bin/bash\n"
             "set -uo pipefail\n"

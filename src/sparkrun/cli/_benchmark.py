@@ -50,6 +50,7 @@ DEFAULT_BENCHMARK_TIMEOUT: int = 14400  # 4 hours
 @click.option("--no-stop", is_flag=True, help="Don't stop inference after benchmarking")
 @click.option("--skip-run", is_flag=True, help="Skip launching inference (benchmark existing instance)")
 @click.option("--sync-tuning", is_flag=True, help="Sync tuning configs from registries before benchmarking")
+@click.option("--rootful", is_flag=True, help="Run with --privileged as root inside container (legacy behavior)")
 @click.option("--timeout", "bench_timeout", type=int, default=None,
               help="Benchmark timeout in seconds (default: %d, or from profile)" % DEFAULT_BENCHMARK_TIMEOUT)
 @dry_run_option
@@ -59,7 +60,7 @@ def benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
               options, image, solo, port, cache_dir,
               profile, framework,
               output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
-              sync_tuning, bench_timeout, dry_run):
+              sync_tuning, rootful, bench_timeout, dry_run):
     """Benchmark an inference recipe.
 
     Runs the full benchmark flow: launch inference, run benchmark, stop
@@ -87,7 +88,7 @@ def benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
         options, image, solo, port, cache_dir,
         profile, framework,
         output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
-        sync_tuning, bench_timeout, dry_run,
+        sync_tuning, rootful, bench_timeout, dry_run,
     )
 
 
@@ -97,14 +98,14 @@ def _run_benchmark(
         options, image, solo, port, cache_dir,
         profile, framework_name,
         output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
-        sync_tuning, bench_timeout, dry_run,
+        sync_tuning, rootful, bench_timeout, dry_run,
 ):
     """Execute the full benchmark flow: launch inference -> benchmark -> stop."""
     from sparkrun.benchmarking.base import export_results
     from ..core.benchmark_profiles import BenchmarkSpec
     from sparkrun.core.bootstrap import init_sparkrun, get_runtime, get_benchmarking_framework
     from sparkrun.core.config import SparkrunConfig
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
     from sparkrun.core.launcher import launch_inference
     from sparkrun.orchestration.primitives import (
         build_ssh_kwargs,
@@ -337,6 +338,8 @@ def _run_benchmark(
             skip_keys={"served_model_name"},
             dry_run=dry_run,
             detached=True,
+            rootless=not rootful,
+            auto_user=not rootful,
         )
 
         if launch_result.rc != 0 and not dry_run:

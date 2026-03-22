@@ -161,7 +161,7 @@ def _stop_by_cluster_id(target, hosts, hosts_file, cluster_name, config, dry_run
     ssh_kwargs = build_ssh_kwargs(config)
     container_names = enumerate_cluster_containers(cluster_id, len(host_list))
 
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
     is_local = len(host_list) == 1 and is_local_host(host_list[0])
     if is_local:
         cleanup_containers_local(container_names, dry_run=dry_run)
@@ -214,7 +214,7 @@ def _stop_recipe(recipe_name, hosts, hosts_file, cluster_name, config, tp_overri
 
     container_names = enumerate_cluster_containers(cluster_id, len(host_list))
 
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
     is_local = len(host_list) == 1 and is_local_host(host_list[0])
     if is_local:
         cleanup_containers_local(container_names, dry_run=dry_run)

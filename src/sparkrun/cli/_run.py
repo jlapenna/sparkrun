@@ -303,7 +303,7 @@ def run(
             head_container = generate_node_container_name(result.cluster_id, 0)
 
         # Detect head IP for health checks
-        from sparkrun.core.hosts import is_local_host
+        from sparkrun.utils import is_local_host
         if is_local_host(head_host):
             head_ip = "127.0.0.1"
         else:

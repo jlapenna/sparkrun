@@ -19,25 +19,6 @@ if TYPE_CHECKING:
     from sparkrun.core.registry import RegistryManager
     from sparkrun.models.vram import VRAMEstimate
 
-
-# region yaml details -- move to util?
-
-class _LiteralBlockDumper(yaml.SafeDumper):
-    """YAML dumper that uses literal block style (|) for multiline strings."""
-    pass
-
-
-def _literal_str_representer(dumper: yaml.Dumper, data: str) -> yaml.ScalarNode:
-    if "\n" in data:
-        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
-    return dumper.represent_scalar("tag:yaml.org,2002:str", data)
-
-
-# noinspection PyTypeChecker
-_LiteralBlockDumper.add_representer(str, _literal_str_representer)
-
-# endregion
-
 logger = logging.getLogger(__name__)
 
 # Matches a backslash followed by trailing whitespace before a newline.
@@ -117,8 +98,6 @@ def _resolve_runtime_from_command_hint(recipe: Recipe) -> None:
         recipe.runtime = "llama-cpp"
     elif _CMD_TRTLLM_RE.match(cmd):
         recipe.runtime = "trtllm"
-
-    return
 
 
 def _resolve_v1_migration(recipe: Recipe) -> None:
@@ -264,6 +243,87 @@ def discover_cwd_recipes(directory: Path | None = None) -> list[Path]:
     for pattern in ("*.yaml", "*.yml"):
         candidates.extend(directory.glob(pattern))
     return sorted(p for p in candidates if is_recipe_file(p))
+
+
+SPARK_ARENA_PREFIX = "@spark-arena/"
+SPARK_ARENA_API_URL = "https://spark-arena.com/api/recipes/%s/raw"
+
+
+def _expand_recipe_shortcut(name: str) -> str:
+    """Expand known recipe shortcuts to full URLs.
+
+    Currently supports:
+        @spark-arena/UUID  ->  https://spark-arena.com/api/recipes/UUID/raw
+    """
+    if name.startswith(SPARK_ARENA_PREFIX):
+        recipe_id = name[len(SPARK_ARENA_PREFIX):]
+        return SPARK_ARENA_API_URL % recipe_id
+    return name
+
+
+def _simplify_recipe_ref(url: str) -> str:
+    """Simplify a recipe URL to a shortcut if possible (inverse of expand).
+
+    Currently supports:
+        https://spark-arena.com/api/recipes/UUID/raw  ->  @spark-arena/UUID
+
+    Returns the original string unchanged if no simplification applies.
+    """
+    m = re.match(r"https?://spark-arena\.com/api/recipes/([^/]+)/raw$", url)
+    if m:
+        return "%s%s" % (SPARK_ARENA_PREFIX, m.group(1))
+    return url
+
+
+def _is_recipe_url(name: str) -> bool:
+    """Check if recipe_name looks like an HTTP(S) URL."""
+    return name.startswith(("http://", "https://"))
+
+
+def _url_cache_path(url: str) -> Path:
+    """Return the local cache path for a remote recipe URL."""
+    import hashlib
+
+    from sparkrun.core.config import DEFAULT_CACHE_DIR
+
+    url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
+    return DEFAULT_CACHE_DIR / "remote-recipes" / ("%s.yaml" % url_hash)
+
+
+def _fetch_and_cache_recipe(url: str) -> Path:
+    """Fetch a recipe from URL and cache it locally.
+
+    On success, writes/updates the cache file and returns its path.
+    On network failure, falls back to cached copy if available.
+    Raises RecipeError if fetch fails and no cache exists.
+    """
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    cache_path = _url_cache_path(url)
+
+    try:
+        req = Request(url, headers={"User-Agent": "sparkrun"})
+        with urlopen(req, timeout=30) as resp:
+            content = resp.read()
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(content)
+        return cache_path
+    except (HTTPError, URLError, OSError) as e:
+        if cache_path.exists():
+            reason = e.code if isinstance(e, HTTPError) else e.reason
+            logger.warning(
+                "Failed to fetch recipe (using cached copy): %s", reason,
+            )
+            return cache_path
+        if isinstance(e, HTTPError):
+            raise RecipeError(
+                "Failed to fetch recipe from %s: HTTP %d" % (url, e.code)
+            )
+        raise RecipeError(
+            "Failed to fetch recipe from %s: %s"
+            % (url, e.reason if isinstance(e, URLError) else e)
+        )
 
 
 class RecipeError(Exception):
@@ -773,11 +833,13 @@ class Recipe:
         Builds a clean dict from resolved attributes (not raw input),
         applies preferred key ordering, and writes YAML.
         """
+        from sparkrun.utils.yaml_helpers import LiteralBlockDumper
+
         export_dict = self._build_export_dict()
         ordered = _sort_dict_by_patterns(export_dict, self.EXPORT_KEY_ORDER)
 
         text = json_dumps(ordered, sort_keys=False) if json else \
-            yaml.dump(ordered, Dumper=_LiteralBlockDumper, indent=2, sort_keys=False, default_flow_style=False)
+            yaml.dump(ordered, Dumper=LiteralBlockDumper, indent=2, sort_keys=False, default_flow_style=False)
 
         if path is None:
             return text

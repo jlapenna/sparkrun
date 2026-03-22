@@ -12,8 +12,7 @@ import subprocess
 import time
 
 from sparkrun.core.config import SparkrunConfig, resolve_cache_dir
-from sparkrun.utils import is_valid_ip  # noqa: F401 — re-exported for callers
-from sparkrun.utils import merge_env  # noqa: F401 — re-exported for callers
+from sparkrun.utils import is_valid_ip
 from sparkrun.orchestration.ssh import (
     RemoteResult,
     run_remote_command,
@@ -28,6 +27,10 @@ from sparkrun.orchestration.infiniband import (
 from sparkrun.orchestration.docker import docker_stop_cmd
 
 logger = logging.getLogger(__name__)
+
+# Orchestration constants
+MAX_PARALLEL_SSH = 20
+PORT_SCAN_MAX_ATTEMPTS = 24
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +259,7 @@ def try_clear_page_cache(
     Failures are non-fatal — a warning is logged with a hint about
     ``sparkrun setup clear-cache --save-sudo``.
     """
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
     from sparkrun.scripts import read_script
 
     script = read_script("clear_cache.sh")
@@ -324,7 +327,7 @@ def check_tcp_reachability(
         except (OSError, socket.timeout):
             return ip, False
 
-    with ThreadPoolExecutor(max_workers=min(len(ips), 20)) as pool:
+    with ThreadPoolExecutor(max_workers=min(len(ips), MAX_PARALLEL_SSH)) as pool:
         results = dict(pool.map(_check, ips))
 
     return results
@@ -447,7 +450,7 @@ def is_container_running(
 def find_available_port(
         host: str,
         port: int,
-        max_attempts: int = 24,
+        max_attempts: int = PORT_SCAN_MAX_ATTEMPTS,
         ssh_kwargs: dict | None = None,
         dry_run: bool = False,
 ) -> int:
@@ -657,7 +660,7 @@ def run_script_on_host(
     If *host* is ``"localhost"``, ``"127.0.0.1"``, or empty, runs locally.
     Otherwise runs via SSH.
     """
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
     if is_local_host(host):
         return run_local_script(script, dry_run=dry_run)
     kw = ssh_kwargs or {}
@@ -672,7 +675,7 @@ def run_command_on_host(
         dry_run: bool = False,
 ) -> RemoteResult:
     """Run a command on a host — dispatches to local or remote execution."""
-    from sparkrun.core.hosts import is_local_host
+    from sparkrun.utils import is_local_host
     if is_local_host(host):
         return run_local_script("#!/bin/bash\n" + command, dry_run=dry_run)
     kw = ssh_kwargs or {}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from sparkrun.core.hosts import is_local_host
+from sparkrun.utils import is_local_host
 from sparkrun.tuning.sync import _get_local_tuning_dir
 
 logger = logging.getLogger(__name__)

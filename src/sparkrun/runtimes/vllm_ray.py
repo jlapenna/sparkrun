@@ -6,40 +6,15 @@ import logging
 from typing import Any, TYPE_CHECKING
 
 from sparkrun.runtimes.base import RuntimePlugin
+from sparkrun.runtimes._vllm_common import VllmMixin, VLLM_FLAG_MAP, VLLM_BOOL_FLAGS
 
 if TYPE_CHECKING:
     from sparkrun.core.recipe import Recipe
 
 logger = logging.getLogger(__name__)
 
-# Standard vLLM CLI flags and their recipe default keys
-_VLLM_FLAG_MAP = {
-    "port": "--port",
-    "host": "--host",
-    "tensor_parallel": "-tp",
-    "gpu_memory_utilization": "--gpu-memory-utilization",
-    "max_model_len": "--max-model-len",
-    "max_num_batched_tokens": "--max-num-batched-tokens",
-    "max_num_seqs": "--max-num-seqs",
-    "served_model_name": "--served-model-name",
-    "dtype": "--dtype",
-    "quantization": "--quantization",
-    "enforce_eager": "--enforce-eager",
-    "enable_prefix_caching": "--enable-prefix-caching",
-    "trust_remote_code": "--trust-remote-code",
-    "distributed_executor_backend": "--distributed-executor-backend",
-    "pipeline_parallel": "-pp",
-    "kv_cache_dtype": "--kv-cache-dtype",
-}
 
-# Boolean flags (present = True, absent = False)
-_VLLM_BOOL_FLAGS = {
-    "enforce_eager", "enable_prefix_caching", "trust_remote_code",
-    "enable_auto_tool_choice",
-}
-
-
-class VllmRayRuntime(RuntimePlugin):
+class VllmRayRuntime(VllmMixin, RuntimePlugin):
     """vLLM runtime using Ray for multi-node clustering.
 
     Uses Ray head/worker orchestration for distributed inference.
@@ -68,7 +43,7 @@ class VllmRayRuntime(RuntimePlugin):
             )
             if skip_keys:
                 rendered = self.strip_flags_from_command(
-                    rendered, skip_keys, _VLLM_FLAG_MAP, _VLLM_BOOL_FLAGS,
+                    rendered, skip_keys, VLLM_FLAG_MAP, VLLM_BOOL_FLAGS,
                 )
             return rendered
 
@@ -97,29 +72,10 @@ class VllmRayRuntime(RuntimePlugin):
             skip.add("distributed_executor_backend")
         skip.update(skip_keys)
         parts.extend(self.build_flags_from_map(
-            config, _VLLM_FLAG_MAP, bool_keys=_VLLM_BOOL_FLAGS, skip_keys=skip,
+            config, VLLM_FLAG_MAP, bool_keys=VLLM_BOOL_FLAGS, skip_keys=skip,
         ))
 
         return " ".join(parts)
-
-    # --- Tuning config auto-mount ---
-
-    def get_extra_volumes(self) -> dict[str, str]:
-        """Mount vLLM tuning configs if available."""
-        from sparkrun.tuning.vllm import get_vllm_tuning_volumes
-        return get_vllm_tuning_volumes() or {}
-
-    def get_extra_env(self) -> dict[str, str]:
-        """Set VLLM_TUNED_CONFIG_FOLDER if tuning configs exist."""
-        from sparkrun.tuning.vllm import get_vllm_tuning_env
-        env = super().get_extra_env()
-        env.update(get_vllm_tuning_env() or {})
-        return env
-
-    def version_commands(self) -> dict[str, str]:
-        cmds = super().version_commands()
-        cmds["vllm"] = "python3 -c 'import vllm; print(vllm.__version__)' 2>/dev/null || echo unknown"
-        return cmds
 
     def get_cluster_env(self, head_ip: str, num_nodes: int) -> dict[str, str]:
         """Return vLLM-specific cluster environment variables."""
@@ -127,10 +83,6 @@ class VllmRayRuntime(RuntimePlugin):
             "RAY_memory_monitor_refresh_ms": "0",
             "RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO": "0",
         }
-
-    def validate_recipe(self, recipe: Recipe) -> list[str]:
-        """Validate vLLM-specific recipe fields."""
-        return super().validate_recipe(recipe)
 
     # --- Log following hooks ---
 

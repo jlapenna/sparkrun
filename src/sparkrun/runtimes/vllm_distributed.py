@@ -11,7 +11,7 @@ import logging
 from typing import Any, TYPE_CHECKING
 
 from sparkrun.runtimes.base import RuntimePlugin
-from sparkrun.runtimes.vllm_ray import _VLLM_FLAG_MAP, _VLLM_BOOL_FLAGS
+from sparkrun.runtimes._vllm_common import VllmMixin, VLLM_FLAG_MAP, VLLM_BOOL_FLAGS
 
 if TYPE_CHECKING:
     from sparkrun.core.recipe import Recipe
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class VllmDistributedRuntime(RuntimePlugin):
+class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
     """vLLM runtime using native distributed mode (no Ray).
 
     Each node runs the full ``vllm serve`` command with node-specific
@@ -54,7 +54,7 @@ class VllmDistributedRuntime(RuntimePlugin):
             )
             if skip_keys:
                 rendered = self.strip_flags_from_command(
-                    rendered, skip_keys, _VLLM_FLAG_MAP, _VLLM_BOOL_FLAGS,
+                    rendered, skip_keys, VLLM_FLAG_MAP, VLLM_BOOL_FLAGS,
                 )
             return rendered
 
@@ -87,7 +87,7 @@ class VllmDistributedRuntime(RuntimePlugin):
             )
             if skip_keys:
                 rendered = self.strip_flags_from_command(
-                    rendered, skip_keys, _VLLM_FLAG_MAP, _VLLM_BOOL_FLAGS,
+                    rendered, skip_keys, VLLM_FLAG_MAP, VLLM_BOOL_FLAGS,
                 )
             base = rendered
         else:
@@ -118,7 +118,7 @@ class VllmDistributedRuntime(RuntimePlugin):
         skip = {"tensor_parallel", "distributed_executor_backend"}
         skip.update(skip_keys)
         parts.extend(self.build_flags_from_map(
-            config, _VLLM_FLAG_MAP, bool_keys=_VLLM_BOOL_FLAGS, skip_keys=skip,
+            config, VLLM_FLAG_MAP, bool_keys=VLLM_BOOL_FLAGS, skip_keys=skip,
         ))
 
         return " ".join(parts)
@@ -139,25 +139,6 @@ class VllmDistributedRuntime(RuntimePlugin):
 
         return base
 
-    # --- Tuning config auto-mount ---
-
-    def get_extra_volumes(self) -> dict[str, str]:
-        """Mount vLLM tuning configs if available."""
-        from sparkrun.tuning.vllm import get_vllm_tuning_volumes
-        return get_vllm_tuning_volumes() or {}
-
-    def get_extra_env(self) -> dict[str, str]:
-        """Set VLLM_TUNED_CONFIG_FOLDER if tuning configs exist."""
-        from sparkrun.tuning.vllm import get_vllm_tuning_env
-        env = super().get_extra_env()
-        env.update(get_vllm_tuning_env() or {})
-        return env
-
-    def version_commands(self) -> dict[str, str]:
-        cmds = super().version_commands()
-        cmds["vllm"] = "python3 -c 'import vllm; print(vllm.__version__)' 2>/dev/null || echo unknown"
-        return cmds
-
     def get_cluster_env(self, head_ip: str, num_nodes: int) -> dict[str, str]:
         """Return vLLM distributed-specific cluster environment variables.
 
@@ -170,16 +151,6 @@ class VllmDistributedRuntime(RuntimePlugin):
             "NCCL_CUMEM_ENABLE": "0",
             "OMP_NUM_THREADS": "4",
         }
-
-    def validate_recipe(self, recipe: Recipe) -> list[str]:
-        """Validate vLLM distributed-specific recipe fields."""
-        return super().validate_recipe(recipe)
-
-    # --- Log following hooks ---
-
-    def _head_container_name(self, cluster_id: str) -> str:
-        """vLLM distributed names the head container ``{cluster_id}_node_0``."""
-        return self.executor.node_container_name(cluster_id, 0)
 
     # --- Cluster stop ---
 
@@ -214,186 +185,15 @@ class VllmDistributedRuntime(RuntimePlugin):
             skip_keys: set[str] | frozenset[str] = frozenset(),
             **kwargs,
     ) -> int:
-        """Orchestrate a multi-node vLLM cluster using native distribution.
-
-        Steps:
-        1. Clean up existing containers on all hosts.
-        2. Detect InfiniBand on all hosts (parallel).
-        3. Detect head node IP.
-        4. Launch head node (rank 0).
-        5. Wait for master port to be ready.
-        6. Launch worker nodes in parallel (with --headless).
-        """
-        import time
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        from sparkrun.orchestration.primitives import (
-            build_ssh_kwargs,
-            build_volumes,
-            merge_env,
-            detect_host_ip,
-            wait_for_port,
-            resolve_nccl_env,
-        )
-        from sparkrun.orchestration.ssh import (
-            run_remote_script, run_remote_command,
-            start_log_capture, stop_log_capture,
-        )
-
-        num_nodes = len(hosts)
-        head_host = hosts[0]
-        worker_hosts = hosts[1:]
-        ssh_kwargs = build_ssh_kwargs(config)
-        volumes = build_volumes(cache_dir, extra=self.get_extra_volumes())
-        runtime_env = self.get_cluster_env(head_ip="<pending>", num_nodes=num_nodes)
-        # Runtime defaults first, recipe env overrides (power users can tweak)
-        all_env = merge_env(runtime_env, self.get_extra_env(), env)
-
-        self._print_cluster_banner(
-            "vLLM Distributed Cluster Launcher", hosts, image, cluster_id,
-            {"Master Port": init_port}, dry_run,
-        )
-
-        # Step 1: Cleanup
-        t0 = time.monotonic()
-        logger.info("Step 1/6: Cleaning up existing containers for cluster '%s'...", cluster_id)
-        for rank, host in enumerate(hosts):
-            container_name = self.executor.node_container_name(cluster_id, rank)
-            run_remote_command(
-                host, self.executor.stop_cmd(container_name),
-                timeout=30, dry_run=dry_run, **ssh_kwargs,
-            )
-        logger.info("Step 1/6: Cleanup done (%.1fs)", time.monotonic() - t0)
-
-        # Step 2: InfiniBand detection (skip if pre-detected nccl_env provided)
-        t0 = time.monotonic()
-        logger.info("Step 2/6: InfiniBand detection...")
-        nccl_env = resolve_nccl_env(
-            nccl_env, hosts,
-            head_host=head_host, ssh_kwargs=ssh_kwargs, dry_run=dry_run,
-        )
-        logger.info("Step 2/6: IB step done (%.1fs)", time.monotonic() - t0)
-
-        # Step 3: Detect head node IP
-        t0 = time.monotonic()
-        logger.info("Step 3/6: Detecting head node IP on %s...", head_host)
-        try:
-            head_ip = detect_host_ip(head_host, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
-        except RuntimeError as e:
-            logger.error("%s", e)
-            return 1
-        logger.info("  Head IP: %s", head_ip)
-        logger.info("Step 3/6: IP detection done (%.1fs)", time.monotonic() - t0)
-
-        # Auto-detect available init port to avoid collisions with running instances
-        from sparkrun.orchestration.primitives import find_available_port
-        init_port = find_available_port(head_host, init_port, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
-
-        # Generate per-node commands
-        head_command = self.generate_node_command(
+        """Orchestrate a multi-node vLLM cluster using native distribution."""
+        return self._run_native_cluster(
+            hosts=hosts, image=image, serve_command=serve_command,
             recipe=recipe, overrides=overrides,
-            head_ip=head_ip, num_nodes=num_nodes,
-            node_rank=0, init_port=init_port,
-            skip_keys=skip_keys,
+            cluster_id=cluster_id, env=env, cache_dir=cache_dir,
+            config=config, dry_run=dry_run, detached=detached,
+            nccl_env=nccl_env, init_port=init_port, skip_keys=skip_keys,
+            banner_title="vLLM Distributed Cluster Launcher",
+            port_label="Master Port",
+            node_label="vllm node",
+            **kwargs,
         )
-        logger.info("Serve command (head, rank 0):")
-        for line in head_command.strip().splitlines():
-            logger.info("  %s", line)
-
-        # Step 4: Launch head node (rank 0)
-        t0 = time.monotonic()
-        head_container = self.executor.node_container_name(cluster_id, 0)
-        logger.info(
-            "Step 4/6: Launching head node (rank 0) on %s as %s...",
-            head_host, head_container,
-        )
-        head_script = self._generate_node_script(
-            image=image, container_name=head_container,
-            serve_command=head_command, label="vllm node",
-            env=all_env, volumes=volumes, nccl_env=nccl_env,
-        )
-        head_result = run_remote_script(
-            head_host, head_script, timeout=120, dry_run=dry_run, **ssh_kwargs,
-        )
-        if not head_result.success and not dry_run:
-            logger.error("Failed to launch head node: %s", head_result.stderr[:200])
-            return 1
-        logger.info("Step 4/6: Head node launched (%.1fs)", time.monotonic() - t0)
-
-        # Step 5: Wait for master port
-        # Capture head container logs in the background so we can surface
-        # them if the node fails to become ready (avoids manual SSH).
-        t0 = time.monotonic()
-        if not dry_run:
-            logger.info("Step 5/6: Waiting for head node master port %s:%d...", head_host, init_port)
-
-            log_proc = start_log_capture(head_host, head_container, ssh_kwargs)
-            try:
-                ready = wait_for_port(
-                    head_host, init_port,
-                    max_retries=60, retry_interval=2,
-                    ssh_kwargs=ssh_kwargs, dry_run=dry_run,
-                    container_name=head_container,
-                )
-            finally:
-                captured = stop_log_capture(log_proc)
-
-            if not ready:
-                logger.error("Head node failed to become ready on %s.", head_host)
-                if captured:
-                    logger.error("Container logs for %s:", head_container)
-                    for line in captured[-150:]:
-                        logger.error("  %s", line)
-                else:
-                    logger.error(
-                        "No logs captured. Check manually: ssh %s 'docker logs %s'",
-                        head_host, head_container,
-                    )
-                return 1
-            logger.info("Step 5/6: Head node ready (%.1fs)", time.monotonic() - t0)
-        else:
-            logger.info("Step 5/6: [dry-run] Would wait for master port %d", init_port)
-
-        # Step 6: Launch worker nodes in parallel
-        t0 = time.monotonic()
-        if worker_hosts:
-            logger.info(
-                "Step 6/6: Launching %d worker node(s) on %s...",
-                len(worker_hosts), ", ".join(worker_hosts),
-            )
-            with ThreadPoolExecutor(max_workers=len(worker_hosts)) as executor:
-                futures = {}
-                for i, host in enumerate(worker_hosts):
-                    rank = i + 1
-                    worker_command = self.generate_node_command(
-                        recipe=recipe, overrides=overrides,
-                        head_ip=head_ip, num_nodes=num_nodes,
-                        node_rank=rank, init_port=init_port,
-                        skip_keys=skip_keys,
-                    )
-                    worker_container = self.executor.node_container_name(cluster_id, rank)
-                    worker_script = self._generate_node_script(
-                        image=image, container_name=worker_container,
-                        serve_command=worker_command, label="vllm node",
-                        env=all_env, volumes=volumes, nccl_env=nccl_env,
-                    )
-                    future = executor.submit(
-                        run_remote_script, host, worker_script,
-                        timeout=120, dry_run=dry_run, **ssh_kwargs,
-                    )
-                    futures[future] = (host, rank)
-
-                for future in as_completed(futures):
-                    host, rank = futures[future]
-                    result = future.result()
-                    if not result.success and not dry_run:
-                        logger.warning(
-                            "  Worker rank %d on %s may have failed: %s",
-                            rank, host, result.stderr[:100],
-                        )
-
-            logger.info("Step 6/6: Workers launched (%.1fs)", time.monotonic() - t0)
-        else:
-            logger.info("Step 6/6: No worker hosts, skipping")
-
-        self._print_connection_info(hosts, cluster_id, per_node_logs=True)
-        return 0
