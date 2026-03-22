@@ -543,6 +543,9 @@ def load_cmd(recipe_name, hosts, hosts_file, cluster_name,
         auto_port=True,
         dry_run=dry_run,
         detached=True,
+        # non-root user and non-privileged
+        rootless=True,
+        auto_user=True,
     )
 
     if result.rc != 0:
