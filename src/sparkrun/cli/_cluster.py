@@ -35,14 +35,18 @@ def cluster(ctx):
               type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
               help="Resource transfer mode (auto, local, push, delegated)")
 @click.option("--transfer-interface", default=None,
-              type=click.Choice(["cx7", "mgmt"], case_sensitive=False),
-              help="Network interface for transfers (cx7=InfiniBand, mgmt=management)")
+              type=click.Choice(["auto", "cx7", "mgmt"], case_sensitive=False),
+              help="Network interface for transfers (auto=default, cx7=InfiniBand, mgmt=management)")
 @click.pass_context
 def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode,
                    transfer_interface):
     """Create a new named cluster."""
     from sparkrun.core.cluster_manager import ClusterError
     from sparkrun.core.hosts import parse_hosts_file
+
+    # "auto" means unset (use default behavior)
+    if transfer_interface == "auto":
+        transfer_interface = None
 
     host_list = [h.strip() for h in hosts.split(",") if h.strip()] if hosts else []
     if hosts_file:
@@ -64,8 +68,10 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
 
 @cluster.command("update")
 @click.argument("name", type=CLUSTER_NAME)
-@click.option("--hosts", "-H", default=None, help="Comma-separated host list")
-@click.option("--hosts-file", default=None, help="File with hosts (one per line)")
+@click.option("--hosts", "-H", default=None, help="Replace host list (comma-separated)")
+@click.option("--hosts-file", default=None, help="Replace host list from file (one per line)")
+@click.option("--add-host", multiple=True, help="Add host(s) to the cluster (repeatable, comma-ok)")
+@click.option("--remove-host", multiple=True, help="Remove host(s) from the cluster (repeatable, comma-ok)")
 @click.option("-d", "--description", default=None, help="Cluster description")
 @click.option("--user", "-u", default=None, help="SSH username for this cluster")
 @click.option("--cache-dir", default=None, help="HuggingFace cache directory for this cluster")
@@ -73,14 +79,32 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
               type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
               help="Resource transfer mode (auto, local, push, delegated)")
 @click.option("--transfer-interface", default=None,
-              type=click.Choice(["cx7", "mgmt"], case_sensitive=False),
-              help="Network interface for transfers (cx7=InfiniBand, mgmt=management)")
+              type=click.Choice(["auto", "cx7", "mgmt"], case_sensitive=False),
+              help="Network interface for transfers (auto=default, cx7=InfiniBand, mgmt=management)")
 @click.pass_context
-def cluster_update(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode,
-                   transfer_interface):
-    """Update an existing cluster."""
+def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host, description, user,
+                   cache_dir, transfer_mode, transfer_interface):
+    """Update an existing cluster.
+
+    \b
+    Examples:
+      sparkrun cluster update mylab --add-host 10.0.0.5
+      sparkrun cluster update mylab --add-host 10.0.0.5 --add-host 10.0.0.6
+      sparkrun cluster update mylab --add-host 10.0.0.5,10.0.0.6
+      sparkrun cluster update mylab --remove-host 10.0.0.2
+      sparkrun cluster update mylab --hosts 10.0.0.1,10.0.0.2,10.0.0.3
+      sparkrun cluster update mylab --user ubuntu --transfer-mode push
+    """
     from sparkrun.core.cluster_manager import ClusterError
     from sparkrun.core.hosts import parse_hosts_file
+
+    # --hosts/--hosts-file and --add-host/--remove-host are mutually exclusive
+    if (hosts or hosts_file) and (add_host or remove_host):
+        click.echo(
+            "Error: --hosts/--hosts-file cannot be combined with --add-host/--remove-host.",
+            err=True,
+        )
+        sys.exit(1)
 
     host_list = None
     if hosts:
@@ -95,12 +119,49 @@ def cluster_update(ctx, name, hosts, hosts_file, description, user, cache_dir, t
     transfer_mode_provided = ctx.get_parameter_source("transfer_mode") == ParameterSource.COMMANDLINE
     transfer_interface_provided = ctx.get_parameter_source("transfer_interface") == ParameterSource.COMMANDLINE
 
-    if (host_list is None and description is None and not user_provided
+    has_host_change = host_list is not None or add_host or remove_host
+    if (not has_host_change and description is None and not user_provided
             and not cache_dir_provided and not transfer_mode_provided
             and not transfer_interface_provided):
-        click.echo("Error: Nothing to update. Provide --hosts, --hosts-file, -d, --user, "
-                   "--cache-dir, --transfer-mode, or --transfer-interface.", err=True)
+        click.echo("Error: Nothing to update. Provide --hosts, --hosts-file, --add-host, "
+                   "--remove-host, -d, --user, --cache-dir, --transfer-mode, "
+                   "or --transfer-interface.", err=True)
         sys.exit(1)
+
+    mgr = _get_cluster_manager()
+
+    # Handle --add-host / --remove-host by modifying the current host list
+    if add_host or remove_host:
+        try:
+            current = mgr.get(name)
+        except ClusterError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+
+        current_hosts = list(current.hosts)
+        existing_set = set(current_hosts)
+
+        for h in add_host:
+            for part in h.split(","):
+                part = part.strip()
+                if part and part not in existing_set:
+                    current_hosts.append(part)
+                    existing_set.add(part)
+
+        for h in remove_host:
+            for part in h.split(","):
+                part = part.strip()
+                if part in existing_set:
+                    current_hosts = [x for x in current_hosts if x != part]
+                    existing_set.discard(part)
+                else:
+                    click.echo("Warning: host '%s' not in cluster '%s', skipping." % (part, name), err=True)
+
+        if not current_hosts:
+            click.echo("Error: Cannot remove all hosts from cluster.", err=True)
+            sys.exit(1)
+
+        host_list = current_hosts
 
     update_kwargs = {}
     if user_provided:
@@ -110,12 +171,15 @@ def cluster_update(ctx, name, hosts, hosts_file, description, user, cache_dir, t
     if transfer_mode_provided:
         update_kwargs["transfer_mode"] = transfer_mode
     if transfer_interface_provided:
-        update_kwargs["transfer_interface"] = transfer_interface
+        # "auto" means unset (use default behavior)
+        update_kwargs["transfer_interface"] = None if transfer_interface == "auto" else transfer_interface
 
-    mgr = _get_cluster_manager()
     try:
         mgr.update(name, hosts=host_list, description=description, **update_kwargs)
-        click.echo(f"Cluster '{name}' updated.")
+        if host_list is not None:
+            click.echo("Cluster '%s' updated (%d hosts: %s)." % (name, len(host_list), ", ".join(host_list)))
+        else:
+            click.echo(f"Cluster '{name}' updated.")
     except ClusterError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
