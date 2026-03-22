@@ -53,6 +53,7 @@ def launch_inference(
         v=None,
         is_solo: bool = False,
         cache_dir: str | None = None,
+        local_cache_dir: str | None = None,
         transfer_mode: str | None = None,
         transfer_interface: str | None = None,
         recipe_ref: str | None = None,
@@ -96,7 +97,8 @@ def launch_inference(
         config: SparkrunConfig instance.
         v: SAF Variables instance (optional, uses singleton if None).
         is_solo: Whether to launch in solo mode.
-        cache_dir: Explicit cache dir override (None = resolve from config).
+        cache_dir: Remote/cluster cache dir (None = resolve from config).
+        local_cache_dir: Control-machine cache dir for downloads (None = same as cache_dir).
         transfer_mode: Resource transfer mode override (None = "auto").
         transfer_interface: Network interface for transfers (cx7 or mgmt; None = cx7 default).
         recipe_ref: Simplified recipe reference for display (e.g. @spark-arena/UUID).
@@ -122,6 +124,7 @@ def launch_inference(
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
     effective_cache_dir = cache_dir or str(config.hf_cache_dir)
+    effective_local_cache = local_cache_dir or effective_cache_dir
     effective_transfer_mode = transfer_mode or "auto"
     ssh_kwargs = build_ssh_kwargs(config)
 
@@ -196,6 +199,7 @@ def launch_inference(
             recipe_name=recipe.name,
             transfer_mode=effective_transfer_mode,
             transfer_interface=transfer_interface,
+            local_cache_dir=effective_local_cache,
         )
         # Re-save job metadata with IP maps from IB detection
         if not dry_run and (ib_ip_map or mgmt_ip_map):

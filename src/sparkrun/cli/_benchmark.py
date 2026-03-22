@@ -38,7 +38,6 @@ DEFAULT_BENCHMARK_TIMEOUT: int = 14400  # 4 hours
 @recipe_override_options
 @click.option("--solo", is_flag=True, help="Force single-node mode")
 @click.option("--port", type=int, default=None, help="Override serve port")
-@click.option("--cache-dir", default=None, help="HuggingFace cache directory")
 @click.option("--profile", default=None, type=PROFILE_NAME, help="Benchmark profile name or file path")
 @click.option("--framework", default=None, help="Override benchmarking framework (default: llama-benchy)")
 @click.option("--out", "--output", "output_file", default=None, type=click.Path(),
@@ -57,7 +56,7 @@ DEFAULT_BENCHMARK_TIMEOUT: int = 14400  # 4 hours
 @click.pass_context
 def benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
               tensor_parallel, pipeline_parallel, gpu_mem, max_model_len,
-              options, image, solo, port, cache_dir,
+              options, image, solo, port,
               profile, framework,
               output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
               sync_tuning, rootful, bench_timeout, dry_run):
@@ -85,7 +84,7 @@ def benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
     _run_benchmark(
         ctx, recipe_name, hosts, hosts_file, cluster_name,
         tensor_parallel, pipeline_parallel, gpu_mem, max_model_len,
-        options, image, solo, port, cache_dir,
+        options, image, solo, port,
         profile, framework,
         output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
         sync_tuning, rootful, bench_timeout, dry_run,
@@ -95,7 +94,7 @@ def benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
 def _run_benchmark(
         ctx, recipe_name, hosts, hosts_file, cluster_name,
         tensor_parallel, pipeline_parallel, gpu_mem, max_model_len,
-        options, image, solo, port, cache_dir,
+        options, image, solo, port,
         profile, framework_name,
         output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
         sync_tuning, rootful, bench_timeout, dry_run,
@@ -273,7 +272,8 @@ def _run_benchmark(
 
     # Resolve cache dir, transfer mode, and transfer interface from cluster config
     cluster_cfg = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr)
-    effective_cache_dir = cache_dir or cluster_cfg.cache_dir or str(config.hf_cache_dir)
+    local_cache_dir = str(config.hf_cache_dir)
+    remote_cache_dir = cluster_cfg.cache_dir or local_cache_dir
     effective_transfer_mode = cluster_cfg.transfer_mode or "auto"
     effective_transfer_interface = cluster_cfg.transfer_interface
 
@@ -314,7 +314,7 @@ def _run_benchmark(
     click.echo("=" * 60)
     click.echo("")
 
-    _display_vram_estimate(recipe, cli_overrides=overrides, auto_detect=True, cache_dir=effective_cache_dir)
+    _display_vram_estimate(recipe, cli_overrides=overrides, auto_detect=True, cache_dir=remote_cache_dir)
 
     # ---------------------------------------------------------------
     # 6. Launch inference (unless --skip-run)
@@ -332,7 +332,8 @@ def _run_benchmark(
             config=config,
             v=v,
             is_solo=is_solo,
-            cache_dir=effective_cache_dir,
+            cache_dir=remote_cache_dir,
+            local_cache_dir=local_cache_dir,
             transfer_mode=effective_transfer_mode,
             transfer_interface=effective_transfer_interface,
             recipe_ref=recipe_ref,

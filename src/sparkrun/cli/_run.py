@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 @click.option("--solo", is_flag=True, help="Force single-node mode", hidden=True)
 @click.option("--port", type=int, default=None, help="Override serve port")
 @click.option("--served-model-name", default=None, help="Override served model name")
-@click.option("--cache-dir", default=None, help="HuggingFace cache directory")
 @click.option("--ray-port", type=int, default=46379, help="Ray GCS port (vllm-ray)", hidden=True)
 @click.option("--init-port", type=int, default=25000, help="vllm/SGLang distributed init port", hidden=True)
 @click.option("--dashboard", is_flag=True, help="Enable Ray dashboard on head node", hidden=True)
@@ -52,14 +51,16 @@ logger = logging.getLogger(__name__)
 @click.option("--transfer-mode", default=None,
               type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
               help="Resource transfer mode (overrides cluster setting)")
+@click.option("--collect-diagnostics", "diagnostics_path", default=None,
+              type=click.Path(), hidden=True, help="Collect diagnostics to NDJSON file")
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def run(
         ctx, recipe_name, hosts, hosts_file, cluster_name, solo, port, tensor_parallel,
-        pipeline_parallel, gpu_mem, served_model_name, max_model_len, image, cache_dir,
+        pipeline_parallel, gpu_mem, served_model_name, max_model_len, image,
         ray_port, init_port, dashboard, dashboard_port, dry_run, ensure, foreground, no_follow,
-        no_sync_tuning, no_rm, rootful, restart_policy, transfer_mode, options,
-        extra_args, config_path=None, setup=True,
+        no_sync_tuning, no_rm, rootful, restart_policy, transfer_mode, diagnostics_path,
+        options, extra_args, config_path=None, setup=True,
 ):
     """Run an inference recipe.
 
@@ -220,7 +221,8 @@ def run(
 
     # Resolve cache dir, transfer mode, and transfer interface from cluster config
     cluster_cfg = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr)
-    effective_cache_dir = cache_dir or cluster_cfg.cache_dir or str(config.hf_cache_dir)
+    local_cache_dir = str(config.hf_cache_dir)
+    remote_cache_dir = cluster_cfg.cache_dir or local_cache_dir
     effective_transfer_mode = transfer_mode or cluster_cfg.transfer_mode or "auto"
     effective_transfer_interface = cluster_cfg.transfer_interface
 
@@ -236,7 +238,7 @@ def run(
     if effective_transfer_mode not in ("auto", "local"):
         click.echo("Transfer:  %s" % effective_transfer_mode)
 
-    _display_vram_estimate(recipe, cli_overrides=overrides, auto_detect=True, cache_dir=effective_cache_dir)
+    _display_vram_estimate(recipe, cli_overrides=overrides, auto_detect=True, cache_dir=remote_cache_dir)
 
     click.echo()
     click.echo("Hosts:     %s" % host_source)
@@ -256,31 +258,69 @@ def run(
     if restart_policy:
         cli_executor_opts["restart_policy"] = restart_policy
 
+    # --- Diagnostics setup ---
+    diag = None
+    if diagnostics_path:
+        from sparkrun.diagnostics import RunDiagnosticsCollector
+        from sparkrun.orchestration.primitives import build_ssh_kwargs as _diag_ssh
+        _diag_ssh_kw = _diag_ssh(config)
+        diag = RunDiagnosticsCollector(diagnostics_path, host_list, _diag_ssh_kw, dry_run=dry_run)
+        diag.open()
+        diag.emit_header(cluster_name=cluster_name, command="sparkrun run %s" % recipe_name)
+        diag.emit_recipe(recipe, overrides)
+        diag.emit_config(
+            hosts=host_list, is_solo=is_solo, serve_port=port,
+            cache_dir=remote_cache_dir, transfer_mode=effective_transfer_mode,
+        )
+        try:
+            diag.phase_start("spark_diagnostics")
+            diag.collect_spark_diagnostics()
+            diag.phase_end("spark_diagnostics")
+        except Exception as e:
+            diag.phase_end("spark_diagnostics", error=str(e))
+            logger.warning("Spark diagnostics collection failed: %s", e)
+
     # Launch via shared pipeline
-    result = launch_inference(
-        recipe=recipe,
-        runtime=runtime,
-        host_list=host_list,
-        overrides=overrides,
-        config=config,
-        v=v,
-        is_solo=is_solo,
-        cache_dir=effective_cache_dir,
-        transfer_mode=effective_transfer_mode,
-        transfer_interface=effective_transfer_interface,
-        recipe_ref=recipe_ref,
-        registry_mgr=registry_mgr,
-        sync_tuning=not no_sync_tuning,
-        dry_run=dry_run,
-        detached=not foreground,
-        ray_port=ray_port,
-        dashboard_port=dashboard_port,
-        dashboard=dashboard,
-        init_port=init_port,
-        executor_config=cli_executor_opts,
-        rootless=not rootful,
-        auto_user=not rootful,
-    )
+    if diag:
+        diag.phase_start("launch")
+    try:
+        result = launch_inference(
+            recipe=recipe,
+            runtime=runtime,
+            host_list=host_list,
+            overrides=overrides,
+            config=config,
+            v=v,
+            is_solo=is_solo,
+            cache_dir=remote_cache_dir,
+            local_cache_dir=local_cache_dir,
+            transfer_mode=effective_transfer_mode,
+            transfer_interface=effective_transfer_interface,
+            recipe_ref=recipe_ref,
+            registry_mgr=registry_mgr,
+            sync_tuning=not no_sync_tuning,
+            dry_run=dry_run,
+            detached=not foreground,
+            ray_port=ray_port,
+            dashboard_port=dashboard_port,
+            dashboard=dashboard,
+            init_port=init_port,
+            executor_config=cli_executor_opts,
+            rootless=not rootful,
+            auto_user=not rootful,
+        )
+    except Exception as e:
+        if diag:
+            diag.phase_end("launch", error=str(e))
+            diag.emit_error("launch", e)
+            diag.emit_summary()
+            diag.close()
+        raise
+
+    if diag:
+        diag.phase_end("launch")
+        diag.emit_launch_result(result)
+        diag.emit_serve_command(result.serve_command, result.container_image)
 
     click.echo("Cluster:   %s" % result.cluster_id)
     click.echo()
@@ -362,7 +402,7 @@ def run(
             port=effective_port,
             cluster_id=result.cluster_id,
             container_name=head_container,
-            cache_dir=effective_cache_dir,
+            cache_dir=remote_cache_dir,
         )
 
         try:
@@ -401,5 +441,22 @@ def run(
             config=config,
             dry_run=dry_run,
         )
+
+    # --- Diagnostics finalize ---
+    if diag:
+        if result.rc != 0:
+            # Capture container logs on failure for debugging
+            from sparkrun.orchestration.docker import generate_container_name, generate_node_container_name
+            from sparkrun.orchestration.primitives import build_ssh_kwargs as _diag_ssh2
+            _head = host_list[0] if host_list else "localhost"
+            _cname = (generate_container_name(result.cluster_id, "solo") if is_solo
+                      else generate_node_container_name(result.cluster_id, 0))
+            try:
+                diag.capture_container_logs(_head, _cname, _diag_ssh2(config))
+            except Exception:
+                pass
+        diag.emit_summary()
+        diag.close()
+        click.echo("Diagnostics written to: %s" % diagnostics_path)
 
     sys.exit(result.rc)

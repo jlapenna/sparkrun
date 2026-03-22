@@ -303,7 +303,7 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
                 state = states.get(host)
                 if state is None or state.latest is None:
                     snapshot["hosts"][host] = {"status": "error", "error": state.error} if (
-                        state and state.error
+                            state and state.error
                     ) else {"status": "connecting"}
                     continue
                 entry = asdict(state.latest)

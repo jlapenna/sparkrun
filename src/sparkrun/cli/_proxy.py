@@ -443,11 +443,10 @@ def alias_list():
 @recipe_override_options
 @click.option("--solo", is_flag=True, help="Force single-node mode")
 @click.option("--port", type=int, default=None, help="Override serve port")
-@click.option("--cache-dir", default=None, help="HuggingFace cache directory")
 @dry_run_option
 def load_cmd(recipe_name, hosts, hosts_file, cluster_name,
              tensor_parallel, pipeline_parallel, gpu_mem, max_model_len,
-             options, image, solo, port, cache_dir, dry_run):
+             options, image, solo, port, dry_run):
     """Load a model via sparkrun run and register with proxy.
 
     Launches inference and registers the new endpoint with the running
@@ -522,7 +521,8 @@ def load_cmd(recipe_name, hosts, hosts_file, cluster_name,
 
     # Resolve cache dir, transfer mode, and transfer interface from cluster config
     cluster_cfg = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr)
-    effective_cache_dir = cache_dir or cluster_cfg.cache_dir or str(config.hf_cache_dir)
+    local_cache_dir = str(config.hf_cache_dir)
+    remote_cache_dir = cluster_cfg.cache_dir or local_cache_dir
     effective_transfer_mode = cluster_cfg.transfer_mode or "auto"
     effective_transfer_interface = cluster_cfg.transfer_interface
 
@@ -536,7 +536,8 @@ def load_cmd(recipe_name, hosts, hosts_file, cluster_name,
         config=config,
         v=v,
         is_solo=is_solo,
-        cache_dir=effective_cache_dir,
+        cache_dir=remote_cache_dir,
+        local_cache_dir=local_cache_dir,
         transfer_mode=effective_transfer_mode,
         transfer_interface=effective_transfer_interface,
         registry_mgr=registry_mgr,

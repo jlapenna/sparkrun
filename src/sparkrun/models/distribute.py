@@ -68,6 +68,7 @@ def distribute_model_from_local(
     model_id: str,
     hosts: list[str],
     cache_dir: str | None = None,
+    local_cache_dir: str | None = None,
     token: str | None = None,
     revision: str | None = None,
     ssh_user: str | None = None,
@@ -87,7 +88,11 @@ def distribute_model_from_local(
     Args:
         model_id: HuggingFace model identifier.
         hosts: Target hostnames or IPs (used for identification/reporting).
-        cache_dir: Override for the HuggingFace cache directory.
+        cache_dir: Remote cache directory on target hosts.
+        local_cache_dir: Control-machine cache directory for downloads.
+            When different from *cache_dir*, the model is downloaded to
+            *local_cache_dir* but rsynced to *cache_dir* on remote hosts.
+            Defaults to *cache_dir* when not provided.
         token: Optional HuggingFace API token for gated models.
         revision: Optional revision (branch, tag, or commit hash).
         ssh_user: Optional SSH username.
@@ -105,11 +110,12 @@ def distribute_model_from_local(
         List of hostnames (from *hosts*) where distribution failed
         (empty = full success).
     """
-    cache = resolve_cache_dir(cache_dir)
+    local_cache = resolve_cache_dir(local_cache_dir or cache_dir)
+    remote_cache = resolve_cache_dir(cache_dir)
     logger.info("Distributing model '%s' from local to %d host(s)", model_id, len(hosts))
 
     # Step 1: download model locally
-    rc = download_model(model_id, cache_dir=cache, token=token, revision=revision, dry_run=dry_run)
+    rc = download_model(model_id, cache_dir=local_cache, token=token, revision=revision, dry_run=dry_run)
     if rc != 0:
         logger.error("Failed to download model '%s' locally — aborting distribution", model_id)
         return list(hosts)
@@ -121,15 +127,16 @@ def distribute_model_from_local(
 
     # Step 2: best-effort fix of remote cache ownership before rsync
     _try_fix_remote_permissions(
-        cache, hosts,
+        remote_cache, hosts,
         ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
         dry_run=dry_run,
     )
 
     # Step 3: rsync model cache to all hosts in parallel
-    model_path = model_cache_path(model_id, cache)
+    local_model_path = model_cache_path(model_id, local_cache)
+    remote_model_path = model_cache_path(model_id, remote_cache)
     results = run_rsync_parallel(
-        model_path, xfer, model_path,
+        local_model_path, xfer, remote_model_path,
         ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
         timeout=timeout, dry_run=dry_run,
     )

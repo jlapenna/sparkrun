@@ -131,6 +131,7 @@ def _distribute_model_push(
         ssh_kwargs: dict,
         model_revision: str | None = None,
         dry_run: bool = False,
+        local_cache_dir: str | None = None,
 ) -> list[str]:
     """Push-mode model distribution: local → head, then head → workers via IB.
 
@@ -149,6 +150,7 @@ def _distribute_model_push(
     # Step 1: push to head only (no transfer_hosts — use management network)
     head_failed = distribute_model_from_local(
         model, [head], cache_dir=cache_dir,
+        local_cache_dir=local_cache_dir,
         revision=model_revision, transfer_hosts=None,
         dry_run=dry_run, **ssh_kwargs,
     )
@@ -180,6 +182,7 @@ def distribute_resources(
         recipe_name: str = "",
         transfer_mode: str = "auto",
         transfer_interface: str | None = None,
+        local_cache_dir: str | None = None,
 ) -> tuple[dict[str, str] | None, dict[str, str], dict[str, str]]:
     """Detect IB, distribute container image and model to target hosts.
 
@@ -217,6 +220,8 @@ def distribute_resources(
         transfer_interface: Network interface for transfers.  ``"cx7"``
             (default) uses IB IPs when available; ``"mgmt"`` forces
             management IPs regardless of IB availability.
+        local_cache_dir: Control-machine cache dir for model downloads.
+            Defaults to *cache_dir* when not provided.
 
     Returns:
         Tuple of (nccl_env, ib_ip_map, mgmt_ip_map).  ``nccl_env`` is
@@ -244,6 +249,8 @@ def distribute_resources(
     ).hexdigest()[:12]
     _lock_id = f"sparkrun_{_lock_key}"
 
+    effective_local_cache = local_cache_dir or cache_dir
+
     if len(host_list) <= 1 and is_local_host(host_list[0]):
         # Local-only: just ensure image and model exist, no SSH needed
         with pending_op(_lock_id, "image_pull", **_pop_kw):
@@ -252,7 +259,7 @@ def distribute_resources(
         if model:
             with pending_op(_lock_id, "model_download", **_pop_kw):
                 logger.info("Ensuring model %s is available locally...", model)
-                download_model(model, cache_dir=cache_dir, revision=model_revision, dry_run=dry_run)
+                download_model(model, cache_dir=effective_local_cache, revision=model_revision, dry_run=dry_run)
         return None, {}, {}  # let runtime handle its own local IB detection
 
     ssh_kwargs = build_ssh_kwargs(config)
@@ -365,6 +372,7 @@ def distribute_resources(
                 mdl_failed = distribute_model_from_local(
                     model, host_list,
                     cache_dir=cache_dir,
+                    local_cache_dir=effective_local_cache,
                     revision=model_revision,
                     transfer_hosts=transfer_hosts,
                     dry_run=dry_run, **ssh_kwargs,
@@ -377,6 +385,7 @@ def distribute_resources(
                     ssh_kwargs=ssh_kwargs,
                     model_revision=model_revision,
                     dry_run=dry_run,
+                    local_cache_dir=effective_local_cache,
                 )
             elif transfer_mode == "delegated":
                 mdl_failed = distribute_model_from_head(
@@ -395,11 +404,13 @@ def distribute_resources(
                         ssh_kwargs=ssh_kwargs,
                         model_revision=model_revision,
                         dry_run=dry_run,
+                        local_cache_dir=effective_local_cache,
                     )
             else:
                 mdl_failed = distribute_model_from_local(
                     model, host_list,
                     cache_dir=cache_dir,
+                    local_cache_dir=effective_local_cache,
                     revision=model_revision,
                     transfer_hosts=transfer_hosts,
                     dry_run=dry_run, **ssh_kwargs,
