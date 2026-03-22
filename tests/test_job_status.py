@@ -150,7 +150,7 @@ class TestCheckJobRunning:
             status = check_job_running(
                 cluster_id="sparkrun_aabbccdd0011",
                 hosts=["10.0.0.1"],
-                check_health=True,
+                check_http_models=True,
             )
         assert status.running is True
         assert status.healthy is True
@@ -174,7 +174,7 @@ class TestCheckJobRunning:
             status = check_job_running(
                 cluster_id="sparkrun_aabbccdd0011",
                 hosts=["10.0.0.1"],
-                check_health=True,
+                check_http_models=True,
             )
         assert status.running is True
         assert status.healthy is False
@@ -191,7 +191,7 @@ class TestCheckJobRunning:
             status = check_job_running(
                 cluster_id="sparkrun_aabbccdd0011",
                 hosts=["10.0.0.1"],
-                check_health=True,
+                check_http_models=True,
             )
         assert status.running is False
         assert status.healthy is None
@@ -211,7 +211,7 @@ class TestCheckJobRunning:
             check_job_running(
                 cluster_id="sparkrun_aabbccdd0011",
                 hosts=["10.0.0.1"],
-                check_health=True,
+                check_http_models=True,
                 port=7777,
             )
         call_url = mock_health.call_args[0][0]

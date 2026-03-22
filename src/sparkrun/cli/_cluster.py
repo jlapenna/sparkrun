@@ -55,7 +55,7 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
     mgr = _get_cluster_manager()
     try:
         mgr.create(name, host_list, description, user=user, cache_dir=cache_dir,
-                    transfer_mode=transfer_mode, transfer_interface=transfer_interface)
+                   transfer_mode=transfer_mode, transfer_interface=transfer_interface)
         click.echo(f"Cluster '{name}' created with {len(host_list)} host(s).")
     except ClusterError as e:
         click.echo(f"Error: {e}", err=True)
@@ -99,7 +99,7 @@ def cluster_update(ctx, name, hosts, hosts_file, description, user, cache_dir, t
             and not cache_dir_provided and not transfer_mode_provided
             and not transfer_interface_provided):
         click.echo("Error: Nothing to update. Provide --hosts, --hosts-file, -d, --user, "
-                    "--cache-dir, --transfer-mode, or --transfer-interface.", err=True)
+                   "--cache-dir, --transfer-mode, or --transfer-interface.", err=True)
         sys.exit(1)
 
     update_kwargs = {}
@@ -251,13 +251,17 @@ def cluster_default(ctx):
 @dry_run_option
 @click.option("--interval", "-i", default=2, type=int, help="Sampling interval in seconds")
 @click.option("--simple", is_flag=True, default=False, help="Use plain-text output instead of TUI")
+@click.option("--json", "output_json", is_flag=True, default=False,
+              help="Stream updates as newline-delimited JSON objects")
 @click.pass_context
-def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, simple):
+def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, simple, output_json):
     """Live-monitor CPU, RAM, and GPU metrics across cluster hosts.
 
     Streams host_monitor.sh on each host via SSH and displays a refreshing
     table with key metrics.  By default launches an interactive Textual TUI;
-    pass --simple for plain-text output.  Press q (TUI) or Ctrl-C to stop.
+    pass --simple for plain-text output, or --json for newline-delimited JSON
+    suitable for piping into external automation.  Press q (TUI) or Ctrl-C
+    to stop.
 
     Examples:
 
@@ -268,6 +272,8 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
       sparkrun cluster monitor --cluster mylab --interval 5
 
       sparkrun cluster monitor --cluster mylab --simple
+
+      sparkrun cluster monitor --cluster mylab --json
     """
     from sparkrun.core.config import SparkrunConfig
     from sparkrun.core.monitoring import ClusterMonitor, stream_cluster_monitor
@@ -282,6 +288,36 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
         for h in host_list:
             click.echo("  %s" % h)
         stream_cluster_monitor(host_list, ssh_kwargs, interval=interval, dry_run=True)
+        return
+
+    # ---- JSON streaming mode ----
+    if output_json:
+        import json as json_mod
+        from dataclasses import asdict
+
+        def _render_json(states):
+            """Emit one JSON object per update tick with all host data."""
+            import time as _time
+            snapshot = {"timestamp": _time.time(), "hosts": {}}
+            for host in host_list:
+                state = states.get(host)
+                if state is None or state.latest is None:
+                    snapshot["hosts"][host] = {"status": "error", "error": state.error} if (
+                        state and state.error
+                    ) else {"status": "connecting"}
+                    continue
+                entry = asdict(state.latest)
+                if state.error:
+                    entry["_warning"] = state.error
+                snapshot["hosts"][host] = entry
+            click.echo(json_mod.dumps(snapshot))
+
+        stream_cluster_monitor(
+            host_list,
+            ssh_kwargs,
+            interval=interval,
+            on_update=_render_json,
+        )
         return
 
     # Try the Textual TUI unless --simple was requested.
@@ -372,11 +408,11 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, config_path=No
             for host, role, status, image in group.members:
                 hdisp = format_host_display(host, group.meta)
                 click.echo(f"  {role:<10s} {hdisp:<40s} {status:<25s} {image}")
-            ri = group.meta.get("runtime_info")
-            if ri and isinstance(ri, dict):
-                click.echo("  versions: %s" % ", ".join(
-                    "%s=%s" % (k, v) for k, v in sorted(ri.items())
-                ))
+            # ri = group.meta.get("runtime_info")
+            # if ri and isinstance(ri, dict):
+            #     click.echo("  versions: %s" % ", ".join(
+            #         "%s=%s" % (k, v) for k, v in sorted(ri.items())
+            #     ))
             logs_cmd, stop_cmd = format_job_commands(group.meta, cluster_id=cid)
             if logs_cmd:
                 click.echo(f"  logs: {logs_cmd}")
@@ -391,11 +427,11 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, config_path=No
             meta = load_job_metadata(cid, cache_dir=str(config.cache_dir)) or {}
             hdisp = format_host_display(host, meta)
             click.echo(f"  {format_job_label(meta, cid):<40s} {hdisp:<40s} {status:<25s} {image}")
-            ri = meta.get("runtime_info")
-            if ri and isinstance(ri, dict):
-                click.echo("    versions: %s" % ", ".join(
-                    "%s=%s" % (k, v) for k, v in sorted(ri.items())
-                ))
+            # ri = meta.get("runtime_info")
+            # if ri and isinstance(ri, dict):
+            #     click.echo("    versions: %s" % ", ".join(
+            #         "%s=%s" % (k, v) for k, v in sorted(ri.items())
+            #     ))
             logs_cmd, stop_cmd = format_job_commands(meta, cluster_id=cid)
             if logs_cmd:
                 click.echo(f"    logs: {logs_cmd}")
@@ -451,14 +487,14 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, config_path=No
               help="Tensor parallelism override (used for cluster_id generation)")
 @click.option("--port", type=int, default=None, help="Port override (used for cluster_id generation and health check)")
 @click.option("--served-model-name", default=None, help="Served model name override (used for cluster_id generation)")
-@click.option("--check-health", is_flag=True, default=False,
-              help="Also verify the inference server responds to health checks")
+@click.option("--check-http-models", is_flag=True, default=False,
+              help="Also verify the inference server responds to health checks at /v1/models")
 @click.option("--json", "output_json", is_flag=True, default=False,
               help="Output result as JSON")
 @click.pass_context
 def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
                       tp_override, port, served_model_name,
-                      check_health, output_json):
+                      check_http_models, output_json):
     """Check if a sparkrun job is running.
 
     TARGET can be a cluster ID (sparkrun_<hex>) or a recipe name.
@@ -500,7 +536,7 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
         status = check_job_running(
             cluster_id=cid, hosts=host_list,
             ssh_kwargs=ssh_kwargs, cache_dir=str(config.cache_dir),
-            check_health=check_health, port=port,
+            check_http_models=check_http_models, port=port,
         )
     else:
         # --- Recipe path ---
@@ -520,7 +556,7 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
 
         try:
             host_list = _apply_node_trimming(
-                host_list, recipe, tp_override=tp_override, runtime=runtime,
+                host_list, recipe, tp_override=tp_override, runtime=runtime, quiet=True,
             )
         except ValueError as e:
             click.echo("Error: %s" % e, err=True)
@@ -539,7 +575,7 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
         status = check_job_running(
             cluster_id=cid, hosts=host_list,
             ssh_kwargs=ssh_kwargs, cache_dir=str(config.cache_dir),
-            check_health=check_health, port=port,
+            check_http_models=check_http_models, port=port,
         )
 
     # --- Output ---
@@ -562,11 +598,11 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
         click.echo("  Recipe: %s" % recipe_name)
         if status.hosts:
             click.echo("  Hosts:  %s" % ", ".join(status.hosts))
-        if check_health and status.healthy is not None:
+        if check_http_models and status.healthy is not None:
             click.echo("  Healthy: %s" % ("yes" if status.healthy else "no"))
 
     # Exit code: 0 = running (and healthy if checked), 1 = not running or unhealthy
     if not status.running:
         sys.exit(1)
-    if check_health and status.healthy is False:
+    if check_http_models and status.healthy is False:
         sys.exit(1)

@@ -88,6 +88,7 @@ def _apply_node_trimming(
         overrides: dict | None = None,
         runtime=None,
         tp_override: int | None = None,
+        quiet: bool = False,
 ) -> list[str]:
     """Trim host list to match the runtime's required node count.
 
@@ -105,6 +106,7 @@ def _apply_node_trimming(
         overrides: Optional CLI overrides (from --option).
         runtime: Optional runtime plugin instance.
         tp_override: Explicit --tp value (takes precedence).
+        quiet: Suppress logging.
 
     Returns:
         Possibly trimmed host list.
@@ -131,10 +133,11 @@ def _apply_node_trimming(
         return host_list
 
     trimmed = host_list[:required]
-    logger.info(
-        "Required nodes=%d < %d hosts; using first %d: %s",
-        required, len(host_list), required, ", ".join(trimmed),
-    )
+    if not quiet:
+        logger.info(
+            "Required nodes=%d < %d hosts; using first %d: %s",
+            required, len(host_list), required, ", ".join(trimmed),
+        )
     return trimmed
 
 

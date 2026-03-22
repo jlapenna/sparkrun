@@ -78,7 +78,7 @@ def format_recipe_table(
 
 def format_job_label(meta: dict[str, Any], cluster_id: str) -> str:
     """Format a display label from job metadata."""
-    short_id = cluster_id.removeprefix("sparkrun_")[:8]
+    short_id = cluster_id.removeprefix("sparkrun_")  # [:8]
     label = meta.get("recipe", cluster_id)
     tp = meta.get("tensor_parallel")
     if tp:

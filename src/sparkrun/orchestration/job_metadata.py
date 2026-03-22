@@ -34,15 +34,15 @@ class JobStatus:
 
 
 def check_job_running(
-    *,
-    cluster_id: str | None = None,
-    recipe: "Recipe | None" = None,
-    hosts: list[str] | None = None,
-    overrides: dict | None = None,
-    ssh_kwargs: dict | None = None,
-    cache_dir: str | None = None,
-    check_health: bool = False,
-    port: int | None = None,
+        *,
+        cluster_id: str | None = None,
+        recipe: "Recipe | None" = None,
+        hosts: list[str] | None = None,
+        overrides: dict | None = None,
+        ssh_kwargs: dict | None = None,
+        cache_dir: str | None = None,
+        check_http_models: bool = False,
+        port: int | None = None,
 ) -> JobStatus:
     """Check whether a sparkrun job is currently running.
 
@@ -57,7 +57,7 @@ def check_job_running(
         overrides: Recipe overrides (port, served_model_name, etc.).
         ssh_kwargs: SSH connection parameters.
         cache_dir: Cache directory for job metadata lookup.
-        check_health: When True and container is running, probe the
+        check_http_models: When True and container is running, probe the
             ``/v1/models`` endpoint.
         port: Explicit port for health checks.  Falls back to metadata
             then default 8000.
@@ -104,7 +104,7 @@ def check_job_running(
 
     # Optional health check
     healthy: bool | None = None
-    if check_health and running:
+    if check_http_models and running:
         from sparkrun.orchestration.primitives import wait_for_healthy
         effective_port = port or (meta.get("port") if meta else None) or 8000
         url = "http://%s:%d/v1/models" % (head_host, effective_port)
@@ -152,15 +152,15 @@ def generate_cluster_id(recipe: "Recipe", hosts: list[str], overrides: dict | No
 
 
 def save_job_metadata(
-    cluster_id: str,
-    recipe: "Recipe",
-    hosts: list[str],
-    overrides: dict | None = None,
-    cache_dir: str | None = None,
-    ib_ip_map: dict[str, str] | None = None,
-    mgmt_ip_map: dict[str, str] | None = None,
-    recipe_ref: str | None = None,
-    runtime_info: dict[str, str] | None = None,
+        cluster_id: str,
+        recipe: "Recipe",
+        hosts: list[str],
+        overrides: dict | None = None,
+        cache_dir: str | None = None,
+        ib_ip_map: dict[str, str] | None = None,
+        mgmt_ip_map: dict[str, str] | None = None,
+        recipe_ref: str | None = None,
+        runtime_info: dict[str, str] | None = None,
 ) -> None:
     """Persist job metadata so ``cluster status`` can display recipe info.
 

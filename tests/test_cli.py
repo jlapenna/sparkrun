@@ -752,6 +752,7 @@ class TestClusterMonitor:
         assert "--interval" in result.output
         assert "--dry-run" in result.output
         assert "--simple" in result.output
+        assert "--json" in result.output
 
     def test_cluster_monitor_dry_run(self, runner, cluster_setup):
         """--dry-run shows what would be monitored without SSH."""
@@ -819,6 +820,47 @@ class TestClusterMonitor:
             assert result.exit_code == 0
             assert "Monitoring" in result.output
             mock_stream.assert_called_once()
+
+    def test_cluster_monitor_json_flag(self, runner, cluster_setup):
+        """--json streams newline-delimited JSON via on_update callback."""
+        import json
+
+        from sparkrun.core.monitoring import HostMonitorState, MonitorSample
+
+        sample = MonitorSample(
+            timestamp="2025-01-01T00:00:00",
+            hostname="host1",
+            cpu_usage_pct="12.3",
+            mem_used_pct="45.6",
+            gpu_util_pct="78.9",
+            gpu_temp_c="55",
+            gpu_power_w="120",
+        )
+
+        def fake_stream(hosts, ssh_kwargs, interval=2, on_update=None, dry_run=False):
+            """Simulate one update tick with sample data."""
+            if on_update:
+                states = {
+                    "10.0.0.1": HostMonitorState(latest=sample),
+                    "10.0.0.2": HostMonitorState(error="connection refused"),
+                }
+                on_update(states)
+
+        with mock.patch("sparkrun.core.monitoring.stream_cluster_monitor", side_effect=fake_stream):
+            result = runner.invoke(main, [
+                "cluster", "monitor",
+                "--cluster", "monitor-cluster",
+                "--json",
+            ])
+            assert result.exit_code == 0
+            obj = json.loads(result.output.strip())
+            assert "timestamp" in obj
+            assert "hosts" in obj
+            # Host with sample data should have monitor fields
+            assert obj["hosts"]["10.0.0.1"]["hostname"] == "host1"
+            assert obj["hosts"]["10.0.0.1"]["cpu_usage_pct"] == "12.3"
+            # Host with error and no sample should report error status
+            assert obj["hosts"]["10.0.0.2"]["status"] == "error"
 
     def test_cluster_monitor_tui_fallback_on_import_error(self, runner, cluster_setup, monkeypatch):
         """Falls back to simple mode when Textual is not importable."""
