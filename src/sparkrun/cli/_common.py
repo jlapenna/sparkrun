@@ -177,6 +177,7 @@ class ResolvedClusterConfig:
     transfer_interface: str | None = None
 
 
+# TODO: this should potentially be part of cluster manager? regardless it's not really CLI specific
 def resolve_cluster_config(
         cluster_name: str | None,
         hosts: str | None,
@@ -219,19 +220,6 @@ def resolve_cluster_config(
         cfg.cache_dir = cluster_def.cache_dir
 
     return cfg
-
-
-# Backward-compatible aliases
-def _resolve_cluster_user(cluster_name, hosts, hosts_file, cluster_mgr):
-    return resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).user
-
-
-def _resolve_transfer_mode(cluster_name, hosts, hosts_file, cluster_mgr):
-    return resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).transfer_mode
-
-
-def _resolve_cluster_cache_dir(cluster_name, hosts, hosts_file, cluster_mgr):
-    return resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).cache_dir
 
 
 def _get_cluster_manager(v=None):
@@ -341,7 +329,7 @@ def _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, v=None):
         sys.exit(1)
     # Apply cluster-level SSH user (if defined) so downstream SSH calls
     # automatically use it.
-    cluster_user = _resolve_cluster_user(cluster_name, hosts, hosts_file, cluster_mgr)
+    cluster_user = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).user
     if cluster_user:
         config.ssh_user = cluster_user
     return host_list, cluster_mgr

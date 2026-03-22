@@ -11,12 +11,11 @@ from ._common import (
     _apply_node_trimming,
     _apply_recipe_overrides,
     _load_recipe,
-    _resolve_cluster_cache_dir,
     _resolve_hosts_or_exit,
-    _resolve_transfer_mode,
     dry_run_option,
     host_options,
     recipe_override_options,
+    resolve_cluster_config,
 )
 
 
@@ -521,11 +520,11 @@ def load_cmd(recipe_name, hosts, hosts_file, cluster_name,
     if is_solo and len(host_list) > 1:
         host_list = host_list[:1]
 
-    # Resolve cache dir and transfer mode
-    cluster_cache_dir = _resolve_cluster_cache_dir(cluster_name, hosts, hosts_file, cluster_mgr)
-    effective_cache_dir = cache_dir or cluster_cache_dir or str(config.hf_cache_dir)
-    cluster_transfer_mode = _resolve_transfer_mode(cluster_name, hosts, hosts_file, cluster_mgr)
-    effective_transfer_mode = cluster_transfer_mode or "auto"
+    # Resolve cache dir, transfer mode, and transfer interface from cluster config
+    cluster_cfg = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr)
+    effective_cache_dir = cache_dir or cluster_cfg.cache_dir or str(config.hf_cache_dir)
+    effective_transfer_mode = cluster_cfg.transfer_mode or "auto"
+    effective_transfer_interface = cluster_cfg.transfer_interface
 
     # Launch via shared pipeline (auto_port=True for conflict avoidance)
     click.echo("Loading model: %s" % recipe_name)
@@ -539,6 +538,7 @@ def load_cmd(recipe_name, hosts, hosts_file, cluster_name,
         is_solo=is_solo,
         cache_dir=effective_cache_dir,
         transfer_mode=effective_transfer_mode,
+        transfer_interface=effective_transfer_interface,
         registry_mgr=registry_mgr,
         auto_port=True,
         dry_run=dry_run,
@@ -629,9 +629,9 @@ def _resolve_live_discovery_args(
 
         # Apply cluster SSH user if applicable
         if cluster_name:
-            from sparkrun.cli._common import _get_cluster_manager, _resolve_cluster_user
+            from sparkrun.cli._common import _get_cluster_manager, resolve_cluster_config
             cluster_mgr = _get_cluster_manager()
-            cluster_user = _resolve_cluster_user(cluster_name, hosts, hosts_file, cluster_mgr)
+            cluster_user = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).user
             if cluster_user:
                 config.ssh_user = cluster_user
 

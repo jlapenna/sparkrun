@@ -10,7 +10,7 @@ from ._common import (
     _detect_shell,
     _get_cluster_manager,
     _require_uv,
-    _resolve_cluster_user,
+    resolve_cluster_config,
     _resolve_setup_context,
     _shell_rc_file,
     dry_run_option,
@@ -269,7 +269,7 @@ def setup_ssh(ctx, hosts, hosts_file, cluster_name, extra_hosts, include_self, u
     )
 
     # Determine the cluster's configured user (if hosts came from a cluster)
-    cluster_user = _resolve_cluster_user(cluster_name, hosts, hosts_file, cluster_mgr)
+    cluster_user = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr).user
 
     # Resolve 127.0.0.1 to a routable IP so other nodes can SSH back
     _resolved_loopback = False

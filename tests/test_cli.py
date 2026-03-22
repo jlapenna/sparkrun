@@ -2447,12 +2447,12 @@ class TestUrlRecipe:
 # ---------------------------------------------------------------------------
 
 
-class TestResolveClusterUser:
-    """Tests for _resolve_cluster_user helper."""
+class TestResolveClusterConfig:
+    """Tests for resolve_cluster_config helper."""
 
     def test_returns_user_from_named_cluster(self, tmp_path, monkeypatch):
         """Named cluster with a user returns that user."""
-        from sparkrun.cli._common import _resolve_cluster_user
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2461,12 +2461,12 @@ class TestResolveClusterUser:
         mgr = ClusterManager(tmp_path)
         mgr.create("mylab", ["10.0.0.1", "10.0.0.2"], user="labuser")
 
-        result = _resolve_cluster_user("mylab", None, None, mgr)
-        assert result == "labuser"
+        cfg = resolve_cluster_config("mylab", None, None, mgr)
+        assert cfg.user == "labuser"
 
     def test_returns_none_for_cluster_without_user(self, tmp_path, monkeypatch):
         """Named cluster without a user returns None."""
-        from sparkrun.cli._common import _resolve_cluster_user
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2475,12 +2475,12 @@ class TestResolveClusterUser:
         mgr = ClusterManager(tmp_path)
         mgr.create("nouser", ["10.0.0.1"])
 
-        result = _resolve_cluster_user("nouser", None, None, mgr)
-        assert result is None
+        cfg = resolve_cluster_config("nouser", None, None, mgr)
+        assert cfg.user is None
 
-    def test_returns_none_when_hosts_flag_given(self, tmp_path, monkeypatch):
-        """When --hosts is provided, cluster user is not resolved."""
-        from sparkrun.cli._common import _resolve_cluster_user
+    def test_returns_none_user_when_hosts_flag_given(self, tmp_path, monkeypatch):
+        """When --hosts is provided, cluster user is still resolved (user always applies)."""
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2489,13 +2489,13 @@ class TestResolveClusterUser:
         mgr = ClusterManager(tmp_path)
         mgr.create("mylab", ["10.0.0.1"], user="labuser")
 
-        # hosts flag is non-None, so cluster_name is ignored
-        result = _resolve_cluster_user(None, "10.0.0.1", None, mgr)
-        assert result is None
+        # hosts flag is non-None, no cluster_name — no cluster resolved
+        cfg = resolve_cluster_config(None, "10.0.0.1", None, mgr)
+        assert cfg.user is None
 
-    def test_returns_none_when_hosts_file_given(self, tmp_path, monkeypatch):
+    def test_returns_none_user_when_hosts_file_given(self, tmp_path, monkeypatch):
         """When --hosts-file is provided, cluster user is not resolved."""
-        from sparkrun.cli._common import _resolve_cluster_user
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2504,12 +2504,12 @@ class TestResolveClusterUser:
         mgr = ClusterManager(tmp_path)
         mgr.create("mylab", ["10.0.0.1"], user="labuser")
 
-        result = _resolve_cluster_user(None, None, "/some/hosts.txt", mgr)
-        assert result is None
+        cfg = resolve_cluster_config(None, None, "/some/hosts.txt", mgr)
+        assert cfg.user is None
 
-    def test_falls_back_to_default_cluster(self, tmp_path, monkeypatch):
+    def test_falls_back_to_default_cluster_user(self, tmp_path, monkeypatch):
         """When no explicit cluster/hosts, uses default cluster's user."""
-        from sparkrun.cli._common import _resolve_cluster_user
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2519,35 +2519,35 @@ class TestResolveClusterUser:
         mgr.create("default-lab", ["10.0.0.1"], user="defaultuser")
         mgr.set_default("default-lab")
 
-        result = _resolve_cluster_user(None, None, None, mgr)
-        assert result == "defaultuser"
+        cfg = resolve_cluster_config(None, None, None, mgr)
+        assert cfg.user == "defaultuser"
 
     def test_returns_none_when_no_cluster_mgr(self):
-        """When cluster_mgr is None, returns None."""
-        from sparkrun.cli._common import _resolve_cluster_user
+        """When cluster_mgr is None, returns None for all fields."""
+        from sparkrun.cli._common import resolve_cluster_config
 
-        result = _resolve_cluster_user(None, None, None, None)
-        assert result is None
+        cfg = resolve_cluster_config(None, None, None, None)
+        assert cfg.user is None
+        assert cfg.cache_dir is None
+        assert cfg.transfer_mode is None
+        assert cfg.transfer_interface is None
 
     def test_returns_none_for_nonexistent_cluster(self, tmp_path, monkeypatch):
-        """Nonexistent cluster name returns None (no crash)."""
-        from sparkrun.cli._common import _resolve_cluster_user
+        """Nonexistent cluster name returns None for all fields (no crash)."""
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
         monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", tmp_path)
 
         mgr = ClusterManager(tmp_path)
-        result = _resolve_cluster_user("doesnotexist", None, None, mgr)
-        assert result is None
-
-
-class TestResolveClusterCacheDir:
-    """Tests for _resolve_cluster_cache_dir helper."""
+        cfg = resolve_cluster_config("doesnotexist", None, None, mgr)
+        assert cfg.user is None
+        assert cfg.cache_dir is None
 
     def test_returns_cache_dir_from_named_cluster(self, tmp_path, monkeypatch):
         """Named cluster with a cache_dir returns that path."""
-        from sparkrun.cli._common import _resolve_cluster_cache_dir
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2556,12 +2556,12 @@ class TestResolveClusterCacheDir:
         mgr = ClusterManager(tmp_path)
         mgr.create("mylab", ["10.0.0.1"], cache_dir="/mnt/models")
 
-        result = _resolve_cluster_cache_dir("mylab", None, None, mgr)
-        assert result == "/mnt/models"
+        cfg = resolve_cluster_config("mylab", None, None, mgr)
+        assert cfg.cache_dir == "/mnt/models"
 
-    def test_returns_none_for_cluster_without_cache_dir(self, tmp_path, monkeypatch):
+    def test_returns_none_cache_dir_for_cluster_without_it(self, tmp_path, monkeypatch):
         """Named cluster without a cache_dir returns None."""
-        from sparkrun.cli._common import _resolve_cluster_cache_dir
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2570,12 +2570,12 @@ class TestResolveClusterCacheDir:
         mgr = ClusterManager(tmp_path)
         mgr.create("nodir", ["10.0.0.1"])
 
-        result = _resolve_cluster_cache_dir("nodir", None, None, mgr)
-        assert result is None
+        cfg = resolve_cluster_config("nodir", None, None, mgr)
+        assert cfg.cache_dir is None
 
-    def test_returns_none_when_hosts_flag_given(self, tmp_path, monkeypatch):
+    def test_cache_dir_none_when_hosts_flag_given(self, tmp_path, monkeypatch):
         """When --hosts is provided, cluster cache_dir is not resolved."""
-        from sparkrun.cli._common import _resolve_cluster_cache_dir
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2584,16 +2584,16 @@ class TestResolveClusterCacheDir:
         mgr = ClusterManager(tmp_path)
         mgr.create("mylab", ["10.0.0.1"], cache_dir="/mnt/models")
 
-        result = _resolve_cluster_cache_dir(None, "10.0.0.1", None, mgr)
-        assert result is None
+        cfg = resolve_cluster_config(None, "10.0.0.1", None, mgr)
+        assert cfg.cache_dir is None
 
-    def test_returns_none_when_cluster_and_hosts_both_given(self, tmp_path, monkeypatch):
+    def test_cache_dir_none_when_cluster_and_hosts_both_given(self, tmp_path, monkeypatch):
         """When both --cluster and --hosts are provided, cluster cache_dir is not resolved.
 
         resolve_hosts() ignores the cluster when --hosts is set; cache_dir resolution
         must match that priority chain so they stay in sync.
         """
-        from sparkrun.cli._common import _resolve_cluster_cache_dir
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2602,12 +2602,12 @@ class TestResolveClusterCacheDir:
         mgr = ClusterManager(tmp_path)
         mgr.create("mylab", ["10.0.0.1"], cache_dir="/mnt/models")
 
-        result = _resolve_cluster_cache_dir("mylab", "10.0.0.2", None, mgr)
-        assert result is None
+        cfg = resolve_cluster_config("mylab", "10.0.0.2", None, mgr)
+        assert cfg.cache_dir is None
 
-    def test_returns_none_when_cluster_and_hosts_file_both_given(self, tmp_path, monkeypatch):
+    def test_cache_dir_none_when_cluster_and_hosts_file_both_given(self, tmp_path, monkeypatch):
         """When both --cluster and --hosts-file are provided, cluster cache_dir is not resolved."""
-        from sparkrun.cli._common import _resolve_cluster_cache_dir
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2616,12 +2616,12 @@ class TestResolveClusterCacheDir:
         mgr = ClusterManager(tmp_path)
         mgr.create("mylab", ["10.0.0.1"], cache_dir="/mnt/models")
 
-        result = _resolve_cluster_cache_dir("mylab", None, "/some/hosts.txt", mgr)
-        assert result is None
+        cfg = resolve_cluster_config("mylab", None, "/some/hosts.txt", mgr)
+        assert cfg.cache_dir is None
 
-    def test_falls_back_to_default_cluster(self, tmp_path, monkeypatch):
+    def test_falls_back_to_default_cluster_cache_dir(self, tmp_path, monkeypatch):
         """When no explicit cluster/hosts, uses default cluster's cache_dir."""
-        from sparkrun.cli._common import _resolve_cluster_cache_dir
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
@@ -2631,27 +2631,63 @@ class TestResolveClusterCacheDir:
         mgr.create("default-lab", ["10.0.0.1"], cache_dir="/nfs/cache")
         mgr.set_default("default-lab")
 
-        result = _resolve_cluster_cache_dir(None, None, None, mgr)
-        assert result == "/nfs/cache"
+        cfg = resolve_cluster_config(None, None, None, mgr)
+        assert cfg.cache_dir == "/nfs/cache"
 
-    def test_returns_none_when_no_cluster_mgr(self):
-        """When cluster_mgr is None, returns None."""
-        from sparkrun.cli._common import _resolve_cluster_cache_dir
+    def test_cache_dir_none_when_no_cluster_mgr(self):
+        """When cluster_mgr is None, cache_dir is None."""
+        from sparkrun.cli._common import resolve_cluster_config
 
-        result = _resolve_cluster_cache_dir(None, None, None, None)
-        assert result is None
+        cfg = resolve_cluster_config(None, None, None, None)
+        assert cfg.cache_dir is None
 
-    def test_returns_none_for_nonexistent_cluster(self, tmp_path, monkeypatch):
-        """Nonexistent cluster name returns None (no crash)."""
-        from sparkrun.cli._common import _resolve_cluster_cache_dir
+    def test_cache_dir_none_for_nonexistent_cluster(self, tmp_path, monkeypatch):
+        """Nonexistent cluster name returns None for cache_dir (no crash)."""
+        from sparkrun.cli._common import resolve_cluster_config
         from sparkrun.core.cluster_manager import ClusterManager
 
         import sparkrun.core.config
         monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", tmp_path)
 
         mgr = ClusterManager(tmp_path)
-        result = _resolve_cluster_cache_dir("doesnotexist", None, None, mgr)
-        assert result is None
+        cfg = resolve_cluster_config("doesnotexist", None, None, mgr)
+        assert cfg.cache_dir is None
+
+    def test_returns_all_fields_from_cluster(self, tmp_path, monkeypatch):
+        """Named cluster with all fields returns all values."""
+        from sparkrun.cli._common import resolve_cluster_config
+        from sparkrun.core.cluster_manager import ClusterManager
+
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", tmp_path)
+
+        mgr = ClusterManager(tmp_path)
+        mgr.create("full", ["10.0.0.1"], user="admin",
+                    cache_dir="/mnt/models", transfer_mode="push",
+                    transfer_interface="mgmt")
+
+        cfg = resolve_cluster_config("full", None, None, mgr)
+        assert cfg.name == "full"
+        assert cfg.user == "admin"
+        assert cfg.cache_dir == "/mnt/models"
+        assert cfg.transfer_mode == "push"
+        assert cfg.transfer_interface == "mgmt"
+
+    def test_transfer_fields_none_when_hosts_flag_given(self, tmp_path, monkeypatch):
+        """When --hosts is provided, transfer_mode/transfer_interface are not resolved."""
+        from sparkrun.cli._common import resolve_cluster_config
+        from sparkrun.core.cluster_manager import ClusterManager
+
+        import sparkrun.core.config
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", tmp_path)
+
+        mgr = ClusterManager(tmp_path)
+        mgr.create("mylab", ["10.0.0.1"], transfer_mode="push",
+                    transfer_interface="mgmt")
+
+        cfg = resolve_cluster_config(None, "10.0.0.1", None, mgr)
+        assert cfg.transfer_mode is None
+        assert cfg.transfer_interface is None
 
 
 class TestResolveHostsAppliesClusterUser:
