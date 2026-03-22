@@ -3025,7 +3025,7 @@ class TestSetupEarlyoom:
         """Test that _build_earlyoom_regex produces expected output."""
         from sparkrun.cli._setup import _build_earlyoom_regex, EARLYOOM_PREFER_PATTERNS, EARLYOOM_AVOID_PATTERNS
         prefer_regex = _build_earlyoom_regex(EARLYOOM_PREFER_PATTERNS)
-        assert prefer_regex.startswith("^(")
+        assert prefer_regex.startswith("(")
         assert prefer_regex.endswith(")")
         assert "vllm" in prefer_regex
         assert "VLLM" in prefer_regex
@@ -3035,7 +3035,7 @@ class TestSetupEarlyoom:
         assert "python" in prefer_regex
 
         avoid_regex = _build_earlyoom_regex(EARLYOOM_AVOID_PATTERNS)
-        assert avoid_regex.startswith("^(")
+        assert avoid_regex.startswith("(")
         assert "sshd" in avoid_regex
         assert "dockerd" in avoid_regex
         assert "dbus-daemon" in avoid_regex

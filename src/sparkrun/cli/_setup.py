@@ -956,10 +956,10 @@ def _build_earlyoom_regex(patterns: list[str]) -> str:
     """Build a regex pattern string for earlyoom --prefer/--avoid.
 
     earlyoom uses POSIX extended regex matching against ``/proc/pid/comm``.
-    Wraps patterns in ``^(...)`` so matching is anchored to the start of
-    the process name.
+    Wraps patterns in ``(...)`` so matching is unanchored and can match
+    anywhere in the process name.
     """
-    return "^(%s)" % "|".join(patterns)
+    return "(%s)" % "|".join(patterns)
 
 
 @setup.command("earlyoom")
