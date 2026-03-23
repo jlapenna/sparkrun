@@ -279,3 +279,78 @@ def collect_spark_diagnostics(
     )
 
     return host_data
+
+
+def collect_config_diagnostics(
+        writer: NDJSONWriter,
+        config=None,
+        cluster_mgr=None,
+        registry_mgr=None,
+) -> None:
+    """Emit sparkrun configuration state: clusters, registries, config.
+
+    Reads local configuration only — no SSH required.
+
+    Args:
+        writer: NDJSONWriter for NDJSON output.
+        config: Optional SparkrunConfig instance.
+        cluster_mgr: Optional ClusterManager instance.
+        registry_mgr: Optional RegistryManager instance.
+    """
+    # Sparkrun config
+    if config is not None:
+        writer.emit("config_sparkrun", {
+            "config_path": str(config.config_path),
+            "cache_dir": str(config.cache_dir),
+            "hf_cache_dir": str(config.hf_cache_dir),
+            "ssh_user": config.ssh_user,
+            "default_hosts": config.default_hosts,
+        })
+
+    # Cluster definitions
+    if cluster_mgr is not None:
+        default_cluster = cluster_mgr.get_default()
+        clusters = []
+        try:
+            for c in cluster_mgr.list_clusters():
+                clusters.append({
+                    "name": c.name,
+                    "hosts": c.hosts,
+                    "description": c.description,
+                    "user": c.user,
+                    "cache_dir": c.cache_dir,
+                    "transfer_mode": c.transfer_mode,
+                    "transfer_interface": c.transfer_interface,
+                    "is_default": c.name == default_cluster,
+                })
+        except Exception as e:
+            logger.warning("Failed to list clusters: %s", e)
+
+        writer.emit("config_clusters", {
+            "default": default_cluster,
+            "count": len(clusters),
+            "clusters": clusters,
+        })
+
+    # Registry configuration
+    if registry_mgr is not None:
+        registries = []
+        try:
+            for r in registry_mgr.list_registries():
+                registries.append({
+                    "name": r.name,
+                    "url": r.url,
+                    "subpath": r.subpath,
+                    "description": r.description,
+                    "enabled": r.enabled,
+                    "visible": r.visible,
+                    "tuning_subpath": r.tuning_subpath,
+                    "benchmark_subpath": r.benchmark_subpath,
+                })
+        except Exception as e:
+            logger.warning("Failed to list registries: %s", e)
+
+        writer.emit("config_registries", {
+            "count": len(registries),
+            "registries": registries,
+        })

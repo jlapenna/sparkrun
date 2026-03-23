@@ -12,6 +12,7 @@ from sparkrun.diagnostics.spark_collector import (
     _extract_firmware_devices,
     _extract_firmware_history,
     _extract_network,
+    collect_config_diagnostics,
     collect_spark_diagnostics,
     collect_sudo_diagnostics,
 )
@@ -457,6 +458,107 @@ class TestCollectSudoDiagnostics:
         lines = path.read_text().strip().splitlines()
         records = [json.loads(ln) for ln in lines]
         assert any(r["_type"] == "host_error" for r in records)
+
+
+# ---------------------------------------------------------------------------
+# collect_config_diagnostics
+# ---------------------------------------------------------------------------
+
+class TestCollectConfigDiagnostics:
+    def test_config_emitted(self, tmp_path: Path):
+        config = mock.MagicMock()
+        config.config_path = tmp_path / "config.yaml"
+        config.cache_dir = tmp_path / "cache"
+        config.hf_cache_dir = tmp_path / "hf"
+        config.ssh_user = "testuser"
+        config.default_hosts = ["10.0.0.1"]
+
+        path = tmp_path / "cfg.ndjson"
+        with NDJSONWriter(path) as writer:
+            collect_config_diagnostics(writer, config=config)
+
+        lines = path.read_text().strip().splitlines()
+        records = [json.loads(ln) for ln in lines]
+        cfg_rec = next(r for r in records if r["_type"] == "config_sparkrun")
+        assert cfg_rec["ssh_user"] == "testuser"
+        assert cfg_rec["default_hosts"] == ["10.0.0.1"]
+
+    def test_clusters_emitted(self, tmp_path: Path):
+        cluster_mgr = mock.MagicMock()
+        cluster_mgr.get_default.return_value = "mylab"
+        cluster_def = mock.MagicMock()
+        cluster_def.name = "mylab"
+        cluster_def.hosts = ["10.0.0.1", "10.0.0.2"]
+        cluster_def.description = "My lab cluster"
+        cluster_def.user = "admin"
+        cluster_def.cache_dir = None
+        cluster_def.transfer_mode = "auto"
+        cluster_def.transfer_interface = None
+        cluster_mgr.list_clusters.return_value = [cluster_def]
+
+        path = tmp_path / "cls.ndjson"
+        with NDJSONWriter(path) as writer:
+            collect_config_diagnostics(writer, cluster_mgr=cluster_mgr)
+
+        lines = path.read_text().strip().splitlines()
+        records = [json.loads(ln) for ln in lines]
+        cls_rec = next(r for r in records if r["_type"] == "config_clusters")
+        assert cls_rec["default"] == "mylab"
+        assert cls_rec["count"] == 1
+        assert cls_rec["clusters"][0]["name"] == "mylab"
+        assert cls_rec["clusters"][0]["is_default"] is True
+
+    def test_registries_emitted(self, tmp_path: Path):
+        registry_mgr = mock.MagicMock()
+        reg = mock.MagicMock()
+        reg.name = "official"
+        reg.url = "https://github.com/example/registry.git"
+        reg.subpath = "recipes"
+        reg.description = "Official registry"
+        reg.enabled = True
+        reg.visible = True
+        reg.tuning_subpath = "tuning"
+        reg.benchmark_subpath = "benchmarks"
+        registry_mgr.list_registries.return_value = [reg]
+
+        path = tmp_path / "reg.ndjson"
+        with NDJSONWriter(path) as writer:
+            collect_config_diagnostics(writer, registry_mgr=registry_mgr)
+
+        lines = path.read_text().strip().splitlines()
+        records = [json.loads(ln) for ln in lines]
+        reg_rec = next(r for r in records if r["_type"] == "config_registries")
+        assert reg_rec["count"] == 1
+        assert reg_rec["registries"][0]["name"] == "official"
+        assert reg_rec["registries"][0]["enabled"] is True
+
+    def test_all_combined(self, tmp_path: Path):
+        config = mock.MagicMock()
+        config.config_path = tmp_path / "config.yaml"
+        config.cache_dir = tmp_path / "cache"
+        config.hf_cache_dir = tmp_path / "hf"
+        config.ssh_user = None
+        config.default_hosts = []
+
+        cluster_mgr = mock.MagicMock()
+        cluster_mgr.get_default.return_value = None
+        cluster_mgr.list_clusters.return_value = []
+
+        registry_mgr = mock.MagicMock()
+        registry_mgr.list_registries.return_value = []
+
+        path = tmp_path / "all.ndjson"
+        with NDJSONWriter(path) as writer:
+            collect_config_diagnostics(
+                writer, config=config, cluster_mgr=cluster_mgr, registry_mgr=registry_mgr,
+            )
+
+        lines = path.read_text().strip().splitlines()
+        records = [json.loads(ln) for ln in lines]
+        types = [r["_type"] for r in records]
+        assert "config_sparkrun" in types
+        assert "config_clusters" in types
+        assert "config_registries" in types
 
 
 # ---------------------------------------------------------------------------

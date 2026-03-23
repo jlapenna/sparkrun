@@ -223,6 +223,118 @@ def setup_update(ctx, no_update_registries):
             click.echo("Warning: registry update failed (non-fatal).", err=True)
 
 
+def _detect_and_update_mgmt_ips(host_list, cluster_name, cluster_mgr, ssh_kwargs, dry_run=False):
+    """Detect management IPs on cluster hosts and update the cluster definition if needed.
+
+    After SSH mesh, the hosts in the cluster definition may be CX7 or other
+    non-management IPs.  This function SSHes into each host to discover its
+    management IP (default-route interface) and, when any differ from the
+    stored addresses, updates the cluster definition to prefer management IPs.
+
+    If a host's management IP matches the local machine, 127.0.0.1 is used.
+
+    Args:
+        host_list: Current cluster host list (may be mutated in place).
+        cluster_name: Name of the cluster to update (may be None).
+        cluster_mgr: ClusterManager instance (may be None).
+        ssh_kwargs: SSH connection keyword arguments.
+        dry_run: Preview mode.
+
+    Returns:
+        The (possibly updated) host list.
+    """
+    from sparkrun.orchestration.primitives import local_ip_for
+    from sparkrun.orchestration.scripts import generate_ip_detect_script
+    from sparkrun.orchestration.ssh import run_remote_scripts_parallel
+    from sparkrun.utils import is_valid_ip
+
+    if dry_run or not host_list:
+        return host_list
+
+    click.echo("Detecting management IPs on cluster hosts...")
+    script = generate_ip_detect_script()
+    results = run_remote_scripts_parallel(
+        host_list, script, timeout=15, quiet=True, **ssh_kwargs,
+    )
+
+    # Build mapping: original host -> detected mgmt IP
+    mgmt_map: dict[str, str] = {}
+    for r in results:
+        if r.success:
+            ip = r.last_line.strip()
+            if is_valid_ip(ip):
+                mgmt_map[r.host] = ip
+
+    if not mgmt_map:
+        click.echo("  Could not detect management IPs (non-fatal).")
+        return host_list
+
+    # Determine local machine's IP for 127.0.0.1 substitution
+    local_ip = local_ip_for(host_list[0]) if host_list else None
+
+    # Build corrected host list (preserving order, deduplicating)
+    new_hosts: list[str] = []
+    seen: set[str] = set()
+    changes: list[str] = []
+    for h in host_list:
+        mgmt = mgmt_map.get(h)
+        if mgmt and mgmt != h:
+            # Host was given as a non-management IP — prefer mgmt
+            if local_ip and mgmt == local_ip:
+                resolved = "127.0.0.1"
+                label = "  %s -> 127.0.0.1 (local, mgmt=%s)" % (h, mgmt)
+            else:
+                resolved = mgmt
+                label = "  %s -> %s" % (h, mgmt)
+            if resolved in seen:
+                changes.append("  %s -> %s (duplicate, dropped)" % (h, resolved))
+                continue
+            new_hosts.append(resolved)
+            seen.add(resolved)
+            changes.append(label)
+        elif h == local_ip and mgmt == local_ip:
+            # Already the local machine's routable IP — use 127.0.0.1
+            resolved = "127.0.0.1"
+            if resolved in seen:
+                changes.append("  %s -> 127.0.0.1 (duplicate, dropped)" % h)
+                continue
+            new_hosts.append(resolved)
+            seen.add(resolved)
+            changes.append("  %s -> 127.0.0.1 (local)" % h)
+        else:
+            if h in seen:
+                changes.append("  %s (duplicate, dropped)" % h)
+                continue
+            new_hosts.append(h)
+            seen.add(h)
+
+    deduped = len(new_hosts) < len(host_list)
+
+    if not changes:
+        click.echo("  All hosts are already using management IPs.")
+        return host_list
+
+    if deduped and all("duplicate" in c for c in changes):
+        click.echo("  Deduplicating cluster hosts:")
+    else:
+        click.echo("  Updating cluster hosts to management IPs:")
+    for c in changes:
+        click.echo(c)
+
+    # Update in place so callers see the new list
+    host_list[:] = new_hosts
+
+    # Persist to cluster definition
+    if cluster_name and cluster_mgr:
+        try:
+            cluster_mgr.update(name=cluster_name, hosts=new_hosts)
+            click.echo("  Cluster '%s' updated." % cluster_name)
+        except Exception as e:
+            click.echo("  Warning: could not update cluster: %s" % e, err=True)
+
+    return host_list
+
+
 def _run_ssh_mesh(mesh_hosts, user, cluster_hosts=None, ssh_key=None, discover_ips=True, dry_run=False):
     """Run SSH mesh (mesh_ssh_keys.sh) and optionally discover/distribute host keys.
 
@@ -1349,9 +1461,11 @@ def setup_diagnose(ctx, hosts, hosts_file, cluster_name, dry_run, output_file, j
 
     from sparkrun.core.bootstrap import init_sparkrun
     from sparkrun.core.config import SparkrunConfig
-    from sparkrun.diagnostics import NDJSONWriter, collect_spark_diagnostics, collect_sudo_diagnostics
+    from sparkrun.diagnostics import (
+        NDJSONWriter, collect_config_diagnostics, collect_spark_diagnostics, collect_sudo_diagnostics,
+    )
 
-    from ._common import _resolve_setup_context, _setup_logging
+    from ._common import _get_cluster_manager, _resolve_setup_context, _setup_logging
 
     init_sparkrun()
     _setup_logging(ctx.obj["verbose"])
@@ -1384,6 +1498,13 @@ def setup_diagnose(ctx, hosts, hosts_file, cluster_name, dry_run, output_file, j
             "command": "sparkrun setup diagnose",
             "sudo": use_sudo,
         })
+
+        # Local config: clusters and registries
+        cluster_mgr = _get_cluster_manager()
+        registry_mgr = config.get_registry_manager()
+        collect_config_diagnostics(
+            writer, config=config, cluster_mgr=cluster_mgr, registry_mgr=registry_mgr,
+        )
 
         host_data = collect_spark_diagnostics(
             hosts=host_list,

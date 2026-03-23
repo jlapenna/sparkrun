@@ -75,9 +75,10 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
         click.echo("=" * 48)
         click.echo()
 
-        # Resolve user
+        # Default user (may be overridden by interactive prompt below)
+        default_user = os.environ.get("USER", "root")
         if user is None:
-            user = os.environ.get("USER", "root")
+            user = default_user
 
         # Auto-install if not installed via uv tool
         uv = shutil.which("uv")
@@ -269,16 +270,15 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                 else:
                     cluster_name = click.prompt("Cluster name", default="default")
 
-            description = ""
-            if not yes:
-                description = click.prompt("Description (optional)", default="", show_default=False)
+            # Prompt for SSH username (--user flag takes precedence)
+            if not yes and user == default_user:
+                user = click.prompt("SSH username", default=default_user)
 
             try:
                 cluster_mgr.create(
                     name=cluster_name,
                     hosts=host_list,
-                    description=description,
-                    user=user if user != os.environ.get("USER") else None,
+                    user=user if user != default_user else None,
                 )
                 cluster_mgr.set_default(cluster_name)
                 results["cluster"] = "%s (%d hosts, set as default)" % (cluster_name, len(host_list))
@@ -298,7 +298,7 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                         cluster_mgr.update(
                             name=cluster_name,
                             hosts=host_list,
-                            description=description or None,
+                            user=user if user != default_user else None,
                         )
                         cluster_mgr.set_default(cluster_name)
                         results["cluster"] = "%s (%d hosts, updated)" % (cluster_name, len(host_list))
@@ -308,8 +308,7 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                         cluster_mgr.create(
                             name=cluster_name,
                             hosts=host_list,
-                            description=description,
-                            user=user if user != os.environ.get("USER") else None,
+                            user=user if user != default_user else None,
                         )
                         cluster_mgr.set_default(cluster_name)
                         results["cluster"] = "%s (%d hosts, set as default)" % (
@@ -376,6 +375,21 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
         ssh_kwargs = build_ssh_kwargs(config)
         if user:
             ssh_kwargs["ssh_user"] = user
+
+        # ── Management IP normalization ──────────────────────────────
+        # After SSH mesh, detect each host's management IP and update the
+        # cluster definition if the user provided CX7 or other non-mgmt IPs.
+        if host_list and cluster_name and results.get("ssh") == "OK":
+            from ._setup import _detect_and_update_mgmt_ips
+
+            prev_len = len(host_list)
+            _detect_and_update_mgmt_ips(
+                host_list, cluster_name, cluster_mgr, ssh_kwargs, dry_run=dry_run,
+            )
+            # Refresh summary if hosts changed (dedup or mgmt IP correction)
+            if len(host_list) != prev_len and results.get("cluster"):
+                results["cluster"] = "%s (%d hosts, updated)" % (cluster_name, len(host_list))
+            click.echo()
 
         # ── Sudo password helper (deferred collection) ───────────────
         def _ensure_sudo_password():
