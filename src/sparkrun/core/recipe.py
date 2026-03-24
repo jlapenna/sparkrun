@@ -490,6 +490,11 @@ class Recipe:
         return self.name
 
     @property
+    def spark_arena_benchmarks(self) -> list[dict[str, Any]]:
+        """List of ``{tp, uuid}`` dicts linking to Spark Arena benchmark results."""
+        return self.metadata.get("spark_arena_benchmarks", [])
+
+    @property
     def slug(self) -> str:
         """URL/filesystem-safe slug derived from name."""
         return re.sub(r"[^a-z0-9]+", "-", self.name.lower()).strip("-")
@@ -649,7 +654,17 @@ class Recipe:
                     hf_info = extract_model_info(hf_config)
                     # Fill in missing fields (metadata takes precedence)
                     if not model_dtype:
-                        model_dtype = hf_info.get("model_dtype")
+                        # Resolve model_dtype with quantization awareness:
+                        # 1. Recipe defaults "quantization" key (e.g. quantization: fp8)
+                        # 2. HF quantization_config.quant_method (extracted as quant_dtype)
+                        # 3. HF torch_dtype (fallback — often bfloat16 even for quant models)
+                        recipe_quant = config.get("quantization")
+                        if recipe_quant and str(recipe_quant).lower() not in ("none", "auto", ""):
+                            model_dtype = str(recipe_quant).lower()
+                        elif hf_info.get("quant_dtype"):
+                            model_dtype = hf_info["quant_dtype"]
+                        else:
+                            model_dtype = hf_info.get("model_dtype")
                     if not num_layers:
                         num_layers = hf_info.get("num_layers")
                     if not num_kv_heads:

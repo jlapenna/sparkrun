@@ -197,6 +197,34 @@ def fetch_safetensors_size(
     return None
 
 
+def _resolve_quant_dtype(quantization_config: dict[str, Any]) -> str | None:
+    """Derive a model weight dtype from a HuggingFace quantization_config block.
+
+    Handles common quant methods: fp8, awq, gptq, bitsandbytes, compressed-tensors.
+    Returns a dtype string recognized by :func:`bytes_per_element`, or ``None``
+    if the method is unrecognized.
+    """
+    method = str(quantization_config.get("quant_method", "")).lower().strip()
+    if not method:
+        return None
+
+    if method == "fp8":
+        return "fp8"
+
+    bits = quantization_config.get("bits")
+    if method == "awq":
+        return "awq4" if bits is None or int(bits) == 4 else f"awq{int(bits)}"
+    if method in ("gptq", "marlin"):
+        return "gptq" if bits is None or int(bits) == 4 else f"int{int(bits)}"
+    if method == "bitsandbytes":
+        if quantization_config.get("load_in_4bit") or quantization_config.get("quant_type") == "nf4":
+            return "int4"
+        if quantization_config.get("load_in_8bit"):
+            return "int8"
+
+    return None
+
+
 def _extract_from_config(cfg: dict[str, Any]) -> dict[str, Any]:
     """Extract architecture info from a single config dict (top-level or nested)."""
     info: dict[str, Any] = {}
@@ -264,6 +292,15 @@ def extract_model_info(hf_config: dict[str, Any]) -> dict[str, Any]:
                     if k not in info:
                         info[k] = v
                 break  # only use the first matching nested config
+
+    # Extract quantization dtype from quantization_config if present.
+    # This is more accurate than torch_dtype for quantized models (e.g.
+    # an FP8 model will have torch_dtype=bfloat16 but quant_method=fp8).
+    qc = hf_config.get("quantization_config")
+    if isinstance(qc, dict):
+        qd = _resolve_quant_dtype(qc)
+        if qd:
+            info["quant_dtype"] = qd
 
     return info
 
