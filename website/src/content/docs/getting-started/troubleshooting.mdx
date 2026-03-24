@@ -10,11 +10,13 @@ DGX Spark inference containers typically run as **root** inside rootful Docker. 
 :::note[Cache directory resolution]
 sparkrun uses the same cache directory as `huggingface_hub`, resolved in this order:
 
-1. `--cache-dir` CLI flag or `hf_cache_dir` in `~/.config/sparkrun/config.yaml` (sparkrun-specific override)
+1. `hf_cache_dir` in `~/.config/sparkrun/config.yaml` (sparkrun-specific override)
 2. `HF_HUB_CACHE` environment variable
 3. `HUGGINGFACE_HUB_CACHE` environment variable (legacy alias)
 4. `HF_HOME` environment variable + `/hub`
 5. `~/.cache/huggingface` (default)
+
+For remote cluster hosts, the cache directory can also be set per-cluster via `sparkrun cluster create --cache-dir` or `sparkrun cluster update --cache-dir`. This is useful when the control machine and cluster hosts have different filesystem layouts (e.g. macOS control machine managing Linux DGX Spark nodes).
 
 If you've set `HF_HOME` or `HF_HUB_CACHE`, sparkrun respects those automatically — no sparkrun-specific configuration needed.
 :::
@@ -288,10 +290,7 @@ Check that CX7 IPs are reachable between all hosts in the cluster.
   sparkrun setup ssh --cluster mylab
   ```
 - Check InfiniBand connectivity between hosts (see [InfiniBand not detected](#infiniband-not-detected) above)
-- Ensure the same container image is present on all hosts — image ID mismatches can cause subtle failures. Re-sync with:
-  ```bash
-  sparkrun run <recipe> --sync-container
-  ```
+- Ensure the same container image is present on all hosts — image ID mismatches can cause subtle failures. sparkrun automatically syncs container images to all target hosts during `sparkrun run`. To force a full re-distribution, stop the workload and re-run the recipe.
 - For very large models, increase the distributed initialization timeout via runtime-specific environment variables
 
 For systematic debugging, use [diagnostics](/getting-started/diagnostics/) to collect detailed host information.
