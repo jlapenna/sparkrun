@@ -136,7 +136,7 @@ class ProxyEngine:
     ) -> int:
         """Launch the LiteLLM proxy server via uvx.
 
-        Uses ``uvx --from 'litellm[proxy]' litellm`` to run the
+        Uses ``uvx --from 'litellm[proxy]==1.82.6' litellm`` to run the
         LiteLLM proxy server without requiring a permanent install.
 
         Note: ``litellm`` is the server command; ``litellm-proxy`` is the
@@ -165,7 +165,7 @@ class ProxyEngine:
             config_path = self.config_path
 
         cmd = [
-            uvx, "--from", "litellm[proxy]", "litellm",
+            uvx, "--from", "litellm[proxy]==1.82.6", "litellm",
             "--config", str(config_path),
             "--host", self.host,
             "--port", str(self.port),
