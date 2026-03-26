@@ -123,7 +123,7 @@ def export_running(ctx, target, hosts, hosts_file, cluster_name, output_json, sa
         # Best path: full-fidelity reconstruction
         recipe = Recipe._deserialize(recipe_state)
         _output_export(recipe, output_json, save_path,
-                        overrides=meta_overrides, container_image=effective_image)
+                       overrides=meta_overrides, container_image=effective_image)
         return
 
     # Fallback: load recipe by name from registries
@@ -142,7 +142,7 @@ def export_running(ctx, target, hosts, hosts_file, cluster_name, output_json, sa
     if meta_overrides:
         # Good fallback: full overrides dict available
         _output_export(recipe, output_json, save_path,
-                        overrides=meta_overrides, container_image=effective_image)
+                       overrides=meta_overrides, container_image=effective_image)
         return
 
     # Legacy fallback: reconstruct partial overrides from individual metadata fields
@@ -155,7 +155,7 @@ def export_running(ctx, target, hosts, hosts_file, cluster_name, output_json, sa
         legacy_overrides["served_model_name"] = meta["served_model_name"]
 
     _output_export(recipe, output_json, save_path,
-                    overrides=legacy_overrides or None, container_image=effective_image)
+                   overrides=legacy_overrides or None, container_image=effective_image)
 
 
 def _output_export(recipe, output_json, save_path, overrides=None, container_image=None):
@@ -360,8 +360,8 @@ def _detect_remote_sparkrun(host, ssh_kwargs, dry_run=False):
 
 
 def _resolve_recipe_for_systemd(target, config, hosts, hosts_file, cluster_name,
-                                 options, tensor_parallel, pipeline_parallel,
-                                 gpu_mem, max_model_len, image, port, served_model_name):
+                                options, tensor_parallel, pipeline_parallel,
+                                gpu_mem, max_model_len, image, port, served_model_name):
     """Resolve recipe, hosts, and overrides for the systemd command.
 
     Returns (recipe, overrides, host_list, effective_cluster_name).

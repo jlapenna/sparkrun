@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sys
 
@@ -19,6 +20,25 @@ from ._common import (
 logger = logging.getLogger(__name__)
 
 _BENCHMARK_PROFILE = '@official/spark-arena-v1'
+
+_PARALLELISM_KEYS = [
+    ('tensor_parallel', 'tp'),
+    ('pipeline_parallel', 'pp'),
+    ('data_parallel', 'dp'),
+    ('expert_parallel', 'ep'),
+    ('context_parallel', 'cp'),
+]
+
+
+def _build_cluster_meta(recipe, overrides, cluster_id):
+    """Build cluster metadata dict with only non-default parallelism values."""
+    config_chain = recipe.build_config_chain(overrides)
+    meta = {'cluster_id': cluster_id}
+    for key, short in _PARALLELISM_KEYS:
+        val = config_chain.get(key)
+        if val is not None:
+            meta[short] = int(val)
+    return meta
 
 
 @click.group()
@@ -103,6 +123,8 @@ def status():
 @click.option("--rootful", is_flag=True, help="Run with --privileged as root inside container", hidden=True)
 @click.option("--timeout", "bench_timeout", type=int, default=None,
               help="Benchmark timeout in seconds (default: 14400)")
+@click.option("--local-test", is_flag=True, hidden=True,
+              help="Smoke test: skip profile and simulate upload without sending")
 @dry_run_option
 @click.pass_context
 def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
@@ -110,7 +132,7 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
                     options, image, solo, port,
                     # profile, framework, output_file, bench_options,
                     exit_on_first_fail, no_stop, skip_run,
-                    sync_tuning, rootful, bench_timeout, dry_run):
+                    sync_tuning, rootful, bench_timeout, local_test, dry_run):
     """Benchmark a recipe and submit results to Spark Arena.
 
     Runs the full benchmark flow, then uploads results to the Spark Arena
@@ -132,24 +154,29 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
     click.echo("sparkrun %s — Spark Arena benchmark" % __version__)
     click.echo()
 
-    refresh_token = load_refresh_token()
-    if not refresh_token:
-        click.echo("Error: Not logged in. Run 'sparkrun arena login' first.", err=True)
-        sys.exit(1)
+    refresh_token = None
+    if local_test:
+        click.echo("[local-test] Skipping authentication — upload will be simulated.")
+        click.echo()
+    else:
+        refresh_token = load_refresh_token()
+        if not refresh_token:
+            click.echo("Error: Not logged in. Run 'sparkrun arena login' first.", err=True)
+            sys.exit(1)
 
-    try:
-        exchange_token(refresh_token)
-    except RuntimeError as e:
-        click.echo("Error: Authentication failed: %s" % e, err=True)
-        click.echo("Run 'sparkrun arena login' to re-authenticate.", err=True)
-        sys.exit(1)
+        try:
+            exchange_token(refresh_token)
+        except RuntimeError as e:
+            click.echo("Error: Authentication failed: %s" % e, err=True)
+            click.echo("Run 'sparkrun arena login' to re-authenticate.", err=True)
+            sys.exit(1)
 
-    click.echo("Authentication verified.")
-    click.echo()
+        click.echo("Authentication verified.")
+        click.echo()
 
-    profile = _BENCHMARK_PROFILE
+    profile = None if local_test else _BENCHMARK_PROFILE
     framework = None
-    output_file = None  # TODO: /tmp path? /.cache/benchmarks/...path...
+    output_file = None
     bench_options = []
 
     # --- Run benchmark ---
@@ -160,31 +187,45 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
         profile, framework,
         output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
         sync_tuning, rootful, bench_timeout, dry_run,
+        export_results_files=False,
     )
-
-    if dry_run:
-        click.echo("[dry-run] Would upload results to Spark Arena")
-        return
 
     # require result, success, and launch result data (cannot benchmark what we didn't start)
     if not bench_result or not bench_result.success or not bench_result.launch_result:
         click.echo("Benchmark did not complete successfully. Skipping upload.", err=True)
         return
 
-    # TODO: resolve effective recipe w/ correct overrides
-    # TODO: normalize container image (if eugr, then normalize to spark-arena image if possible;
-    #       if spark-arena image otherwise, try to replace :latest with most specific tag possible)
+    # gather recipe/metadata/runtime info
     recipe = bench_result.launch_result.recipe
+    overrides = bench_result.launch_result.overrides
+    metadata = bench_result.generate_metadata()
+    effective_recipe = recipe.export(overrides=overrides, container_image=metadata['recipe']['container'], )
+    # benchmark_json = bench_result.results['json']
+    benchmark_csv = bench_result.results['csv']
 
-    # gather metadata/runtime info
-    runtime_info = bench_result.launch_result.runtime_info
-    cluster_id = bench_result.launch_result.cluster_id
-    host_list = bench_result.launch_result.host_list
+    if dry_run or local_test:
+        from pprint import pformat
+        click.echo('-' * 40)
+        click.echo('Effective Recipe Export:')
+        click.echo('-' * 40)
+        click.echo(effective_recipe)
+        click.echo('-' * 40)
+        click.echo('Metadata:')
+        click.echo('-' * 40)
+        click.echo(pformat(metadata))
+        click.echo('-' * 40)
 
-    # --- Upload results ---
-    click.echo()
-    click.echo("Uploading results to Spark Arena...")
+    if dry_run:
+        click.echo("[dry-run] Would upload results to Spark Arena")
+        return
 
+    # TODO: modify upload approach, we've got csv data ready + metadata + recipe, so we upload those
+    # TODO: I guess let's do write files into .cache directory... and then upload them
+    #       csv data is just text to output (benchmark_csv)
+    #       metadata is dict (metadata)
+    #       recipe is a yaml string to output (effective_recipe)
+
+    # --- Collect upload files ---
     upload_files: list[Path] = []
     recipe_yaml_path = None
 
@@ -195,19 +236,25 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
     if bench_result.output_json:
         upload_files.append(Path(bench_result.output_json))
 
-    # Try to find the recipe YAML for upload
-    from sparkrun.core.config import SparkrunConfig
-    from ._common import _load_recipe
-    try:
-        config = SparkrunConfig()
-        _recipe, recipe_path, _reg = _load_recipe(config, recipe_name)
-        recipe_yaml_path = Path(recipe_path)
-    except (SystemExit, Exception):
-        logger.debug("Could not resolve recipe path for upload", exc_info=True)
+    if local_test:
+        click.echo()
+        click.echo("[local-test] Upload files that would be sent:")
+        for f in upload_files:
+            click.echo("  %s" % f)
+        if recipe_yaml_path:
+            click.echo("  %s (recipe)" % recipe_yaml_path)
+        if not upload_files:
+            click.echo("  (none)")
+        click.echo("[local-test] Skipping actual upload.")
+        return
 
     if not upload_files:
         click.echo("No result files to upload.", err=True)
         return
+
+    # --- Upload results ---
+    click.echo()
+    click.echo("Uploading results to Spark Arena...")
 
     try:
         success, submission_id = upload_benchmark_results(

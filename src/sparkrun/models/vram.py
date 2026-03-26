@@ -81,6 +81,24 @@ class VRAMEstimate:
         return self.total_per_gpu_gb <= DGX_SPARK_VRAM_GB
 
 
+_DTYPE_CANONICAL: dict[str, str] = {
+    "fp32": "float32",
+    "fp16": "float16",
+    "bf16": "bfloat16",
+}
+
+
+def normalize_dtype(dtype: str) -> str:
+    """Normalize a dtype string to its canonical form.
+
+    Maps common short aliases (``bf16`` → ``bfloat16``, ``fp16`` → ``float16``,
+    ``fp32`` → ``float32``) to full names.  Unknown dtypes are returned
+    lower-cased but otherwise unchanged.
+    """
+    key = dtype.lower().strip().replace("-", "_")
+    return _DTYPE_CANONICAL.get(key, key)
+
+
 def bytes_per_element(dtype: str) -> float | None:
     """Return bytes per element for a dtype string, or None if unknown."""
     return _DTYPE_BYTES.get(dtype.lower().strip().replace("-", "_"))

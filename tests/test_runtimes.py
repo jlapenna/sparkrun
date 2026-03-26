@@ -675,7 +675,8 @@ class TestEugrPrepare:
         with mock.patch.object(builder, "ensure_repo", return_value=repo_dir):
             with mock.patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock.Mock(returncode=0)
-                builder.prepare_image("my-image", recipe, ["10.0.0.1"])
+                with mock.patch.object(builder, "_save_build_metadata"):
+                    builder.prepare_image("my-image", recipe, ["10.0.0.1"])
 
                 # Should call build-and-copy.sh with -t and build_args
                 cmd = mock_run.call_args[0][0]
@@ -707,7 +708,8 @@ class TestEugrPrepare:
             with mock.patch.object(builder, "ensure_repo", return_value=repo_dir):
                 with mock.patch("subprocess.run") as mock_run:
                     mock_run.return_value = mock.Mock(returncode=0)
-                    builder.prepare_image("my-image", recipe, ["10.0.0.1"])
+                    with mock.patch.object(builder, "_save_build_metadata"):
+                        builder.prepare_image("my-image", recipe, ["10.0.0.1"])
                     mock_run.assert_called_once()
                     cmd = mock_run.call_args[0][0]
                     assert str(repo_dir / "build-and-copy.sh") in cmd[0]

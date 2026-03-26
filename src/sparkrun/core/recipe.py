@@ -630,9 +630,12 @@ class Recipe:
         config = self.build_config_chain(cli_overrides)
 
         # Start with metadata values
-        model_dtype = self.metadata.get("model_dtype")
+        from sparkrun.models.vram import normalize_dtype
+        _raw_dtype = self.metadata.get("model_dtype")
+        model_dtype = normalize_dtype(str(_raw_dtype)) if _raw_dtype else None
         model_params_raw = self.metadata.get("model_params")
-        kv_dtype = self.metadata.get("kv_dtype")
+        _raw_kv = self.metadata.get("kv_dtype")
+        kv_dtype = normalize_dtype(str(_raw_kv)) if _raw_kv else None
         num_layers = self.metadata.get("num_layers")
         num_kv_heads = self.metadata.get("num_kv_heads")
         head_dim = self.metadata.get("head_dim")
@@ -719,8 +722,8 @@ class Recipe:
 
         # Write back auto-detected values so downstream consumers
         # (e.g. benchmark result export) can use them without re-fetching.
-        if model_dtype and "model_dtype" not in self.metadata:
-            self.metadata["model_dtype"] = str(model_dtype)
+        if model_dtype:
+            self.metadata["model_dtype"] = normalize_dtype(str(model_dtype))
         if num_layers is not None and "num_layers" not in self.metadata:
             self.metadata["num_layers"] = int(num_layers)
         if num_kv_heads is not None and "num_kv_heads" not in self.metadata:
@@ -982,6 +985,29 @@ class Recipe:
         # Override container with effective image (post-builder)
         if container_image:
             export_dict["container"] = container_image
+
+        # filter out pre-/post- commands that were added by
+        # runtime, builder, etc. because those should be reproducible
+        # implicitly by relying on the runtime & builder in the future as well
+
+        # ensure that pre_exec is excluded if raw is empty
+        export_dict['pre_exec'] = self._raw.get('pre_exec', [])
+        if not export_dict['pre_exec']:
+            del export_dict['pre_exec']
+
+        # ensure that post_exec is excluded if raw is empty
+        export_dict['post_exec'] = self._raw.get('post_exec', [])
+        if not export_dict['post_exec']:
+            del export_dict['post_exec']
+
+        # ensure that post_commands are excluded if raw is empty
+        export_dict['post_commands'] = self._raw.get('post_commands', [])
+        if not export_dict['post_commands']:
+            del export_dict['post_commands']
+
+        # ensure that `stop_after_post` is excluded if False
+        if not export_dict.get('stop_after_post', False):
+            export_dict.pop('stop_after_post', None)
 
         ordered = _sort_dict_by_patterns(export_dict, self.EXPORT_KEY_ORDER)
 

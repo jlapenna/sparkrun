@@ -402,7 +402,7 @@ class TestArenaCLI:
             result = runner.invoke(main, ["arena", "status"])
             assert result.exit_code == 0
             assert "test@example.com" in result.output
-            assert "Google" in result.output
+            assert "google.com" in result.output
 
     def test_status_expired_token(self, runner, tmp_path, monkeypatch):
         token_path = tmp_path / "token"

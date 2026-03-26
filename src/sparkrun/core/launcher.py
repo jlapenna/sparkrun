@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from sparkrun.core.recipe import Recipe
     from sparkrun.core.registry import RegistryManager
     from sparkrun.runtimes.base import RuntimePlugin
+    from sparkrun.builders.base import BuilderPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class LaunchResult:
     ib_ip_map: dict[str, str] = field(default_factory=dict)
     serve_command: str = ""
     runtime_info: dict[str, str] = field(default_factory=dict)
+    builder: BuilderPlugin | None = None
 
 
 def launch_inference(
@@ -155,6 +157,7 @@ def launch_inference(
     container_image = runtime.resolve_container(recipe, overrides)
 
     # Builder phase
+    builder = None
     if recipe.builder:
         from sparkrun.core.bootstrap import get_builder
 
@@ -405,4 +408,5 @@ def launch_inference(
         ib_ip_map=ib_ip_map,
         serve_command=serve_command,
         runtime_info=runtime_info,
+        builder=builder,
     )

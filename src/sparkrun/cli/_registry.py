@@ -321,6 +321,7 @@ def _format_param_count(value) -> str | None:
     return str(n)
 
 
+# TODO: centralize and/or make runtime instances provide their short form
 # Collapse vllm variants into a single display runtime for the website.
 _RUNTIME_DISPLAY = {
     "vllm-distributed": "vllm",
@@ -341,6 +342,7 @@ def export_metadata(ctx, output, include_hidden):
 
     from vpd.next.util import read_yaml
     from sparkrun.core.recipe import Recipe
+    from sparkrun.models.download import parse_gguf_model_spec
 
     config, registry_mgr = _get_config_and_registry()
     registry_mgr.ensure_initialized()
@@ -413,7 +415,8 @@ def export_metadata(ctx, output, include_hidden):
                 "slug": slug,
                 "name": recipe.name,
                 "registry": entry.name,
-                "model": recipe.model,
+                "model": parse_gguf_model_spec(recipe.model)[0],
+                'model_full': recipe.model,
                 "runtime": display_runtime,
                 "cluster_backend": cluster_backend,
                 "description": recipe.description,

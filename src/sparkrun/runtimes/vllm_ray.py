@@ -146,11 +146,11 @@ class VllmRayRuntime(VllmMixin, RuntimePlugin):
         from sparkrun.orchestration.primitives import (
             build_ssh_kwargs,
             build_volumes,
-            merge_env,
             cleanup_containers,
             is_valid_ip,
             resolve_nccl_env,
         )
+        from sparkrun.utils import merge_env
         from sparkrun.orchestration.ssh import run_remote_script, run_remote_scripts_parallel
 
         head_host = hosts[0]

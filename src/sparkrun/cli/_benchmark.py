@@ -6,8 +6,8 @@ import logging
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
+from datetime import datetime, timezone
+from typing import Optional, TYPE_CHECKING, Any
 
 import click
 
@@ -34,18 +34,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_BENCHMARK_TIMEOUT: int = 14400  # 4 hours
 
 if TYPE_CHECKING:
+    from ..benchmarking.base import BenchmarkingPlugin
     from ..core.launcher import LaunchResult
-
-
-@dataclass
-class BenchmarkResult:
-    """Result of a benchmark run with output file paths."""
-    success: bool = False
-    output_yaml: Optional[str] = None
-    output_csv: Optional[str] = None
-    output_json: Optional[str] = None
-    recipe_name: Optional[str] = None
-    launch_result: Optional['LaunchResult'] = None
 
 
 @click.command()
@@ -114,12 +104,13 @@ def _run_benchmark(
         profile, framework_name,
         output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
         sync_tuning, rootful, bench_timeout, dry_run,
+        export_results_files=True,
 ):
     """Execute the full benchmark flow: launch inference -> benchmark -> stop.
 
     Returns a :class:`BenchmarkResult` with output file paths on success.
     """
-    from sparkrun.benchmarking.base import export_results
+    from sparkrun.benchmarking.base import export_results, BenchmarkResult
     from ..core.benchmark_profiles import BenchmarkSpec
     from sparkrun.core.bootstrap import init_sparkrun, get_runtime, get_benchmarking_framework
     from sparkrun.core.config import SparkrunConfig
@@ -179,6 +170,8 @@ def _run_benchmark(
     except ValueError as e:
         click.echo("Error: %s" % e, err=True)
         sys.exit(1)
+
+    bench_result.framework = fw
 
     # Build layered bench args
     passthrough_layer: dict = {}
@@ -453,6 +446,8 @@ def _run_benchmark(
             args=bench_args,
             result_file=result_file,
         )
+        bench_result.profile = profile
+        bench_result.benchmark_args = bench_args
 
         click.echo("Benchmark command:")
         click.echo("  %s" % " ".join(bench_cmd))
@@ -466,6 +461,7 @@ def _run_benchmark(
             import time
             click.echo("--- benchmark output ---")
             bench_start = time.monotonic()
+            bench_result.start_time = datetime.now(tz=timezone.utc)
             try:
                 import os
                 bench_env = os.environ.copy()
@@ -489,6 +485,7 @@ def _run_benchmark(
                 stderr_text = proc.stderr.read()
 
                 elapsed = time.monotonic() - bench_start
+                bench_result.end_time = datetime.now(tz=timezone.utc)
                 click.echo("--- end benchmark output ---")
                 click.echo("")
 
@@ -522,55 +519,58 @@ def _run_benchmark(
         # -----------------------------------------------------------
         if not dry_run:
             results = fw.parse_results(stdout_text, stderr_text, result_file=result_file)
+            bench_result.results = results
 
             rows = results.get("rows", [])
             if rows:
                 click.echo("")
                 click.echo("Results: %d test row(s) collected" % len(rows))
 
-            if not output_file:
-                profile_slug = profile.replace("/", "_").replace("@", "") if profile else "default"
-                effective_pp = int(config_chain.get("pipeline_parallel") or 1)
-                pp_suffix = "_pp%d" % effective_pp if effective_pp > 1 else ""
-                output_file = "benchmark_%s_%s_tp%d%s.yaml" % (
-                    recipe.name.replace("/", "_"),
-                    profile_slug,
-                    effective_tp,
-                    pp_suffix,
+            if export_results_files:
+                # create a standard output file basis
+                if not output_file:
+                    profile_slug = profile.replace("/", "_").replace("@", "") if profile else "default"
+                    effective_pp = int(config_chain.get("pipeline_parallel") or 1)
+                    pp_suffix = "_pp%d" % effective_pp if effective_pp > 1 else ""
+                    output_file = "benchmark_%s_%s_tp%d%s.yaml" % (
+                        recipe.name.replace("/", "_"),
+                        profile_slug,
+                        effective_tp,
+                        pp_suffix,
+                    )
+
+                export_results(
+                    recipe=recipe,
+                    hosts=host_list,
+                    tp=effective_tp,
+                    cluster_id=cluster_id,
+                    framework_name=fw.framework_name,
+                    profile_name=profile,
+                    args=bench_args,
+                    results=results,
+                    output_path=output_file,
+                    runtime_info=launch_result.runtime_info if launch_result else None,
                 )
+                click.echo("Results saved to: %s" % output_file)
+                bench_result.output_yaml = output_file
 
-            export_results(
-                recipe=recipe,
-                hosts=host_list,
-                tp=effective_tp,
-                cluster_id=cluster_id,
-                framework_name=fw.framework_name,
-                profile_name=profile,
-                args=bench_args,
-                results=results,
-                output_path=output_file,
-                runtime_info=launch_result.runtime_info if launch_result else None,
-            )
-            click.echo("Results saved to: %s" % output_file)
-            bench_result.output_yaml = output_file
-
-            from pathlib import Path
-            _OUTPUT_WRITERS = {
-                "json": lambda data, path: path.write_text(
-                    __import__("json").dumps(data, indent=2)),
-                "csv": lambda data, path: path.write_text(data),
-            }
-            for fmt, writer in _OUTPUT_WRITERS.items():
-                content = results.get(fmt)
-                if not content:
-                    continue
-                fmt_path = Path(output_file).with_suffix(".%s" % fmt)
-                writer(content, fmt_path)
-                click.echo("%s results saved to: %s" % (fmt.upper(), fmt_path))
-                if fmt == "csv":
-                    bench_result.output_csv = str(fmt_path)
-                elif fmt == "json":
-                    bench_result.output_json = str(fmt_path)
+                from pathlib import Path
+                _OUTPUT_WRITERS = {
+                    "json": lambda data, path: path.write_text(
+                        __import__("json").dumps(data, indent=2)),
+                    "csv": lambda data, path: path.write_text(data),
+                }
+                for fmt, writer in _OUTPUT_WRITERS.items():
+                    content = results.get(fmt)
+                    if not content:
+                        continue
+                    fmt_path = Path(output_file).with_suffix(".%s" % fmt)
+                    writer(content, fmt_path)
+                    click.echo("%s results saved to: %s" % (fmt.upper(), fmt_path))
+                    if fmt == "csv":
+                        bench_result.output_csv = str(fmt_path)
+                    elif fmt == "json":
+                        bench_result.output_json = str(fmt_path)
         else:
             click.echo("[dry-run] Would parse and export results to: %s" % (output_file or "benchmark_<recipe>_<framework>.yaml"))
 

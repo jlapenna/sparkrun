@@ -12,9 +12,21 @@ if TYPE_CHECKING:
     from sparkrun.core.config import SparkrunConfig
     from sparkrun.core.recipe import Recipe
 
-logger = logging.getLogger(__name__)
-
 EXT_BUILDER = "sparkrun.builder"
+
+# Fully qualified image prefixes that indicate a pullable registry image
+# (no build needed even if the image isn't present locally).
+PULLABLE_REGISTRY_PREFIXES = (
+    "docker.io/",
+    "ghcr.io/",
+    "nvcr.io/",
+    "quay.io/",
+    "registry.hub.docker.com/",
+    "public.ecr.aws/",
+    "gcr.io/",
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _flatten_dict(d: dict, prefix: str = "", sep: str = "_", normalize: bool = False) -> dict[str, str]:
@@ -143,6 +155,25 @@ class BuilderPlugin(Plugin):
         except Exception:
             logger.debug("Container label collection failed", exc_info=True)
             return {}
+
+    def resolve_long_term_image(
+            self,
+            container_image: str,
+            runtime_info: dict[str, str],
+            recipe: Recipe,
+    ) -> tuple[str, bool]:
+        """Resolve a container image to a long-term pinned reference.
+
+        Builders that publish to public registries with dated tags can
+        override this to map an ephemeral image (e.g. ``:latest`` or a
+        locally-built name) to a reproducible ``YYYYMMDDNN`` tag by
+        matching source hashes from *runtime_info* against known builds.
+
+        Returns:
+            ``(image_ref, pinned)`` where *pinned* is ``True`` when the
+            image was successfully resolved to a stable tag.
+        """
+        return container_image, False
 
     def validate_recipe(self, recipe: Recipe) -> list[str]:
         """Validate builder-specific recipe fields."""

@@ -76,7 +76,7 @@ class LlamaCppRuntime(RuntimePlugin):
     """
 
     runtime_name = "llama-cpp"
-    default_image_prefix = "scitrera/dgx-spark-llama-cpp:latest"
+    default_image_prefix = "scitrera/dgx-spark-llama-cpp"
 
     def cluster_strategy(self) -> str:
         """llama.cpp uses native RPC-based distribution, not Ray."""
