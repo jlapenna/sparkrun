@@ -42,6 +42,7 @@ def coerce_value(value: str):
 def resolve_ssh_user(cluster_user: str | None, config, fallback: str = "root") -> str:
     """Resolve SSH user from cluster definition, config, or OS environment."""
     import os
+
     return cluster_user or config.ssh_user or os.environ.get("USER", fallback)
 
 
@@ -78,6 +79,7 @@ def load_yaml(path) -> dict:
     """Load a YAML file, returning an empty dict on parse failure."""
     from pathlib import Path as _Path
     import yaml
+
     with _Path(path).open() as f:
         data = yaml.safe_load(f)
     return data if isinstance(data, dict) else {}

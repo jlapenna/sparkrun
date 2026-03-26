@@ -85,11 +85,11 @@ class BenchmarkingPlugin(Plugin):
 
     @abstractmethod
     def build_benchmark_command(
-            self,
-            target_url: str,
-            model: str,
-            args: dict[str, Any],
-            result_file: str | None = None,
+        self,
+        target_url: str,
+        model: str,
+        args: dict[str, Any],
+        result_file: str | None = None,
     ) -> list[str]:
         """Build the benchmark command argv list.
 
@@ -149,18 +149,21 @@ class BenchmarkingPlugin(Plugin):
 # TODO: _build_cluster_meta and _PARALLELISM_KEYS should perhaps
 #       be somewhere more central because useful to use for any parallelism checks
 _PARALLELISM_KEYS = [
-    ('tensor_parallel', 'tp'),
-    ('pipeline_parallel', 'pp'),
-    ('data_parallel', 'dp'),
-    ('expert_parallel', 'ep'),
-    ('context_parallel', 'cp'),
+    ("tensor_parallel", "tp"),
+    ("pipeline_parallel", "pp"),
+    ("data_parallel", "dp"),
+    ("expert_parallel", "ep"),
+    ("context_parallel", "cp"),
 ]
 
 
 def _build_cluster_meta(recipe, overrides, cluster_id, host_list):
     """Build cluster metadata dict with only non-default parallelism values."""
     config_chain = recipe.build_config_chain(overrides)
-    meta = {'cluster_id': cluster_id, 'node_count': len(host_list), }
+    meta = {
+        "cluster_id": cluster_id,
+        "node_count": len(host_list),
+    }
     for key, short in _PARALLELISM_KEYS:
         val = config_chain.get(key)
         if val is not None:
@@ -181,10 +184,10 @@ class BenchmarkResult:
 
     # recipe/launch info
     recipe_name: Optional[str] = None
-    launch_result: Optional['LaunchResult'] = None
+    launch_result: Optional["LaunchResult"] = None
 
     # benchmark info
-    framework: Optional['BenchmarkingPlugin'] = None
+    framework: Optional["BenchmarkingPlugin"] = None
     profile: Optional[str] = None
     benchmark_args: Optional[dict[str, Any]] = None
 
@@ -220,7 +223,7 @@ class BenchmarkResult:
 
     def generate_metadata(self):
         from sparkrun.models.download import parse_gguf_model_spec
-        from sparkrun.cli._registry import _RUNTIME_DISPLAY
+        from sparkrun.utils.cli_formatters import RUNTIME_DISPLAY as _RUNTIME_DISPLAY
 
         launch_result = self.launch_result
         recipe = launch_result.recipe
@@ -266,16 +269,16 @@ class BenchmarkResult:
 
         metadata = {
             "recipe": {
-                'name': recipe.name,
-                'qualified_name': recipe.qualified_name,
-                'type': 'sparkrun',
-                'model': recipe.model,  # will include quant if applicable
-                'hf_model': hf_model,  # will exclude quant if applicable
-                'raw_container': recipe.container,
-                'container': recipe_container,
-                'container_pinned': container_pinned,
-                'runtime': _RUNTIME_DISPLAY.get(recipe.runtime, recipe.runtime),
-                'runtime_full': recipe.runtime,
+                "name": recipe.name,
+                "qualified_name": recipe.qualified_name,
+                "type": "sparkrun",
+                "model": recipe.model,  # will include quant if applicable
+                "hf_model": hf_model,  # will exclude quant if applicable
+                "raw_container": recipe.container,
+                "container": recipe_container,
+                "container_pinned": container_pinned,
+                "runtime": _RUNTIME_DISPLAY.get(recipe.runtime, recipe.runtime),
+                "runtime_full": recipe.runtime,
                 "registry": recipe.source_registry,
                 "registry_git": recipe.source_registry_url or "",
                 "hash": recipe_hash,
@@ -285,30 +288,30 @@ class BenchmarkResult:
                 "end": self.end_time.isoformat(),
                 "duration": (self.end_time - self.start_time).total_seconds(),
             },
-            'cluster': _build_cluster_meta(recipe, overrides, launch_result.cluster_id, launch_result.host_list),
-            'benchmark': {
-                'framework': framework.framework_name if framework else 'unknown',
-                'profile': profile,
-                'args': benchmark_args,
+            "cluster": _build_cluster_meta(recipe, overrides, launch_result.cluster_id, launch_result.host_list),
+            "benchmark": {
+                "framework": framework.framework_name if framework else "unknown",
+                "profile": profile,
+                "args": benchmark_args,
             },
-            'model': model_meta,
-            'runtime_info': launch_result.runtime_info,
+            "model": model_meta,
+            "runtime_info": launch_result.runtime_info,
         }
         return metadata
 
 
 def export_results(
-        *,
-        recipe: Recipe,
-        hosts: list[str],
-        tp: int,
-        cluster_id: str,
-        framework_name: str,
-        profile_name: str | None,
-        args: dict[str, Any],
-        results: dict[str, Any],
-        output_path: str | Path,
-        runtime_info: dict[str, str] | None = None,
+    *,
+    recipe: Recipe,
+    hosts: list[str],
+    tp: int,
+    cluster_id: str,
+    framework_name: str,
+    profile_name: str | None,
+    args: dict[str, Any],
+    results: dict[str, Any],
+    output_path: str | Path,
+    runtime_info: dict[str, str] | None = None,
 ) -> Path:
     """Export benchmark results to a YAML file.
 

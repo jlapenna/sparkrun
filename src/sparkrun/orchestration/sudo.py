@@ -58,8 +58,10 @@ def _run_local_sudo_script(
         )
     except subprocess.TimeoutExpired:
         return RemoteResult(
-            host="localhost", returncode=1,
-            stdout="", stderr="Timeout after %ds" % timeout,
+            host="localhost",
+            returncode=1,
+            stdout="",
+            stderr="Timeout after %ds" % timeout,
         )
 
 
@@ -159,7 +161,12 @@ def run_with_sudo_fallback(
     # a password in Step 2.
     if remote_hosts:
         parallel_results = _ssh.run_remote_scripts_parallel(
-            remote_hosts, script, timeout=timeout, dry_run=dry_run, quiet=True, **ssh_kwargs,
+            remote_hosts,
+            script,
+            timeout=timeout,
+            dry_run=dry_run,
+            quiet=True,
+            **ssh_kwargs,
         )
         for r in parallel_results:
             if r.success:
@@ -175,12 +182,20 @@ def run_with_sudo_fallback(
         for h in failed_hosts:
             if is_local_host(h):
                 r = _run_local_sudo_script(
-                    fallback_script, password=sudo_password, timeout=timeout, dry_run=dry_run,
+                    fallback_script,
+                    password=sudo_password,
+                    timeout=timeout,
+                    dry_run=dry_run,
                 )
                 r = RemoteResult(host=h, returncode=r.returncode, stdout=r.stdout, stderr=r.stderr)
             else:
                 r = _ssh.run_remote_sudo_script(
-                    h, fallback_script, sudo_password, timeout=timeout, dry_run=dry_run, **ssh_kwargs,
+                    h,
+                    fallback_script,
+                    sudo_password,
+                    timeout=timeout,
+                    dry_run=dry_run,
+                    **ssh_kwargs,
                 )
             result_map[h] = r
 

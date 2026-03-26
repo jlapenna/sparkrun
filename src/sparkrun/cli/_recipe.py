@@ -20,7 +20,7 @@ from ._common import (
 @click.group()
 @click.pass_context
 def recipe(ctx):
-    """ Find and manage inference recipes."""
+    """Find and manage inference recipes."""
     pass
 
 
@@ -47,8 +47,8 @@ def recipe_list(ctx, registry, runtime, show_all, query, config_path=None):
         recipes = registry_mgr.search_recipes(query, include_hidden=include_hidden)
     else:
         from sparkrun.core.recipe import discover_cwd_recipes
-        recipes = list_recipes(registry_manager=registry_mgr, include_hidden=include_hidden,
-                               local_files=discover_cwd_recipes())
+
+        recipes = list_recipes(registry_manager=registry_mgr, include_hidden=include_hidden, local_files=discover_cwd_recipes())
 
     recipes = filter_recipes(recipes, runtime=runtime, registry=registry)
     click.echo(format_recipe_table(recipes, show_model=True))
@@ -83,10 +83,8 @@ def recipe_search(ctx, registry, runtime, show_all, query, config_path=None):
 @recipe.command("show")
 @click.argument("recipe_name", type=RECIPE_NAME)
 @click.option("--no-vram", is_flag=True, help="Skip VRAM estimation")
-@click.option("--tp", "--tensor-parallel", "tensor_parallel", type=int, default=None,
-              help="Override tensor parallelism")
-@click.option("--gpu-mem", type=float, default=None,
-              help="Override GPU memory utilization (0.0-1.0)")
+@click.option("--tp", "--tensor-parallel", "tensor_parallel", type=int, default=None, help="Override tensor parallelism")
+@click.option("--gpu-mem", type=float, default=None, help="Override GPU memory utilization (0.0-1.0)")
 # @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
 def recipe_show(ctx, recipe_name, no_vram, tensor_parallel, gpu_mem=None, config_path=None):
@@ -102,8 +100,7 @@ def recipe_show(ctx, recipe_name, no_vram, tensor_parallel, gpu_mem=None, config
         cli_overrides["gpu_memory_utilization"] = gpu_mem
 
     reg_name = registry_mgr.registry_for_path(recipe_path) if registry_mgr else None
-    _display_recipe_detail(recipe, show_vram=not no_vram, registry_name=reg_name,
-                           cli_overrides=cli_overrides or None)
+    _display_recipe_detail(recipe, show_vram=not no_vram, registry_name=reg_name, cli_overrides=cli_overrides or None)
 
     return
 
@@ -139,11 +136,9 @@ def recipe_validate(ctx, recipe_name, config_path=None):
 
 @recipe.command("vram")
 @click.argument("recipe_name", type=RECIPE_NAME)
-@click.option("--tp", "--tensor-parallel", "tensor_parallel", type=int, default=None,
-              help="Override tensor parallelism")
+@click.option("--tp", "--tensor-parallel", "tensor_parallel", type=int, default=None, help="Override tensor parallelism")
 @click.option("--max-model-len", type=int, default=None, help="Override max sequence length")
-@click.option("--gpu-mem", type=float, default=None,
-              help="Override gpu_memory_utilization (0.0-1.0)")
+@click.option("--gpu-mem", type=float, default=None, help="Override gpu_memory_utilization (0.0-1.0)")
 @click.option("--no-auto-detect", is_flag=True, help="Skip HuggingFace model auto-detection")
 # @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
@@ -184,9 +179,7 @@ def recipe_vram(ctx, recipe_name, tensor_parallel, max_model_len, gpu_mem, no_au
 @click.pass_context
 def recipe_update(ctx, registry):
     """Update recipe registries from git."""
-    click.echo(
-        "Warning: 'sparkrun recipe update' is deprecated. Use 'sparkrun registry update' or 'sparkrun update' instead.",
-        err=True
-    )
+    click.echo("Warning: 'sparkrun recipe update' is deprecated. Use 'sparkrun registry update' or 'sparkrun update' instead.", err=True)
     from sparkrun.cli._registry import registry_update
+
     ctx.invoke(registry_update, name=registry)

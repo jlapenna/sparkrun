@@ -30,14 +30,22 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
     runtime_name = "vllm-distributed"
     default_image_prefix = "ghcr.io/spark-arena/dgx-vllm-eugr-nightly-tf5"
 
+    def get_family(self) -> str:
+        return "vllm"
+
     def cluster_strategy(self) -> str:
         """vLLM distributed uses native multi-node distribution, not Ray."""
         return "native"
 
-    def generate_command(self, recipe: Recipe, overrides: dict[str, Any],
-                         is_cluster: bool, num_nodes: int = 1,
-                         head_ip: str | None = None,
-                         skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
+    def generate_command(
+        self,
+        recipe: Recipe,
+        overrides: dict[str, Any],
+        is_cluster: bool,
+        num_nodes: int = 1,
+        head_ip: str | None = None,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+    ) -> str:
         """Generate the vllm serve command.
 
         For cluster mode this produces the *base* command without
@@ -50,25 +58,31 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
         rendered = recipe.render_command(config)
         if rendered:
             rendered = self._augment_served_model_name(
-                rendered, config, "--served-model-name", skip_keys,
+                rendered,
+                config,
+                "--served-model-name",
+                skip_keys,
             )
             if skip_keys:
                 rendered = self.strip_flags_from_command(
-                    rendered, skip_keys, VLLM_FLAG_MAP, VLLM_BOOL_FLAGS,
+                    rendered,
+                    skip_keys,
+                    VLLM_FLAG_MAP,
+                    VLLM_BOOL_FLAGS,
                 )
             return rendered
 
         return self._build_command(recipe, config, is_cluster, num_nodes, head_ip, skip_keys=skip_keys)
 
     def generate_node_command(
-            self,
-            recipe: Recipe,
-            overrides: dict[str, Any],
-            head_ip: str,
-            num_nodes: int,
-            node_rank: int,
-            init_port: int = 25000,
-            skip_keys: set[str] | frozenset[str] = frozenset(),
+        self,
+        recipe: Recipe,
+        overrides: dict[str, Any],
+        head_ip: str,
+        num_nodes: int,
+        node_rank: int,
+        init_port: int = 25000,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
     ) -> str:
         """Generate the vllm serve command for a specific node.
 
@@ -83,11 +97,17 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
         rendered = recipe.render_command(config)
         if rendered:
             rendered = self._augment_served_model_name(
-                rendered, config, "--served-model-name", skip_keys,
+                rendered,
+                config,
+                "--served-model-name",
+                skip_keys,
             )
             if skip_keys:
                 rendered = self.strip_flags_from_command(
-                    rendered, skip_keys, VLLM_FLAG_MAP, VLLM_BOOL_FLAGS,
+                    rendered,
+                    skip_keys,
+                    VLLM_FLAG_MAP,
+                    VLLM_BOOL_FLAGS,
                 )
             base = rendered
         else:
@@ -105,8 +125,7 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
             parts.append("--headless")
         return " ".join(parts)
 
-    def _build_base_command(self, recipe: Recipe, config,
-                            skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
+    def _build_base_command(self, recipe: Recipe, config, skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
         """Build the vllm serve command without cluster-specific arguments."""
         parts = ["vllm", "serve", recipe.model]
 
@@ -117,15 +136,26 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
         # Add flags from defaults (skip tp and distributed_executor_backend)
         skip = {"tensor_parallel", "distributed_executor_backend"}
         skip.update(skip_keys)
-        parts.extend(self.build_flags_from_map(
-            config, VLLM_FLAG_MAP, bool_keys=VLLM_BOOL_FLAGS, skip_keys=skip,
-        ))
+        parts.extend(
+            self.build_flags_from_map(
+                config,
+                VLLM_FLAG_MAP,
+                bool_keys=VLLM_BOOL_FLAGS,
+                skip_keys=skip,
+            )
+        )
 
         return " ".join(parts)
 
-    def _build_command(self, recipe: Recipe, config, is_cluster: bool,
-                       num_nodes: int, head_ip: str | None = None,
-                       skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
+    def _build_command(
+        self,
+        recipe: Recipe,
+        config,
+        is_cluster: bool,
+        num_nodes: int,
+        head_ip: str | None = None,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+    ) -> str:
         """Build the vllm serve command from structured config.
 
         For cluster mode, includes ``--nnodes``, ``--master-addr``, and
@@ -155,11 +185,11 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
     # --- Cluster stop ---
 
     def _stop_cluster(
-            self,
-            hosts: list[str],
-            cluster_id: str,
-            config=None,
-            dry_run: bool = False,
+        self,
+        hosts: list[str],
+        cluster_id: str,
+        config=None,
+        dry_run: bool = False,
     ) -> int:
         """Stop a vLLM distributed native cluster."""
         return self._stop_native_cluster(hosts, cluster_id, config=config, dry_run=dry_run)
@@ -167,31 +197,40 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
     # --- Cluster launch ---
 
     def _run_cluster(
-            self,
-            hosts: list[str],
-            image: str,
-            serve_command: str = "",
-            recipe=None,
-            overrides=None,
-            *,
-            cluster_id: str = "sparkrun0",
-            env: dict[str, str] | None = None,
-            cache_dir: str | None = None,
-            config=None,
-            dry_run: bool = False,
-            detached: bool = True,
-            nccl_env: dict[str, str] | None = None,
-            init_port: int = 25000,
-            skip_keys: set[str] | frozenset[str] = frozenset(),
-            **kwargs,
+        self,
+        hosts: list[str],
+        image: str,
+        serve_command: str = "",
+        recipe=None,
+        overrides=None,
+        *,
+        cluster_id: str = "sparkrun0",
+        env: dict[str, str] | None = None,
+        cache_dir: str | None = None,
+        config=None,
+        dry_run: bool = False,
+        detached: bool = True,
+        nccl_env: dict[str, str] | None = None,
+        init_port: int = 25000,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+        **kwargs,
     ) -> int:
         """Orchestrate a multi-node vLLM cluster using native distribution."""
         return self._run_native_cluster(
-            hosts=hosts, image=image, serve_command=serve_command,
-            recipe=recipe, overrides=overrides,
-            cluster_id=cluster_id, env=env, cache_dir=cache_dir,
-            config=config, dry_run=dry_run, detached=detached,
-            nccl_env=nccl_env, init_port=init_port, skip_keys=skip_keys,
+            hosts=hosts,
+            image=image,
+            serve_command=serve_command,
+            recipe=recipe,
+            overrides=overrides,
+            cluster_id=cluster_id,
+            env=env,
+            cache_dir=cache_dir,
+            config=config,
+            dry_run=dry_run,
+            detached=detached,
+            nccl_env=nccl_env,
+            init_port=init_port,
+            skip_keys=skip_keys,
             banner_title="vLLM Distributed Cluster Launcher",
             port_label="Master Port",
             node_label="vllm node",

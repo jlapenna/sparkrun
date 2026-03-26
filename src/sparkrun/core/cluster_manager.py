@@ -104,10 +104,16 @@ class ClusterManager:
         """Get path to cluster YAML file."""
         return self.clusters_dir / f"{name}.yaml"
 
-    def create(self, name: str, hosts: list[str], description: str = "",
-               user: str | None = None, cache_dir: str | None = None,
-               transfer_mode: str | None = None,
-               transfer_interface: str | None = None) -> None:
+    def create(
+        self,
+        name: str,
+        hosts: list[str],
+        description: str = "",
+        user: str | None = None,
+        cache_dir: str | None = None,
+        transfer_mode: str | None = None,
+        transfer_interface: str | None = None,
+    ) -> None:
         """Create a new named cluster.
 
         Args:
@@ -125,25 +131,26 @@ class ClusterManager:
         self._validate_name(name)
 
         if transfer_mode is not None and transfer_mode not in VALID_TRANSFER_MODES:
-            raise ClusterError(
-                "Invalid transfer_mode '%s': must be one of %s"
-                % (transfer_mode, ", ".join(VALID_TRANSFER_MODES))
-            )
+            raise ClusterError("Invalid transfer_mode '%s': must be one of %s" % (transfer_mode, ", ".join(VALID_TRANSFER_MODES)))
 
         if transfer_interface is not None and transfer_interface not in VALID_TRANSFER_INTERFACES:
             raise ClusterError(
-                "Invalid transfer_interface '%s': must be one of %s"
-                % (transfer_interface, ", ".join(VALID_TRANSFER_INTERFACES))
+                "Invalid transfer_interface '%s': must be one of %s" % (transfer_interface, ", ".join(VALID_TRANSFER_INTERFACES))
             )
 
         cluster_path = self._cluster_path(name)
         if cluster_path.exists():
             raise ClusterError(f"Cluster '{name}' already exists")
 
-        cluster_def = ClusterDefinition(name=name, hosts=hosts, description=description,
-                                        user=user, cache_dir=cache_dir,
-                                        transfer_mode=transfer_mode,
-                                        transfer_interface=transfer_interface)
+        cluster_def = ClusterDefinition(
+            name=name,
+            hosts=hosts,
+            description=description,
+            user=user,
+            cache_dir=cache_dir,
+            transfer_mode=transfer_mode,
+            transfer_interface=transfer_interface,
+        )
         self._write_cluster(cluster_def)
         logger.info("Created cluster '%s' with %d hosts", name, len(hosts))
 
@@ -166,14 +173,14 @@ class ClusterManager:
         return self._read_cluster(cluster_path)
 
     def update(
-            self,
-            name: str,
-            hosts: list[str] | None = None,
-            description: str | None = None,
-            user: str | None = _UNSET,
-            cache_dir: str | None = _UNSET,
-            transfer_mode: str | None = _UNSET,
-            transfer_interface: str | None = _UNSET,
+        self,
+        name: str,
+        hosts: list[str] | None = None,
+        description: str | None = None,
+        user: str | None = _UNSET,
+        cache_dir: str | None = _UNSET,
+        transfer_mode: str | None = _UNSET,
+        transfer_interface: str | None = _UNSET,
     ) -> None:
         """Update existing cluster definition.
 
@@ -211,18 +218,14 @@ class ClusterManager:
 
         if transfer_mode is not _UNSET:
             if transfer_mode is not None and transfer_mode not in VALID_TRANSFER_MODES:
-                raise ClusterError(
-                    "Invalid transfer_mode '%s': must be one of %s"
-                    % (transfer_mode, ", ".join(VALID_TRANSFER_MODES))
-                )
+                raise ClusterError("Invalid transfer_mode '%s': must be one of %s" % (transfer_mode, ", ".join(VALID_TRANSFER_MODES)))
             cluster_def.transfer_mode = transfer_mode
             logger.debug("Updated transfer_mode for cluster '%s'", name)
 
         if transfer_interface is not _UNSET:
             if transfer_interface is not None and transfer_interface not in VALID_TRANSFER_INTERFACES:
                 raise ClusterError(
-                    "Invalid transfer_interface '%s': must be one of %s"
-                    % (transfer_interface, ", ".join(VALID_TRANSFER_INTERFACES))
+                    "Invalid transfer_interface '%s': must be one of %s" % (transfer_interface, ", ".join(VALID_TRANSFER_INTERFACES))
                 )
             cluster_def.transfer_interface = transfer_interface
             logger.debug("Updated transfer_interface for cluster '%s'", name)
@@ -363,10 +366,11 @@ class ClusterManager:
 # Cluster status query — business logic extracted from CLI
 # ---------------------------------------------------------------------------
 
+
 def query_cluster_status(
-        host_list: list[str],
-        ssh_kwargs: dict[str, Any],
-        cache_dir: str,
+    host_list: list[str],
+    ssh_kwargs: dict[str, Any],
+    cache_dir: str,
 ) -> ClusterStatusResult:
     """Query sparkrun containers on hosts and classify them.
 
@@ -387,17 +391,17 @@ def query_cluster_status(
     from sparkrun.orchestration.job_metadata import load_job_metadata
     from sparkrun.core.pending_ops import list_pending_ops
 
-    docker_cmd = (
-        "docker ps --filter 'name=sparkrun_' "
-        "--format '{{.Names}}\\t{{.Status}}\\t{{.Image}}'"
-    )
+    docker_cmd = "docker ps --filter 'name=sparkrun_' --format '{{.Names}}\\t{{.Status}}\\t{{.Image}}'"
 
     # Query all hosts in parallel (dispatches local vs SSH automatically)
     with ThreadPoolExecutor(max_workers=len(host_list)) as executor:
         futures = {
             executor.submit(
-                run_command_on_host, host, docker_cmd,
-                ssh_kwargs=ssh_kwargs, timeout=15,
+                run_command_on_host,
+                host,
+                docker_cmd,
+                ssh_kwargs=ssh_kwargs,
+                timeout=15,
             ): host
             for host in host_list
         }
@@ -446,7 +450,7 @@ def query_cluster_status(
                 prefix_end = name.find("_", len("sparkrun_"))
                 if 0 < prefix_end < len(name) - 1:
                     cluster_id = name[:prefix_end]
-                    role = name[prefix_end + 1:]
+                    role = name[prefix_end + 1 :]
                 else:
                     cluster_id = name
                     role = "?"
@@ -464,10 +468,7 @@ def query_cluster_status(
     # Pending operations filtered to relevant hosts
     pending = list_pending_ops(cache_dir=cache_dir)
     host_set = set(host_list)
-    relevant_ops = [
-        op for op in pending
-        if not op.get("hosts") or host_set & set(op["hosts"])
-    ]
+    relevant_ops = [op for op in pending if not op.get("hosts") or host_set & set(op["hosts"])]
 
     return ClusterStatusResult(
         groups=cluster_groups,
@@ -478,3 +479,78 @@ def query_cluster_status(
         total_containers=total_containers,
         host_count=len(host_list),
     )
+
+
+@dataclass
+class ResolvedClusterConfig:
+    """Effective cluster configuration resolved from CLI args + cluster definition.
+
+    Populated by :func:`resolve_cluster_config` which resolves the cluster
+    definition once and extracts all properties in a single pass.
+    """
+
+    name: str | None = None
+    user: str | None = None
+    cache_dir: str | None = None
+    transfer_mode: str | None = None
+    transfer_interface: str | None = None
+
+    def resolve_transfer_config(self, config, transfer_mode_override: str | None = None):
+        """Resolve transfer configuration against defaults.
+
+        Args:
+            config: SparkrunConfig instance.
+            transfer_mode_override: CLI ``--transfer-mode`` value (takes precedence).
+
+        Returns:
+            Tuple of ``(local_cache_dir, remote_cache_dir, effective_transfer_mode, effective_transfer_interface)``.
+        """
+        local_cache_dir = str(config.hf_cache_dir)
+        remote_cache_dir = self.cache_dir or local_cache_dir
+        effective_transfer_mode = transfer_mode_override or self.transfer_mode or "auto"
+        effective_transfer_interface = self.transfer_interface
+        return local_cache_dir, remote_cache_dir, effective_transfer_mode, effective_transfer_interface
+
+
+def resolve_cluster_config(
+    cluster_name: str | None,
+    hosts: str | None,
+    hosts_file: str | None,
+    cluster_mgr,
+) -> ResolvedClusterConfig:
+    """Resolve cluster configuration properties in a single pass.
+
+    When *hosts* or *hosts_file* is provided, the cluster definition
+    is not used for transfer_mode or cache_dir (matching the priority
+    chain of ``core.hosts.resolve_hosts``).  The SSH user is still
+    resolved from the cluster when *cluster_name* is given explicitly.
+
+    Returns a :class:`ResolvedClusterConfig` with all resolved properties.
+    """
+    cfg = ResolvedClusterConfig()
+
+    # Determine which cluster to resolve
+    resolved = cluster_name
+    if not resolved and not hosts and not hosts_file:
+        resolved = cluster_mgr.get_default() if cluster_mgr else None
+
+    if not resolved:
+        return cfg
+
+    cfg.name = resolved
+    try:
+        cluster_def = cluster_mgr.get(resolved)
+    except Exception:
+        logger.debug("Failed to resolve cluster '%s'", resolved, exc_info=True)
+        return cfg
+
+    # User is always resolved (even with explicit --hosts, if --cluster given)
+    cfg.user = cluster_def.user
+
+    # transfer_mode, transfer_interface, and cache_dir only apply when hosts come from the cluster
+    if not hosts and not hosts_file:
+        cfg.transfer_mode = cluster_def.transfer_mode
+        cfg.transfer_interface = cluster_def.transfer_interface
+        cfg.cache_dir = cluster_def.cache_dir
+
+    return cfg

@@ -3393,50 +3393,50 @@ class TestUrlRecipe:
     """Test URL recipe detection and loading."""
 
     def test_is_recipe_url_https(self):
-        from sparkrun.core.recipe import _is_recipe_url
+        from sparkrun.core.recipe import is_recipe_url as _is_recipe_url
 
         assert _is_recipe_url("https://spark-arena.com/api/recipes/abc/raw")
 
     def test_is_recipe_url_http(self):
-        from sparkrun.core.recipe import _is_recipe_url
+        from sparkrun.core.recipe import is_recipe_url as _is_recipe_url
 
         assert _is_recipe_url("http://example.com/recipe.yaml")
 
     def test_is_recipe_url_not_url(self):
-        from sparkrun.core.recipe import _is_recipe_url
+        from sparkrun.core.recipe import is_recipe_url as _is_recipe_url
 
         assert not _is_recipe_url("qwen3-1.7b-vllm")
         assert not _is_recipe_url("./my-recipe.yaml")
         assert not _is_recipe_url("@registry/recipe-name")
 
     def test_expand_spark_arena_shortcut(self):
-        from sparkrun.core.recipe import _expand_recipe_shortcut
+        from sparkrun.core.recipe import expand_recipe_shortcut as _expand_recipe_shortcut
 
         result = _expand_recipe_shortcut("@spark-arena/076136cd-260a-4e77-b6e2-309d8f64619b")
         assert result == ("https://spark-arena.com/api/recipes/076136cd-260a-4e77-b6e2-309d8f64619b/raw")
 
     def test_expand_non_shortcut_unchanged(self):
-        from sparkrun.core.recipe import _expand_recipe_shortcut
+        from sparkrun.core.recipe import expand_recipe_shortcut as _expand_recipe_shortcut
 
         assert _expand_recipe_shortcut("qwen3-1.7b-vllm") == "qwen3-1.7b-vllm"
         assert _expand_recipe_shortcut("@other-registry/foo") == "@other-registry/foo"
         assert _expand_recipe_shortcut("https://example.com/r.yaml") == "https://example.com/r.yaml"
 
     def test_simplify_spark_arena_url(self):
-        from sparkrun.core.recipe import _simplify_recipe_ref
+        from sparkrun.core.recipe import simplify_recipe_ref as _simplify_recipe_ref
 
         url = "https://spark-arena.com/api/recipes/076136cd-260a-4e77-b6e2-309d8f64619b/raw"
         assert _simplify_recipe_ref(url) == ("@spark-arena/076136cd-260a-4e77-b6e2-309d8f64619b")
 
     def test_simplify_non_spark_arena_unchanged(self):
-        from sparkrun.core.recipe import _simplify_recipe_ref
+        from sparkrun.core.recipe import simplify_recipe_ref as _simplify_recipe_ref
 
         url = "https://example.com/recipe.yaml"
         assert _simplify_recipe_ref(url) == url
 
     def test_simplify_roundtrip(self):
         """expand then simplify gives back the original shortcut."""
-        from sparkrun.core.recipe import _expand_recipe_shortcut, _simplify_recipe_ref
+        from sparkrun.core.recipe import expand_recipe_shortcut as _expand_recipe_shortcut, simplify_recipe_ref as _simplify_recipe_ref
 
         shortcut = "@spark-arena/abc-123"
         url = _expand_recipe_shortcut(shortcut)
@@ -3597,7 +3597,7 @@ class TestUrlRecipe:
 
     def test_fetch_and_cache_recipe_success(self, tmp_path, monkeypatch):
         """Successful fetch writes cache file."""
-        from sparkrun.core.recipe import _fetch_and_cache_recipe
+        from sparkrun.core.recipe import fetch_and_cache_recipe as _fetch_and_cache_recipe
 
         import sparkrun.core.config
 
@@ -3619,7 +3619,7 @@ class TestUrlRecipe:
 
     def test_fetch_and_cache_recipe_network_error_with_cache(self, tmp_path, monkeypatch):
         """Network failure with existing cache returns cached copy."""
-        from sparkrun.core.recipe import _fetch_and_cache_recipe, _url_cache_path
+        from sparkrun.core.recipe import fetch_and_cache_recipe as _fetch_and_cache_recipe, _url_cache_path
 
         import sparkrun.core.config
 
@@ -3640,7 +3640,7 @@ class TestUrlRecipe:
 
     def test_fetch_and_cache_recipe_network_error_no_cache(self, tmp_path, monkeypatch):
         """Network failure with no cache raises RecipeError."""
-        from sparkrun.core.recipe import _fetch_and_cache_recipe
+        from sparkrun.core.recipe import fetch_and_cache_recipe as _fetch_and_cache_recipe
 
         import sparkrun.core.config
 

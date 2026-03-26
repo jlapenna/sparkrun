@@ -6,7 +6,8 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING
 
-from sparkrun.core.hosts import is_control_in_cluster, is_local_host
+from sparkrun.core.hosts import is_control_in_cluster
+from sparkrun.utils import is_local_host
 
 if TYPE_CHECKING:
     from sparkrun.core.config import SparkrunConfig
@@ -15,16 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 def _distribute_from_head(
-        head: str,
-        hosts: list[str],
-        ensure_script: str,
-        distribute_script: str,
-        resource_label: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        timeout: int | None = None,
-        dry_run: bool = False,
+    head: str,
+    hosts: list[str],
+    ensure_script: str,
+    distribute_script: str,
+    resource_label: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    timeout: int | None = None,
+    dry_run: bool = False,
 ) -> list[str]:
     """Shared head-to-workers distribution pattern.
 
@@ -51,9 +52,13 @@ def _distribute_from_head(
 
     # Step 1: ensure resource on head
     ensure_result = run_remote_script(
-        head, ensure_script,
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
-        timeout=timeout, dry_run=dry_run,
+        head,
+        ensure_script,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        timeout=timeout,
+        dry_run=dry_run,
     )
     if not ensure_result.success:
         logger.error("Failed to ensure %s on head %s", resource_label, head)
@@ -66,9 +71,13 @@ def _distribute_from_head(
 
     # Step 3: distribute from head to remaining hosts
     dist_result = run_remote_script(
-        head, distribute_script,
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
-        timeout=timeout, dry_run=dry_run,
+        head,
+        distribute_script,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        timeout=timeout,
+        dry_run=dry_run,
     )
 
     if dist_result.success:
@@ -76,17 +85,16 @@ def _distribute_from_head(
         return []
 
     # Report failure using management hostnames
-    logger.warning("%s distribution from head failed (rc=%d)",
-                   resource_label, dist_result.returncode)
+    logger.warning("%s distribution from head failed (rc=%d)", resource_label, dist_result.returncode)
     return list(hosts[1:])
 
 
 def _distribute_image_push(
-        image: str,
-        hosts: list[str],
-        worker_transfer_hosts: list[str] | None,
-        ssh_kwargs: dict,
-        dry_run: bool,
+    image: str,
+    hosts: list[str],
+    worker_transfer_hosts: list[str] | None,
+    ssh_kwargs: dict,
+    dry_run: bool,
 ) -> list[str]:
     """Push-mode image distribution: local → head, then head → workers via IB.
 
@@ -104,8 +112,11 @@ def _distribute_image_push(
 
     # Step 1: push to head only (no transfer_hosts — use management network)
     head_failed = distribute_image_from_local(
-        image, [head], transfer_hosts=None,
-        dry_run=dry_run, **ssh_kwargs,
+        image,
+        [head],
+        transfer_hosts=None,
+        dry_run=dry_run,
+        **ssh_kwargs,
     )
     if head_failed:
         logger.error("Push mode: failed to push image to head %s", head)
@@ -114,9 +125,11 @@ def _distribute_image_push(
     # Step 2: if workers, distribute from head to workers
     if len(hosts) > 1:
         worker_failed = distribute_image_from_head(
-            image, hosts,
+            image,
+            hosts,
             worker_transfer_hosts=worker_transfer_hosts,
-            dry_run=dry_run, **ssh_kwargs,
+            dry_run=dry_run,
+            **ssh_kwargs,
         )
         return worker_failed
 
@@ -124,14 +137,14 @@ def _distribute_image_push(
 
 
 def _distribute_model_push(
-        model: str,
-        hosts: list[str],
-        cache_dir: str,
-        worker_transfer_hosts: list[str] | None,
-        ssh_kwargs: dict,
-        model_revision: str | None = None,
-        dry_run: bool = False,
-        local_cache_dir: str | None = None,
+    model: str,
+    hosts: list[str],
+    cache_dir: str,
+    worker_transfer_hosts: list[str] | None,
+    ssh_kwargs: dict,
+    model_revision: str | None = None,
+    dry_run: bool = False,
+    local_cache_dir: str | None = None,
 ) -> list[str]:
     """Push-mode model distribution: local → head, then head → workers via IB.
 
@@ -149,10 +162,14 @@ def _distribute_model_push(
 
     # Step 1: push to head only (no transfer_hosts — use management network)
     head_failed = distribute_model_from_local(
-        model, [head], cache_dir=cache_dir,
+        model,
+        [head],
+        cache_dir=cache_dir,
         local_cache_dir=local_cache_dir,
-        revision=model_revision, transfer_hosts=None,
-        dry_run=dry_run, **ssh_kwargs,
+        revision=model_revision,
+        transfer_hosts=None,
+        dry_run=dry_run,
+        **ssh_kwargs,
     )
     if head_failed:
         logger.error("Push mode: failed to push model to head %s", head)
@@ -161,10 +178,13 @@ def _distribute_model_push(
     # Step 2: if workers, distribute from head to workers
     if len(hosts) > 1:
         worker_failed = distribute_model_from_head(
-            model, hosts, cache_dir=cache_dir,
+            model,
+            hosts,
+            cache_dir=cache_dir,
             revision=model_revision,
             worker_transfer_hosts=worker_transfer_hosts,
-            dry_run=dry_run, **ssh_kwargs,
+            dry_run=dry_run,
+            **ssh_kwargs,
         )
         return worker_failed
 
@@ -172,17 +192,17 @@ def _distribute_model_push(
 
 
 def distribute_resources(
-        image: str,
-        model: str,
-        host_list: list[str],
-        cache_dir: str,
-        config: SparkrunConfig,
-        dry_run: bool,
-        model_revision: str | None = None,
-        recipe_name: str = "",
-        transfer_mode: str = "auto",
-        transfer_interface: str | None = None,
-        local_cache_dir: str | None = None,
+    image: str,
+    model: str,
+    host_list: list[str],
+    cache_dir: str,
+    config: SparkrunConfig,
+    dry_run: bool,
+    model_revision: str | None = None,
+    recipe_name: str = "",
+    transfer_mode: str = "auto",
+    transfer_interface: str | None = None,
+    local_cache_dir: str | None = None,
 ) -> tuple[dict[str, str] | None, dict[str, str], dict[str, str]]:
     """Detect IB, distribute container image and model to target hosts.
 
@@ -238,15 +258,15 @@ def distribute_resources(
     # Common kwargs for pending-op lock files
     _pop_kw = dict(
         recipe=recipe_name,
-        model=model, image=image,
-        hosts=host_list, cache_dir=str(config.cache_dir),
+        model=model,
+        image=image,
+        hosts=host_list,
+        cache_dir=str(config.cache_dir),
     )
     # Derive a cluster_id-ish key for the lock files.  The real cluster_id
     # is generated earlier in run(); we receive the image+model+hosts here
     # so we hash the same inputs to keep the lock name stable.
-    _lock_key = hashlib.sha256(
-        f"{image}|{model}|{','.join(host_list)}".encode()
-    ).hexdigest()[:12]
+    _lock_key = hashlib.sha256(f"{image}|{model}|{','.join(host_list)}".encode()).hexdigest()[:12]
     _lock_id = f"sparkrun_{_lock_key}"
 
     effective_local_cache = local_cache_dir or cache_dir
@@ -271,7 +291,9 @@ def distribute_resources(
 
     # Step 1: Detect InfiniBand for NCCL env + transfer routing
     ib_result = detect_ib_for_hosts(
-        host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+        host_list,
+        ssh_kwargs=ssh_kwargs,
+        dry_run=dry_run,
     )
     nccl_env = ib_result.nccl_env
     mgmt_ip_map = ib_result.mgmt_ip_map
@@ -280,7 +302,9 @@ def distribute_resources(
     _ib_validated: dict[str, str] | None = None
     if transfer_mode in ("auto", "local"):
         _ib_validated = validate_ib_connectivity(
-            ib_result.ib_ip_map, ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+            ib_result.ib_ip_map,
+            ssh_kwargs=ssh_kwargs,
+            dry_run=dry_run,
         )
 
     _auto_delegated = False
@@ -298,7 +322,7 @@ def distribute_resources(
             logger.info("Auto-detected transfer mode: delegated (external control, no IB connectivity)")
 
     # Determine effective transfer interface (default: cx7)
-    _use_mgmt = (transfer_interface == "mgmt")
+    _use_mgmt = transfer_interface == "mgmt"
     if _use_mgmt:
         logger.info("Transfer interface: mgmt — using management IPs for transfers")
 
@@ -306,20 +330,17 @@ def distribute_resources(
         # Local mode: use validated IB IPs for direct transfers
         ib_ip_map = _ib_validated or {}
         if ib_ip_map and not _use_mgmt:
-            transfer_hosts = [
-                ib_result.ib_ip_map.get(h, h) for h in host_list
-            ]
+            transfer_hosts = [ib_result.ib_ip_map.get(h, h) for h in host_list]
             logger.info(
                 "Using IB network for transfers (%d/%d hosts)",
-                len(ib_result.ib_ip_map), len(host_list),
+                len(ib_result.ib_ip_map),
+                len(host_list),
             )
     else:
         # Push/delegated: control is external, skip IB validation for
         # control→host transfers.  Use IB IPs only for head→worker transfers.
         if len(host_list) > 1 and ib_result.ib_ip_map and not _use_mgmt:
-            worker_transfer_hosts = [
-                ib_result.ib_ip_map.get(h, h) for h in host_list[1:]
-            ]
+            worker_transfer_hosts = [ib_result.ib_ip_map.get(h, h) for h in host_list[1:]]
             logger.info(
                 "External control node: using IB for head→worker transfers (%d workers)",
                 len(host_list) - 1,
@@ -331,35 +352,45 @@ def distribute_resources(
     with pending_op(_lock_id, "image_distribute", **_pop_kw):
         if transfer_mode == "local":
             img_failed = distribute_image_from_local(
-                image, host_list,
+                image,
+                host_list,
                 transfer_hosts=transfer_hosts,
-                dry_run=dry_run, **ssh_kwargs,
+                dry_run=dry_run,
+                **ssh_kwargs,
             )
         elif transfer_mode == "push":
             img_failed = _distribute_image_push(
-                image, host_list,
+                image,
+                host_list,
                 worker_transfer_hosts=worker_transfer_hosts,
-                ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+                ssh_kwargs=ssh_kwargs,
+                dry_run=dry_run,
             )
         elif transfer_mode == "delegated":
             img_failed = distribute_image_from_head(
-                image, host_list,
+                image,
+                host_list,
                 worker_transfer_hosts=worker_transfer_hosts,
-                dry_run=dry_run, **ssh_kwargs,
+                dry_run=dry_run,
+                **ssh_kwargs,
             )
             if img_failed and _auto_delegated:
                 logger.info("Delegated image distribution failed, falling back to push mode")
                 img_failed = _distribute_image_push(
-                    image, host_list,
+                    image,
+                    host_list,
                     worker_transfer_hosts=worker_transfer_hosts,
-                    ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+                    ssh_kwargs=ssh_kwargs,
+                    dry_run=dry_run,
                 )
         else:
             logger.warning("Unknown transfer_mode '%s', falling back to local", transfer_mode)
             img_failed = distribute_image_from_local(
-                image, host_list,
+                image,
+                host_list,
                 transfer_hosts=transfer_hosts,
-                dry_run=dry_run, **ssh_kwargs,
+                dry_run=dry_run,
+                **ssh_kwargs,
             )
 
     if img_failed:
@@ -370,16 +401,19 @@ def distribute_resources(
         with pending_op(_lock_id, "model_download", **_pop_kw):
             if transfer_mode == "local":
                 mdl_failed = distribute_model_from_local(
-                    model, host_list,
+                    model,
+                    host_list,
                     cache_dir=cache_dir,
                     local_cache_dir=effective_local_cache,
                     revision=model_revision,
                     transfer_hosts=transfer_hosts,
-                    dry_run=dry_run, **ssh_kwargs,
+                    dry_run=dry_run,
+                    **ssh_kwargs,
                 )
             elif transfer_mode == "push":
                 mdl_failed = _distribute_model_push(
-                    model, host_list,
+                    model,
+                    host_list,
                     cache_dir=cache_dir,
                     worker_transfer_hosts=worker_transfer_hosts,
                     ssh_kwargs=ssh_kwargs,
@@ -389,16 +423,19 @@ def distribute_resources(
                 )
             elif transfer_mode == "delegated":
                 mdl_failed = distribute_model_from_head(
-                    model, host_list,
+                    model,
+                    host_list,
                     cache_dir=cache_dir,
                     revision=model_revision,
                     worker_transfer_hosts=worker_transfer_hosts,
-                    dry_run=dry_run, **ssh_kwargs,
+                    dry_run=dry_run,
+                    **ssh_kwargs,
                 )
                 if mdl_failed and _auto_delegated:
                     logger.info("Delegated model distribution failed, falling back to push mode")
                     mdl_failed = _distribute_model_push(
-                        model, host_list,
+                        model,
+                        host_list,
                         cache_dir=cache_dir,
                         worker_transfer_hosts=worker_transfer_hosts,
                         ssh_kwargs=ssh_kwargs,
@@ -408,12 +445,14 @@ def distribute_resources(
                     )
             else:
                 mdl_failed = distribute_model_from_local(
-                    model, host_list,
+                    model,
+                    host_list,
                     cache_dir=cache_dir,
                     local_cache_dir=effective_local_cache,
                     revision=model_revision,
                     transfer_hosts=transfer_hosts,
-                    dry_run=dry_run, **ssh_kwargs,
+                    dry_run=dry_run,
+                    **ssh_kwargs,
                 )
 
         if mdl_failed:

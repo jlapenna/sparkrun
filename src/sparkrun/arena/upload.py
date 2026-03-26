@@ -20,12 +20,12 @@ def generate_submission_id() -> str:
 
 
 def upload_file(
-        id_token: str,
-        bucket: str,
-        user_id: str,
-        submission_id: str,
-        file_path: Path,
-        folder: str,
+    id_token: str,
+    bucket: str,
+    user_id: str,
+    submission_id: str,
+    file_path: Path,
+    folder: str,
 ) -> bool:
     """Upload a single file to Firebase Storage.
 
@@ -63,9 +63,9 @@ def upload_file(
 
 
 def upload_benchmark_results(
-        refresh_token: str,
-        upload_files: list[tuple[Path, str]],
-        submission_id: str | None = None,
+    refresh_token: str,
+    upload_files: list[tuple[Path, str]],
+    submission_id: str | None = None,
 ) -> tuple[bool, str]:
     """Upload benchmark result files to Spark Arena.
 

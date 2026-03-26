@@ -24,6 +24,7 @@ _CALLBACK_PORT = 9005
 @dataclass
 class ExchangeResult:
     """Result from a token exchange with the auth proxy."""
+
     id_token: str
     user_id: str
     bucket: str
@@ -35,6 +36,7 @@ class ExchangeResult:
 def _user_agent() -> str:
     """Return User-Agent string for auth proxy requests."""
     from sparkrun import __version__
+
     return "sparkrun/%s" % __version__
 
 
@@ -75,10 +77,14 @@ def exchange_token(refresh_token: str, debug_mode: bool = False) -> ExchangeResu
     """
     url = "%s/exchange" % AUTH_PROXY_BASE
     payload = json.dumps({"refresh_token": refresh_token}).encode()
-    req = Request(url, data=payload, headers={
-        "Content-Type": "application/json",
-        "User-Agent": _user_agent(),
-    })
+    req = Request(
+        url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": _user_agent(),
+        },
+    )
     try:
         with urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
@@ -151,7 +157,7 @@ def run_browser_login() -> str | None:
 
     class CallbackHandler(BaseHTTPRequestHandler):
         def _send_cors_headers(self):
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Origin", AUTH_PROXY_BASE)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
@@ -204,8 +210,7 @@ def run_browser_login() -> str | None:
                 self.send_header("Content-Type", "text/html")
                 self.end_headers()
                 self.wfile.write(
-                    b"<html><body><h2>Authentication received.</h2>"
-                    b"<p>You can close this tab and return to the terminal.</p></body></html>"
+                    b"<html><body><h2>Authentication received.</h2><p>You can close this tab and return to the terminal.</p></body></html>"
                 )
             else:
                 error_list = params.get("error", ["unknown error"])
@@ -218,6 +223,7 @@ def run_browser_login() -> str | None:
             logger.debug("callback server: %s", format % args)
 
     from sparkrun.orchestration.primitives import find_available_port
+
     callback_port = find_available_port("localhost", _CALLBACK_PORT)
 
     # noinspection PyTypeChecker
@@ -231,6 +237,7 @@ def run_browser_login() -> str | None:
     )
 
     import webbrowser
+
     if not webbrowser.open(login_url):
         return None
 
@@ -259,10 +266,15 @@ def run_device_code_login() -> str | None:
 
     # Request a device code
     url = "%s/device/code" % AUTH_PROXY_BASE
-    req = Request(url, data=b"{}", headers={
-        "Content-Type": "application/json",
-        "User-Agent": _user_agent(),
-    }, method="POST")
+    req = Request(
+        url,
+        data=b"{}",
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": _user_agent(),
+        },
+        method="POST",
+    )
     try:
         with urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
@@ -281,6 +293,7 @@ def run_device_code_login() -> str | None:
         return None
 
     import click
+
     click.echo()
     click.echo("To sign in, open this URL on any device:")
     click.echo("  %s" % verification_url)
@@ -297,10 +310,15 @@ def run_device_code_login() -> str | None:
         time.sleep(interval)
 
         payload = json.dumps({"device_code": device_code}).encode()
-        poll_req = Request(poll_url, data=payload, headers={
-            "Content-Type": "application/json",
-            "User-Agent": _user_agent(),
-        }, method="POST")
+        poll_req = Request(
+            poll_url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": _user_agent(),
+            },
+            method="POST",
+        )
         try:
             with urlopen(poll_req, timeout=15) as resp:
                 poll_data = json.loads(resp.read())
@@ -376,7 +394,7 @@ def _complete_login(refresh_token: str) -> bool:
     """Verify token, persist, and report success."""
     import click
 
-    logger.debug("Token to exchange: len=%d, prefix=%s...", len(refresh_token), refresh_token[:20])
+    logger.debug("Token to exchange: len=%d", len(refresh_token))
     try:
         result = exchange_token(refresh_token)
     except RuntimeError as e:

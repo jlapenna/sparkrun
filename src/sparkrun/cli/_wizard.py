@@ -117,9 +117,14 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
             if default_name and not yes:
                 # Default cluster exists — offer to continue with it (low friction)
                 default_def = cluster_mgr.get(default_name)
-                click.echo("Default cluster: %s (%d hosts: %s)" % (
-                    default_name, len(default_def.hosts), ", ".join(default_def.hosts),
-                ))
+                click.echo(
+                    "Default cluster: %s (%d hosts: %s)"
+                    % (
+                        default_name,
+                        len(default_def.hosts),
+                        ", ".join(default_def.hosts),
+                    )
+                )
                 use_default = click.confirm("Continue with this cluster?", default=True)
                 if use_default:
                     host_list = list(default_def.hosts)
@@ -384,7 +389,11 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
 
             prev_len = len(host_list)
             _detect_and_update_mgmt_ips(
-                host_list, cluster_name, cluster_mgr, ssh_kwargs, dry_run=dry_run,
+                host_list,
+                cluster_name,
+                cluster_mgr,
+                ssh_kwargs,
+                dry_run=dry_run,
             )
             # Refresh summary if hosts changed (dedup or mgmt IP correction)
             if len(host_list) != prev_len and results.get("cluster"):
@@ -484,7 +493,8 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
             click.echo("Ensures user can run Docker commands without sudo.")
 
             run_docker = yes or click.confirm(
-                "Add '%s' to the docker group on all hosts?" % user, default=True,
+                "Add '%s' to the docker group on all hosts?" % user,
+                default=True,
             )
 
             if run_docker:
@@ -499,13 +509,15 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                     dg_fallback = _DOCKER_GROUP_FALLBACK_SCRIPT.format(user=user)
 
                     if dry_run:
-                        click.echo(
-                            "  [dry-run] Would ensure docker group on %d host(s)." % len(host_list)
-                        )
+                        click.echo("  [dry-run] Would ensure docker group on %d host(s)." % len(host_list))
                         results["docker"] = "dry-run"
                     else:
                         dg_result_map, dg_still_failed = run_with_sudo_fallback(
-                            host_list, dg_script, dg_fallback, ssh_kwargs, dry_run=dry_run,
+                            host_list,
+                            dg_script,
+                            dg_fallback,
+                            ssh_kwargs,
+                            dry_run=dry_run,
                         )
 
                         if dg_still_failed:
@@ -513,15 +525,15 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                             if pw:
                                 for h in dg_still_failed:
                                     r = run_sudo_script_on_host(
-                                        h, dg_fallback, pw,
-                                        ssh_kwargs=ssh_kwargs, timeout=30,
+                                        h,
+                                        dg_fallback,
+                                        pw,
+                                        ssh_kwargs=ssh_kwargs,
+                                        timeout=30,
                                     )
                                     dg_result_map[h] = r
 
-                        dg_ok = sum(
-                            1 for h in host_list
-                            if dg_result_map.get(h) and dg_result_map[h].success
-                        )
+                        dg_ok = sum(1 for h in host_list if dg_result_map.get(h) and dg_result_map[h].success)
                         results["docker"] = "OK (%d/%d)" % (dg_ok, len(host_list)) if dg_ok else "failed"
                         for h in host_list:
                             r = dg_result_map.get(h)
@@ -548,6 +560,9 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                 try:
                     pw = _ensure_sudo_password()
 
+                    from sparkrun.utils.shell import validate_unix_username
+
+                    validate_unix_username(user)
                     sudoers_scripts = [
                         (
                             "fix-permissions",
@@ -598,9 +613,7 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                             if label_ok < len(host_list):
                                 failed_any = True
                             click.echo("  %s: %d/%d host(s)" % (label, label_ok, len(host_list)))
-                        results["sudoers"] = (
-                            "installed (fix-permissions, clear-cache)" if not failed_any else "partial"
-                        )
+                        results["sudoers"] = "installed (fix-permissions, clear-cache)" if not failed_any else "partial"
                 except Exception as e:
                     results["sudoers"] = "failed"
                     click.echo("Sudoers error: %s" % e, err=True)

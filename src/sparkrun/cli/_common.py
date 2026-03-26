@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import logging
 import sys
-from dataclasses import dataclass
 
 import click
 
 from sparkrun.core.recipe import (
-    _expand_recipe_shortcut,
-    _fetch_and_cache_recipe,
-    _is_recipe_url,
-    _simplify_recipe_ref,  # noqa: F401 — re-exported for cli/_run.py, cli/_benchmark.py
+    expand_recipe_shortcut as _expand_recipe_shortcut,
+    fetch_and_cache_recipe as _fetch_and_cache_recipe,
+    is_recipe_url as _is_recipe_url,
+    simplify_recipe_ref as _simplify_recipe_ref,  # noqa: F401 — re-exported for cli/_run.py, cli/_benchmark.py
 )
 
 logger = logging.getLogger(__name__)
@@ -27,8 +26,7 @@ def _setup_logging(verbose: bool):
     when libraries like ``huggingface_hub`` configure logging on import).
     """
     level = logging.DEBUG if verbose else logging.INFO
-    fmt = ("%(asctime)s [%(levelname)s] %(name)s: %(message)s" if verbose
-           else "%(message)s")
+    fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s" if verbose else "%(message)s"
 
     root = logging.getLogger()
     root.setLevel(level)
@@ -41,6 +39,7 @@ def _setup_logging(verbose: bool):
     root.addHandler(handler)
 
     from sparkrun.utils import suppress_noisy_loggers
+
     suppress_noisy_loggers()
 
     return
@@ -77,18 +76,19 @@ def _parse_options(options: tuple[str, ...]) -> dict:
 def _get_config_and_registry(config_path=None):
     """Create SparkrunConfig and RegistryManager."""
     from sparkrun.core.config import SparkrunConfig
+
     config = SparkrunConfig(config_path) if config_path else SparkrunConfig()
     registry_mgr = config.get_registry_manager()
     return config, registry_mgr
 
 
 def _apply_node_trimming(
-        host_list: list[str],
-        recipe,
-        overrides: dict | None = None,
-        runtime=None,
-        tp_override: int | None = None,
-        quiet: bool = False,
+    host_list: list[str],
+    recipe,
+    overrides: dict | None = None,
+    runtime=None,
+    tp_override: int | None = None,
+    quiet: bool = False,
 ) -> list[str]:
     """Trim host list to match the runtime's required node count.
 
@@ -136,16 +136,19 @@ def _apply_node_trimming(
     if not quiet:
         logger.info(
             "Required nodes=%d < %d hosts; using first %d: %s",
-            required, len(host_list), required, ", ".join(trimmed),
+            required,
+            len(host_list),
+            required,
+            ", ".join(trimmed),
         )
     return trimmed
 
 
 def _apply_tp_trimming(
-        host_list: list[str],
-        recipe,
-        overrides: dict | None = None,
-        tp_override: int | None = None,
+    host_list: list[str],
+    recipe,
+    overrides: dict | None = None,
+    tp_override: int | None = None,
 ) -> list[str]:
     """Trim host list to match tensor_parallel if TP < host count.
 
@@ -162,73 +165,21 @@ def _apply_tp_trimming(
         Possibly trimmed host list.
     """
     return _apply_node_trimming(
-        host_list, recipe, overrides=overrides, tp_override=tp_override,
+        host_list,
+        recipe,
+        overrides=overrides,
+        tp_override=tp_override,
     )
 
 
-@dataclass
-class ResolvedClusterConfig:
-    """Effective cluster configuration resolved from CLI args + cluster definition.
-
-    Populated by :func:`resolve_cluster_config` which resolves the cluster
-    definition once and extracts all properties in a single pass.
-    """
-    name: str | None = None
-    user: str | None = None
-    cache_dir: str | None = None
-    transfer_mode: str | None = None
-    transfer_interface: str | None = None
-
-
-# TODO: this should potentially be part of cluster manager? regardless it's not really CLI specific
-def resolve_cluster_config(
-        cluster_name: str | None,
-        hosts: str | None,
-        hosts_file: str | None,
-        cluster_mgr,
-) -> ResolvedClusterConfig:
-    """Resolve cluster configuration properties in a single pass.
-
-    When *hosts* or *hosts_file* is provided, the cluster definition
-    is not used for transfer_mode or cache_dir (matching the priority
-    chain of ``core.hosts.resolve_hosts``).  The SSH user is still
-    resolved from the cluster when *cluster_name* is given explicitly.
-
-    Returns a :class:`ResolvedClusterConfig` with all resolved properties.
-    """
-    cfg = ResolvedClusterConfig()
-
-    # Determine which cluster to resolve
-    resolved = cluster_name
-    if not resolved and not hosts and not hosts_file:
-        resolved = cluster_mgr.get_default() if cluster_mgr else None
-
-    if not resolved:
-        return cfg
-
-    cfg.name = resolved
-    try:
-        cluster_def = cluster_mgr.get(resolved)
-    except Exception:
-        logger.debug("Failed to resolve cluster '%s'", resolved, exc_info=True)
-        return cfg
-
-    # User is always resolved (even with explicit --hosts, if --cluster given)
-    cfg.user = cluster_def.user
-
-    # transfer_mode, transfer_interface, and cache_dir only apply when hosts come from the cluster
-    if not hosts and not hosts_file:
-        cfg.transfer_mode = cluster_def.transfer_mode
-        cfg.transfer_interface = cluster_def.transfer_interface
-        cfg.cache_dir = cluster_def.cache_dir
-
-    return cfg
+from sparkrun.core.cluster_manager import ResolvedClusterConfig, resolve_cluster_config  # noqa: E402, F401 — re-exported
 
 
 def _get_cluster_manager(v=None):
     """Create a ClusterManager using the SAF config root."""
     from sparkrun.core.cluster_manager import ClusterManager
     from sparkrun.core.config import get_config_root
+
     # TODO: switch to leveraging scitrera-app-framework plugin for ClusterManager singleton?
     return ClusterManager(get_config_root(v))
 
@@ -274,8 +225,7 @@ def _load_recipe(config, recipe_name, resolve=True):
     try:
         registry_mgr = config.get_registry_manager()
         registry_mgr.ensure_initialized()
-        recipe_path = find_recipe(recipe_name, registry_manager=registry_mgr,
-                                  local_files=discover_cwd_recipes())
+        recipe_path = find_recipe(recipe_name, registry_manager=registry_mgr, local_files=discover_cwd_recipes())
         recipe = Recipe.load(recipe_path, resolve=resolve)
     except RecipeAmbiguousError as e:
         # Interactive disambiguation
@@ -319,6 +269,7 @@ def _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, v=None):
         Tuple of (host_list, cluster_mgr).
     """
     from sparkrun.core.hosts import resolve_hosts
+
     cluster_mgr = _get_cluster_manager(v)
     host_list = resolve_hosts(
         hosts=hosts,
@@ -356,13 +307,14 @@ def _resolve_setup_context(hosts, hosts_file, cluster_name, config, user=None):
 def _display_recipe_detail(recipe, show_vram=True, registry_name=None, cli_overrides=None, cache_dir=None):
     """Display recipe details (delegates to cli_formatters)."""
     from sparkrun.utils.cli_formatters import display_recipe_detail
-    display_recipe_detail(recipe, show_vram=show_vram, registry_name=registry_name,
-                          cli_overrides=cli_overrides, cache_dir=cache_dir)
+
+    display_recipe_detail(recipe, show_vram=show_vram, registry_name=registry_name, cli_overrides=cli_overrides, cache_dir=cache_dir)
 
 
 def _display_vram_estimate(recipe, cli_overrides=None, auto_detect=True, cache_dir=None):
     """Display VRAM estimation (delegates to cli_formatters)."""
     from sparkrun.utils.cli_formatters import display_vram_estimate
+
     display_vram_estimate(recipe, cli_overrides=cli_overrides, auto_detect=auto_detect, cache_dir=cache_dir)
 
 
@@ -372,6 +324,7 @@ def _shell_rc_file(shell):
     Exits with an error for unsupported shells.
     """
     from pathlib import Path
+
     home = Path.home()
     rc_files = {
         "bash": home / ".bashrc",
@@ -402,6 +355,7 @@ def _detect_shell():
 def _require_uv() -> str:
     """Return path to uv binary, or exit with an error message."""
     import shutil
+
     # noinspection PyDeprecation
     uv = shutil.which("uv")
     if not uv:
@@ -437,13 +391,19 @@ def _complete_yaml_files(incomplete):
             if incomplete.startswith("./") and not rel.startswith("./"):
                 rel = "./" + rel
             if entry.is_dir():
-                items.append(click.shell_completion.CompletionItem(
-                    rel + "/", type="dir",
-                ))
+                items.append(
+                    click.shell_completion.CompletionItem(
+                        rel + "/",
+                        type="dir",
+                    )
+                )
             elif entry.suffix in (".yaml", ".yml"):
-                items.append(click.shell_completion.CompletionItem(
-                    rel, type="file",
-                ))
+                items.append(
+                    click.shell_completion.CompletionItem(
+                        rel,
+                        type="file",
+                    )
+                )
     except OSError:
         pass
     return items
@@ -489,23 +449,19 @@ class RecipeNameType(click.ParamType):
                         recipe_path = registry_mgr.cache_root / reg.name / reg.subpath
                         recipes = list_recipes(search_paths=[recipe_path])
                         for r in recipes:
-                            items.append(click.shell_completion.CompletionItem(
-                                "@%s/%s" % (reg.name, r["file"])))
+                            items.append(click.shell_completion.CompletionItem("@%s/%s" % (reg.name, r["file"])))
                     if not items and matching_registries:
                         # No recipes found — show registry names so the user
                         # can still discover and select the registry.
                         # type="dir" prevents the shell from appending a
                         # trailing space, so the user can continue typing
                         # the recipe name after the slash.
-                        items = [
-                            click.shell_completion.CompletionItem(
-                                "@%s/" % reg.name, type="dir")
-                            for reg in matching_registries
-                        ]
+                        items = [click.shell_completion.CompletionItem("@%s/" % reg.name, type="dir") for reg in matching_registries]
                     return items
                 else:
                     # Completing recipe after @registry/
                     from sparkrun.utils import parse_scoped_name
+
                     registry_name, recipe_prefix = parse_scoped_name(incomplete)
                     # Only load recipes from the target registry
                     try:
@@ -526,15 +482,10 @@ class RecipeNameType(click.ParamType):
 
             # Default: list recipe names from visible registries only
             from sparkrun.core.recipe import list_recipes, discover_cwd_recipes
+
             config, registry_mgr = _get_config_and_registry()
-            recipes = list_recipes(registry_manager=registry_mgr,
-                                   include_hidden=False,
-                                   local_files=discover_cwd_recipes())
-            return [
-                click.shell_completion.CompletionItem(r["file"])
-                for r in recipes
-                if r["file"].startswith(incomplete)
-            ]
+            recipes = list_recipes(registry_manager=registry_mgr, include_hidden=False, local_files=discover_cwd_recipes())
+            return [click.shell_completion.CompletionItem(r["file"]) for r in recipes if r["file"].startswith(incomplete)]
         except Exception:
             return []
 
@@ -604,18 +555,16 @@ class ProfileNameType(click.ParamType):
                     for reg in registries:
                         if not reg.enabled or not reg.benchmark_subpath or not reg.name.startswith(prefix):
                             continue
-                        profiles = registry_mgr.list_benchmark_profiles(
-                            registry_name=reg.name, include_hidden=True)
+                        profiles = registry_mgr.list_benchmark_profiles(registry_name=reg.name, include_hidden=True)
                         for p in profiles:
-                            items.append(click.shell_completion.CompletionItem(
-                                "@%s/%s" % (reg.name, p["file"])))
+                            items.append(click.shell_completion.CompletionItem("@%s/%s" % (reg.name, p["file"])))
                     return items
                 else:
                     # Completing profile name after @registry/
                     from sparkrun.utils import parse_scoped_name
+
                     registry_name, profile_prefix = parse_scoped_name(incomplete)
-                    profiles = registry_mgr.list_benchmark_profiles(
-                        registry_name=registry_name, include_hidden=True)
+                    profiles = registry_mgr.list_benchmark_profiles(registry_name=registry_name, include_hidden=True)
                     return [
                         click.shell_completion.CompletionItem("@%s/%s" % (registry_name, p["file"]))
                         for p in profiles
@@ -629,11 +578,7 @@ class ProfileNameType(click.ParamType):
             # Default: list profile names from visible registries only
             config, registry_mgr = _get_config_and_registry()
             profiles = registry_mgr.list_benchmark_profiles()
-            return [
-                click.shell_completion.CompletionItem(p["file"])
-                for p in profiles
-                if p["file"].startswith(incomplete)
-            ]
+            return [click.shell_completion.CompletionItem(p["file"]) for p in profiles if p["file"].startswith(incomplete)]
         except Exception:
             return []
 
@@ -651,11 +596,7 @@ class ClusterNameType(click.ParamType):
         try:
             mgr = _get_cluster_manager()
             clusters = mgr.list_clusters()
-            return [
-                click.shell_completion.CompletionItem(c.name)
-                for c in clusters
-                if c.name.startswith(incomplete)
-            ]
+            return [click.shell_completion.CompletionItem(c.name) for c in clusters if c.name.startswith(incomplete)]
         except Exception:
             return []
 
@@ -673,9 +614,7 @@ class RegistryNameType(click.ParamType):
         try:
             _, registry_mgr = _get_config_and_registry()
             return [
-                click.shell_completion.CompletionItem(reg.name)
-                for reg in registry_mgr.list_registries()
-                if reg.name.startswith(incomplete)
+                click.shell_completion.CompletionItem(reg.name) for reg in registry_mgr.list_registries() if reg.name.startswith(incomplete)
             ]
         except Exception:
             return []
@@ -693,14 +632,11 @@ class RuntimeNameType(click.ParamType):
         """Return completion items for known runtimes."""
         try:
             from sparkrun.core.recipe import list_recipes
+
             _, registry_mgr = _get_config_and_registry()
             recipes = list_recipes(registry_manager=registry_mgr)
             runtimes = sorted({r.get("runtime", "") for r in recipes if r.get("runtime")})
-            return [
-                click.shell_completion.CompletionItem(rt)
-                for rt in runtimes
-                if rt.startswith(incomplete)
-            ]
+            return [click.shell_completion.CompletionItem(rt) for rt in runtimes if rt.startswith(incomplete)]
         except Exception:
             return []
 
@@ -710,34 +646,27 @@ RUNTIME_NAME = RuntimeNameType()
 
 def host_options(f):
     """Common host-targeting options: --hosts, --hosts-file, --cluster."""
-    f = click.option("--cluster", "cluster_name", default=None, type=CLUSTER_NAME,
-                     help="Use a saved cluster by name")(f)
-    f = click.option("--hosts-file", default=None,
-                     help="File with hosts (one per line, # comments)")(f)
-    f = click.option("--hosts", "-H", default=None,
-                     help="Comma-separated host list")(f)
+    f = click.option("--cluster", "cluster_name", default=None, type=CLUSTER_NAME, help="Use a saved cluster by name")(f)
+    f = click.option("--hosts-file", default=None, help="File with hosts (one per line, # comments)")(f)
+    f = click.option("--hosts", "-H", default=None, help="Comma-separated host list")(f)
     return f
 
 
 def recipe_override_options(f):
     """Common recipe override options: --tp, --pp, --gpu-mem, --max-model-len, --option/-o, --image."""
-    f = click.option("--option", "-o", "options", multiple=True,
-                     help="Override any recipe default: -o key=value (repeatable)")(f)
+    f = click.option("--option", "-o", "options", multiple=True, help="Override any recipe default: -o key=value (repeatable)")(f)
     f = click.option("--image", default=None, help="Override container image")(f)
-    f = click.option("--max-model-len", type=int, default=None,
-                     help="Override maximum model context length")(f)
-    f = click.option("--gpu-mem", type=float, default=None,
-                     help="Override GPU memory utilization")(f)
-    f = click.option("--pp", "--pipeline-parallel", "pipeline_parallel", type=int, default=None,
-                     help="Override pipeline parallelism")(f)
-    f = click.option("--tp", "--tensor-parallel", "tensor_parallel", type=int, default=None,
-                     help="Override tensor parallelism")(f)
+    f = click.option("--max-model-len", type=int, default=None, help="Override maximum model context length")(f)
+    f = click.option("--gpu-mem", type=float, default=None, help="Override GPU memory utilization")(f)
+    f = click.option("--pp", "--pipeline-parallel", "pipeline_parallel", type=int, default=None, help="Override pipeline parallelism")(f)
+    f = click.option("--tp", "--tensor-parallel", "tensor_parallel", type=int, default=None, help="Override tensor parallelism")(f)
     # TODO: add options for expert parallel and data parallel and context parallel ??? and runtime arg validation
     return f
 
 
-def _apply_recipe_overrides(options, tensor_parallel=None, pipeline_parallel=None,
-                            gpu_mem=None, max_model_len=None, image=None, recipe=None, **kwargs):
+def _apply_recipe_overrides(
+    options, tensor_parallel=None, pipeline_parallel=None, gpu_mem=None, max_model_len=None, image=None, recipe=None, **kwargs
+):
     """Build overrides dict, apply to recipe, and resolve runtime.
 
     Returns ``(recipe, overrides)`` — recipe is returned to make the
@@ -773,5 +702,117 @@ def _apply_recipe_overrides(options, tensor_parallel=None, pipeline_parallel=Non
 
 def dry_run_option(f):
     """Common --dry-run flag."""
-    return click.option("--dry-run", "-n", is_flag=True,
-                        help="Show what would be done")(f)
+    return click.option("--dry-run", "-n", is_flag=True, help="Show what would be done")(f)
+
+
+def validate_and_prepare_hosts(
+    host_list: list[str],
+    recipe,
+    overrides: dict,
+    runtime,
+    solo: bool = False,
+) -> tuple[list[str], bool]:
+    """Validate node count, enforce max_nodes, and determine solo mode.
+
+    Returns ``(trimmed_host_list, is_solo)``.
+    Exits with an error on invalid configurations.
+    """
+    # Node count validation / trimming
+    if len(host_list) > 1 and not solo:
+        try:
+            required = runtime.compute_required_nodes(recipe, overrides)
+        except ValueError as e:
+            click.echo("Error: %s" % e, err=True)
+            sys.exit(1)
+        if required is not None:
+            if required > len(host_list):
+                click.echo(
+                    "Error: runtime requires %d nodes, but only %d hosts provided" % (required, len(host_list)),
+                    err=True,
+                )
+                sys.exit(1)
+            elif required < len(host_list):
+                original_count = len(host_list)
+                host_list = _apply_node_trimming(
+                    host_list,
+                    recipe,
+                    overrides,
+                    runtime=runtime,
+                )
+                click.echo("Note: %d nodes required, using %d of %d hosts" % (required, required, original_count))
+
+    # Enforce max_nodes
+    if recipe.max_nodes is not None and len(host_list) > recipe.max_nodes:
+        try:
+            req = runtime.compute_required_nodes(recipe, overrides)
+        except ValueError:
+            req = None
+        if req is not None and req > recipe.max_nodes:
+            click.echo(
+                "Error: runtime requires %d nodes (from parallelism settings), "
+                "but recipe '%s' specifies max_nodes=%d" % (req, recipe.qualified_name, recipe.max_nodes),
+                err=True,
+            )
+            sys.exit(1)
+        click.echo("Note: recipe max_nodes=%d, using %d of %d hosts" % (recipe.max_nodes, recipe.max_nodes, len(host_list)))
+        host_list = host_list[: recipe.max_nodes]
+
+    # Determine mode
+    is_solo = solo or len(host_list) <= 1
+    if recipe.mode == "solo":
+        is_solo = True
+    if is_solo and len(host_list) > 1:
+        click.echo("Note: solo mode enabled, using 1 of %d hosts" % len(host_list))
+        host_list = host_list[:1]
+
+    return host_list, is_solo
+
+
+def build_cluster_id_overrides(
+    port: int | None = None,
+    served_model_name: str | None = None,
+    tp_override: int | None = None,
+) -> dict | None:
+    """Build overrides dict for cluster_id generation from CLI flags.
+
+    Returns dict of overrides, or None if all values are None.
+    """
+    overrides = {}
+    if port is not None:
+        overrides["port"] = port
+    if served_model_name is not None:
+        overrides["served_model_name"] = served_model_name
+    if tp_override is not None:
+        overrides["tensor_parallel"] = tp_override
+    return overrides or None
+
+
+def resolve_hosts_with_metadata_fallback(
+    hosts,
+    hosts_file,
+    cluster_name,
+    config,
+    meta,
+    target_label,
+    v=None,
+) -> list[str]:
+    """Resolve hosts from CLI args, job metadata, or defaults.
+
+    Priority: CLI flags > metadata hosts > default cluster/config.
+    Exits with error if no hosts can be resolved.
+    """
+    if hosts or hosts_file or cluster_name:
+        host_list, _ = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, v)
+        return host_list
+    if meta and meta.get("hosts"):
+        return meta["hosts"]
+    try:
+        host_list, _ = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, v)
+        return host_list
+    except SystemExit:
+        click.echo(
+            "Error: No job metadata for '%s' and no hosts specified.\n"
+            "  Specify hosts with --hosts or --cluster, or run from the machine that launched the job." % target_label,
+            err=True,
+        )
+        sys.exit(1)

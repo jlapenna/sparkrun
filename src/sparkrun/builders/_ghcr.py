@@ -44,11 +44,11 @@ def _ghcr_anonymous_token(package: str) -> str | None:
 
 
 def fetch_build_index(
-        url: str,
-        cache_dir: Path | None = None,
-        cache_name: str = "build-index.json",
-        *,
-        force_refresh: bool = False,
+    url: str,
+    cache_dir: Path | None = None,
+    cache_name: str = "build-index.json",
+    *,
+    force_refresh: bool = False,
 ) -> list[dict[str, Any]]:
     """Fetch and optionally cache a JSON build-index file.
 
@@ -144,10 +144,7 @@ def ghcr_get_labels(image_name: str, tag: str) -> dict[str, str]:
             manifest_url,
             headers={
                 **headers,
-                "Accept": (
-                    "application/vnd.oci.image.manifest.v1+json, "
-                    "application/vnd.docker.distribution.manifest.v2+json"
-                ),
+                "Accept": ("application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"),
             },
         )
         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
@@ -179,6 +176,9 @@ def ghcr_get_labels(image_name: str, tag: str) -> dict[str, str]:
         return labels if isinstance(labels, dict) else {}
     except Exception:
         logger.debug(
-            "Failed to get labels for %s:%s", image_name, tag, exc_info=True,
+            "Failed to get labels for %s:%s",
+            image_name,
+            tag,
+            exc_info=True,
         )
         return {}

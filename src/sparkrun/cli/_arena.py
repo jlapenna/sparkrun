@@ -18,7 +18,7 @@ from ._common import (
 
 logger = logging.getLogger(__name__)
 
-_BENCHMARK_PROFILE = '@official/spark-arena-v1'
+_BENCHMARK_PROFILE = "@official/spark-arena-v1"
 
 
 @click.group()
@@ -95,24 +95,44 @@ def status():
 #               help="Output file for results YAML")
 # @click.option("-b", "--benchmark-option", "bench_options", multiple=True,
 #               help="Override benchmark arg: -b key=value (repeatable)")
-@click.option("--exit-on-first-fail/--no-exit-on-first-fail", "exit_on_first_fail", default=True,
-              help="Abort benchmark on first failure (default: enabled)")
+@click.option(
+    "--exit-on-first-fail/--no-exit-on-first-fail",
+    "exit_on_first_fail",
+    default=True,
+    help="Abort benchmark on first failure (default: enabled)",
+)
 @click.option("--no-stop", is_flag=True, help="Don't stop inference after benchmarking", hidden=True)
 @click.option("--skip-run", is_flag=True, help="Skip launching inference (benchmark existing instance)", hidden=True)
 @click.option("--sync-tuning", is_flag=True, help="Sync tuning configs from registries before benchmarking", hidden=True)
 @click.option("--rootful", is_flag=True, help="Run with --privileged as root inside container", hidden=True)
-@click.option("--timeout", "bench_timeout", type=int, default=None,
-              help="Benchmark timeout in seconds (default: 14400)")
-@click.option("--local-test", is_flag=True, hidden=True,
-              help="Smoke test: skip profile and simulate upload without sending")
+@click.option("--timeout", "bench_timeout", type=int, default=None, help="Benchmark timeout in seconds (default: 14400)")
+@click.option("--local-test", is_flag=True, hidden=True, help="Smoke test: skip profile and simulate upload without sending")
 @dry_run_option
 @click.pass_context
-def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
-                    tensor_parallel, pipeline_parallel, gpu_mem, max_model_len,
-                    options, image, solo, port,
-                    # profile, framework, output_file, bench_options,
-                    exit_on_first_fail, no_stop, skip_run,
-                    sync_tuning, rootful, bench_timeout, local_test, dry_run):
+def arena_benchmark(
+    ctx,
+    recipe_name,
+    hosts,
+    hosts_file,
+    cluster_name,
+    tensor_parallel,
+    pipeline_parallel,
+    gpu_mem,
+    max_model_len,
+    options,
+    image,
+    solo,
+    port,
+    # profile, framework, output_file, bench_options,
+    exit_on_first_fail,
+    no_stop,
+    skip_run,
+    sync_tuning,
+    rootful,
+    bench_timeout,
+    local_test,
+    dry_run,
+):
     """Benchmark a recipe and submit results to Spark Arena.
 
     Runs the full benchmark flow, then uploads results to the Spark Arena
@@ -160,12 +180,30 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
 
     # --- Run benchmark ---
     bench_result = _run_benchmark(
-        ctx, recipe_name, hosts, hosts_file, cluster_name,
-        tensor_parallel, pipeline_parallel, gpu_mem, max_model_len,
-        options, image, solo, port,
-        profile, framework,
-        output_file, bench_options, exit_on_first_fail, no_stop, skip_run,
-        sync_tuning, rootful, bench_timeout, dry_run,
+        ctx,
+        recipe_name,
+        hosts,
+        hosts_file,
+        cluster_name,
+        tensor_parallel,
+        pipeline_parallel,
+        gpu_mem,
+        max_model_len,
+        options,
+        image,
+        solo,
+        port,
+        profile,
+        framework,
+        output_file,
+        bench_options,
+        exit_on_first_fail,
+        no_stop,
+        skip_run,
+        sync_tuning,
+        rootful,
+        bench_timeout,
+        dry_run,
         export_results_files=False,
     )
 
@@ -178,21 +216,25 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
     recipe = bench_result.launch_result.recipe
     overrides = bench_result.launch_result.overrides
     metadata = bench_result.generate_metadata()
-    effective_recipe = recipe.export(overrides=overrides, container_image=metadata['recipe']['container'], )
+    effective_recipe = recipe.export(
+        overrides=overrides,
+        container_image=metadata["recipe"]["container"],
+    )
     # benchmark_json = bench_result.results['json']
-    benchmark_csv = bench_result.results['csv']
+    benchmark_csv = bench_result.results["csv"]
 
     if dry_run or local_test:
         from pprint import pformat
-        click.echo('-' * 40)
-        click.echo('Effective Recipe Export:')
-        click.echo('-' * 40)
+
+        click.echo("-" * 40)
+        click.echo("Effective Recipe Export:")
+        click.echo("-" * 40)
         click.echo(effective_recipe)
-        click.echo('-' * 40)
-        click.echo('Metadata:')
-        click.echo('-' * 40)
+        click.echo("-" * 40)
+        click.echo("Metadata:")
+        click.echo("-" * 40)
         click.echo(pformat(metadata))
-        click.echo('-' * 40)
+        click.echo("-" * 40)
 
     if dry_run:
         click.echo("[dry-run] Would upload results to Spark Arena")

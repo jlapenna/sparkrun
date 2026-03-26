@@ -34,14 +34,32 @@ _CMD_LLAMA_CPP_RE = re.compile(r"^llama-server\b")
 _CMD_TRTLLM_RE = re.compile(r"^(?:trtllm-serve|mpirun\b.*trtllm)")
 
 _KNOWN_KEYS = {
-    "sparkrun_version", "recipe_version", "name", "description", "model",
+    "sparkrun_version",
+    "recipe_version",
+    "name",
+    "description",
+    "model",
     "model_revision",
-    "runtime", "runtime_version", "mode", "min_nodes", "max_nodes",
-    "container", "defaults", "env", "command", "runtime_config",
-    "cluster_only", "solo_only",
-    "benchmark", "metadata",
-    "pre_exec", "post_exec", "post_commands", "stop_after_post",
-    "builder", "builder_config",
+    "runtime",
+    "runtime_version",
+    "mode",
+    "min_nodes",
+    "max_nodes",
+    "container",
+    "defaults",
+    "env",
+    "command",
+    "runtime_config",
+    "cluster_only",
+    "solo_only",
+    "benchmark",
+    "metadata",
+    "pre_exec",
+    "post_exec",
+    "post_commands",
+    "stop_after_post",
+    "builder",
+    "builder_config",
     "executor_config",
 }
 
@@ -114,7 +132,7 @@ def _resolve_eugr_signals(recipe: Recipe) -> None:
     if recipe.runtime not in ("vllm", ""):
         return
     rc = recipe.runtime_config
-    if rc.get("build_args") or rc.get("mods") or recipe.container.strip().startswith('ghcr.io/spark-arena/dgx-vllm-eugr-nightly'):
+    if rc.get("build_args") or rc.get("mods") or recipe.container.strip().startswith("ghcr.io/spark-arena/dgx-vllm-eugr-nightly"):
         if not recipe.builder:
             recipe.builder = "eugr"
 
@@ -205,9 +223,9 @@ def resolve_builder(data: dict[str, Any]) -> str:
     runtime_config = data.get("runtime_config") or {}
     runtime = data.get("runtime", "")
     if runtime in ("vllm", "") and (
-            data.get("build_args")
-            or data.get("mods")
-            or (isinstance(runtime_config, dict) and (runtime_config.get("build_args") or runtime_config.get("mods")))
+        data.get("build_args")
+        or data.get("mods")
+        or (isinstance(runtime_config, dict) and (runtime_config.get("build_args") or runtime_config.get("mods")))
     ):
         return "eugr"
     return ""
@@ -249,19 +267,19 @@ SPARK_ARENA_PREFIX = "@spark-arena/"
 SPARK_ARENA_API_URL = "https://spark-arena.com/api/recipes/%s/raw"
 
 
-def _expand_recipe_shortcut(name: str) -> str:
+def expand_recipe_shortcut(name: str) -> str:
     """Expand known recipe shortcuts to full URLs.
 
     Currently supports:
         @spark-arena/UUID  ->  https://spark-arena.com/api/recipes/UUID/raw
     """
     if name.startswith(SPARK_ARENA_PREFIX):
-        recipe_id = name[len(SPARK_ARENA_PREFIX):]
+        recipe_id = name[len(SPARK_ARENA_PREFIX) :]
         return SPARK_ARENA_API_URL % recipe_id
     return name
 
 
-def _simplify_recipe_ref(url: str) -> str:
+def simplify_recipe_ref(url: str) -> str:
     """Simplify a recipe URL to a shortcut if possible (inverse of expand).
 
     Currently supports:
@@ -275,7 +293,7 @@ def _simplify_recipe_ref(url: str) -> str:
     return url
 
 
-def _is_recipe_url(name: str) -> bool:
+def is_recipe_url(name: str) -> bool:
     """Check if recipe_name looks like an HTTP(S) URL."""
     return name.startswith(("http://", "https://"))
 
@@ -290,7 +308,7 @@ def _url_cache_path(url: str) -> Path:
     return DEFAULT_CACHE_DIR / "remote-recipes" / ("%s.yaml" % url_hash)
 
 
-def _fetch_and_cache_recipe(url: str) -> Path:
+def fetch_and_cache_recipe(url: str) -> Path:
     """Fetch a recipe from URL and cache it locally.
 
     On success, writes/updates the cache file and returns its path.
@@ -313,17 +331,20 @@ def _fetch_and_cache_recipe(url: str) -> Path:
         if cache_path.exists():
             reason = e.code if isinstance(e, HTTPError) else e.reason
             logger.warning(
-                "Failed to fetch recipe (using cached copy): %s", reason,
+                "Failed to fetch recipe (using cached copy): %s",
+                reason,
             )
             return cache_path
         if isinstance(e, HTTPError):
-            raise RecipeError(
-                "Failed to fetch recipe from %s: HTTP %d" % (url, e.code)
-            )
-        raise RecipeError(
-            "Failed to fetch recipe from %s: %s"
-            % (url, e.reason if isinstance(e, URLError) else e)
-        )
+            raise RecipeError("Failed to fetch recipe from %s: HTTP %d" % (url, e.code))
+        raise RecipeError("Failed to fetch recipe from %s: %s" % (url, e.reason if isinstance(e, URLError) else e))
+
+
+# Backward-compat aliases (old underscore names)
+_expand_recipe_shortcut = expand_recipe_shortcut
+_simplify_recipe_ref = simplify_recipe_ref
+_is_recipe_url = is_recipe_url
+_fetch_and_cache_recipe = fetch_and_cache_recipe
 
 
 class RecipeError(Exception):
@@ -337,10 +358,7 @@ class RecipeAmbiguousError(RecipeError):
         self.name = name
         self.matches = matches
         registries = ", ".join(reg for reg, _ in matches)
-        super().__init__(
-            "Recipe '%s' found in multiple registries: %s. "
-            "Use @registry/%s to specify." % (name, registries, name)
-        )
+        super().__init__("Recipe '%s' found in multiple registries: %s. Use @registry/%s to specify." % (name, registries, name))
 
 
 class Recipe:
@@ -370,12 +388,12 @@ class Recipe:
         self.mode: str = data.get("mode", "auto")  # "solo", "cluster", "auto"
         self.min_nodes: int = int(data.get("min_nodes", 1))
         self.max_nodes: int | None = data.get("max_nodes")
-        if self.mode == 'solo':
+        if self.mode == "solo":
             self.max_nodes = self.min_nodes = 1
-        elif self.mode == 'auto' and self.min_nodes > 1:
-            self.mode = 'cluster'
-        elif self.mode == 'auto' and self.max_nodes == 1:
-            self.mode = 'solo'
+        elif self.mode == "auto" and self.min_nodes > 1:
+            self.mode = "cluster"
+        elif self.mode == "auto" and self.max_nodes == 1:
+            self.mode = "solo"
 
         # Topology - Handle solo_only/cluster_only as first-class fields (works for both v1 and v2)
         if data.get("cluster_only"):
@@ -390,9 +408,7 @@ class Recipe:
 
         # Configuration
         self.defaults: dict[str, Any] = dict(data.get("defaults") or {})
-        self.env: dict[str, str] = {
-            str(k): osp.expandvars(str(v)) for k, v in (data.get("env") or {}).items()
-        }
+        self.env: dict[str, str] = {str(k): osp.expandvars(str(v)) for k, v in (data.get("env") or {}).items()}
         self.command: str | None = data.get("command")
 
         # Metadata section (v2 extension for VRAM estimation, model info)
@@ -503,8 +519,7 @@ class Recipe:
         """Get a value from defaults with optional fallback."""
         return self.defaults.get(key, fallback)
 
-    def build_config_chain(self, cli_overrides: dict[str, Any] | None = None,
-                           user_config: dict[str, Any] | None = None) -> Variables:
+    def build_config_chain(self, cli_overrides: dict[str, Any] | None = None, user_config: dict[str, Any] | None = None) -> Variables:
         """Build cascading config: CLI overrides -> user config -> recipe defaults.
 
         Also injects 'model' into the chain for template substitution.
@@ -600,10 +615,10 @@ class Recipe:
         return recipe
 
     def estimate_vram(
-            self,
-            cli_overrides: dict[str, Any] | None = None,
-            auto_detect: bool = True,
-            cache_dir: str | None = None,
+        self,
+        cli_overrides: dict[str, Any] | None = None,
+        auto_detect: bool = True,
+        cache_dir: str | None = None,
     ) -> VRAMEstimate:
         """Estimate VRAM usage for this recipe.
 
@@ -631,6 +646,7 @@ class Recipe:
 
         # Start with metadata values
         from sparkrun.models.vram import normalize_dtype
+
         _raw_dtype = self.metadata.get("model_dtype")
         model_dtype = normalize_dtype(str(_raw_dtype)) if _raw_dtype else None
         model_params_raw = self.metadata.get("model_params")
@@ -644,13 +660,9 @@ class Recipe:
 
         # Auto-detect from HF if fields are missing and model is specified
         if auto_detect and self.model:
-            needs_detection = (
-                                      model_vram is None
-                                      and (not model_dtype or model_params_raw is None)
-                              ) or (
-                                      kv_vram_per_token is None
-                                      and (not num_layers or not num_kv_heads or not head_dim)
-                              )
+            needs_detection = (model_vram is None and (not model_dtype or model_params_raw is None)) or (
+                kv_vram_per_token is None and (not num_layers or not num_kv_heads or not head_dim)
+            )
             if needs_detection:
                 hf_config = fetch_model_config(self.model, revision=self.model_revision, cache_dir=cache_dir)
                 if hf_config:
@@ -849,13 +861,15 @@ class Recipe:
     # or fnmatch-style patterns (e.g. "model*" matches "model", "model_revision").
     # Keys not listed here are appended alphabetically after the last group.
     EXPORT_KEY_ORDER: list[str] = [
-        'recipe_version',
+        "recipe_version",
         "model*",
         "runtime*",
         "builder*",
-        "min_nodes", "max_nodes",
+        "min_nodes",
+        "max_nodes",
         "container",
-        "solo_only", "cluster_only",
+        "solo_only",
+        "cluster_only",
         "metadata",
         "defaults",
         "env",
@@ -879,15 +893,12 @@ class Recipe:
         - Drops v1-only and internal keys (``recipe_version``, ``sparkrun_version``,
           ``name``, ``mode``, ``runtime_config``, unknown sweep keys).
         """
-        d: dict[str, Any] = {
-            'recipe_version': self.recipe_version,
-            "model": self.model
-        }
+        d: dict[str, Any] = {"recipe_version": self.recipe_version, "model": self.model}
 
         # -- Core fields (always present) --
         if self.model_revision:
             d["model_revision"] = self.model_revision
-        d["runtime"] = self._raw.get('runtime', self.runtime)  # use bare original if given
+        d["runtime"] = self._raw.get("runtime", self.runtime)  # use bare original if given
         if self.runtime_version:
             d["runtime_version"] = self.runtime_version
 
@@ -908,20 +919,20 @@ class Recipe:
             d["cluster_only"] = True
 
         # -- Metadata (absorb promoted keys) --
-        d['metadata'] = meta = dict(self.metadata)
+        d["metadata"] = meta = dict(self.metadata)
         if self.description:
             meta["description"] = self.description
         if self.maintainer:
             meta["maintainer"] = self.maintainer
 
         # transfer SELECTED model parameters to recipe
-        if meta and meta.get('model_dtype', None) is not None:
-            meta['model_dtype'] = str(meta['model_dtype'])
+        if meta and meta.get("model_dtype", None) is not None:
+            meta["model_dtype"] = str(meta["model_dtype"])
         # TODO: kv_dtype should be included and reflect command overrides on kv dtype not just hf auto-detect
         # if meta and meta.get('kv_dtype', None) is not None:
         #     meta['kv_dtype'] = str(meta['kv_dtype'])
-        if meta and meta.get('model_params', None) is not None:
-            meta['model_params'] = str(meta['model_params'])
+        if meta and meta.get("model_params", None) is not None:
+            meta["model_params"] = str(meta["model_params"])
 
         # -- Builder --
         if self.builder:
@@ -953,11 +964,11 @@ class Recipe:
         return d
 
     def export(
-            self,
-            path: Optional[str | Path] = None,
-            json: bool = False,
-            overrides: Optional[dict] = None,
-            container_image: Optional[str] = None,
+        self,
+        path: Optional[str | Path] = None,
+        json: bool = False,
+        overrides: Optional[dict] = None,
+        container_image: Optional[str] = None,
     ) -> Optional[str | Path]:
         """Export the recipe as canonical YAML.
 
@@ -991,28 +1002,31 @@ class Recipe:
         # implicitly by relying on the runtime & builder in the future as well
 
         # ensure that pre_exec is excluded if raw is empty
-        export_dict['pre_exec'] = self._raw.get('pre_exec', [])
-        if not export_dict['pre_exec']:
-            del export_dict['pre_exec']
+        export_dict["pre_exec"] = self._raw.get("pre_exec", [])
+        if not export_dict["pre_exec"]:
+            del export_dict["pre_exec"]
 
         # ensure that post_exec is excluded if raw is empty
-        export_dict['post_exec'] = self._raw.get('post_exec', [])
-        if not export_dict['post_exec']:
-            del export_dict['post_exec']
+        export_dict["post_exec"] = self._raw.get("post_exec", [])
+        if not export_dict["post_exec"]:
+            del export_dict["post_exec"]
 
         # ensure that post_commands are excluded if raw is empty
-        export_dict['post_commands'] = self._raw.get('post_commands', [])
-        if not export_dict['post_commands']:
-            del export_dict['post_commands']
+        export_dict["post_commands"] = self._raw.get("post_commands", [])
+        if not export_dict["post_commands"]:
+            del export_dict["post_commands"]
 
         # ensure that `stop_after_post` is excluded if False
-        if not export_dict.get('stop_after_post', False):
-            export_dict.pop('stop_after_post', None)
+        if not export_dict.get("stop_after_post", False):
+            export_dict.pop("stop_after_post", None)
 
         ordered = _sort_dict_by_patterns(export_dict, self.EXPORT_KEY_ORDER)
 
-        text = json_dumps(ordered, sort_keys=False) if json else \
-            yaml.dump(ordered, Dumper=LiteralBlockDumper, indent=2, sort_keys=False, default_flow_style=False)
+        text = (
+            json_dumps(ordered, sort_keys=False)
+            if json
+            else yaml.dump(ordered, Dumper=LiteralBlockDumper, indent=2, sort_keys=False, default_flow_style=False)
+        )
 
         if path is None:
             return text
@@ -1022,9 +1036,12 @@ class Recipe:
         return dest
 
 
-def find_recipe(name: str, search_paths: list[Path] | None = None,
-                registry_manager: RegistryManager | None = None,
-                local_files: list[Path] | None = None) -> Path:
+def find_recipe(
+    name: str,
+    search_paths: list[Path] | None = None,
+    registry_manager: RegistryManager | None = None,
+    local_files: list[Path] | None = None,
+) -> Path:
     """Find a recipe by name across search paths.
 
     Supports @registry/recipe-name syntax for scoped lookups.
@@ -1042,19 +1059,19 @@ def find_recipe(name: str, search_paths: list[Path] | None = None,
     """
     # Parse @registry/name prefix
     from sparkrun.utils import parse_scoped_name
+
     scoped_registry, lookup_name = parse_scoped_name(name)
 
     # Scoped lookup: search only the specified registry
     if scoped_registry and registry_manager:
         matches = registry_manager.find_recipe_in_registries(
-            lookup_name, include_hidden=True,
+            lookup_name,
+            include_hidden=True,
         )
         scoped_matches = [(reg, path) for reg, path in matches if reg == scoped_registry]
         if scoped_matches:
             return scoped_matches[0][1]
-        raise RecipeError(
-            "Recipe '%s' not found in registry '%s'" % (lookup_name, scoped_registry)
-        )
+        raise RecipeError("Recipe '%s' not found in registry '%s'" % (lookup_name, scoped_registry))
 
     # 1. Check if it's a direct path
     direct = Path(lookup_name)
@@ -1080,12 +1097,12 @@ def find_recipe(name: str, search_paths: list[Path] | None = None,
                     return lf
 
     # 3. Search user-provided paths (flat first, then recursive by stem)
-    for search_dir in (search_paths or []):
+    for search_dir in search_paths or []:
         for ext in ("", ".yaml", ".yml"):
             candidate = search_dir / (lookup_name + ext)
             if candidate.exists():
                 return candidate
-    for search_dir in (search_paths or []):
+    for search_dir in search_paths or []:
         for ext in (".yaml", ".yml"):
             for m in search_dir.rglob(f"**/{lookup_name}{ext}"):
                 return m
@@ -1104,14 +1121,10 @@ def find_recipe(name: str, search_paths: list[Path] | None = None,
     search_desc = [str(p) for p in (search_paths or [])]
     if registry_manager:
         search_desc.append("registry paths")
-    raise RecipeError(
-        "Recipe '%s' not found. Searched: %s"
-        % (lookup_name, search_desc)
-    )
+    raise RecipeError("Recipe '%s' not found. Searched: %s" % (lookup_name, search_desc))
 
 
-def find_recipe_in_registry(name: str, registry_name: str,
-                            registry_manager: RegistryManager) -> Path:
+def find_recipe_in_registry(name: str, registry_name: str, registry_manager: RegistryManager) -> Path:
     """Find a recipe in a specific registry by name.
 
     Args:
@@ -1169,16 +1182,18 @@ def recipe_summary(path: Path, registry_name: str | None = None) -> dict[str, An
     return entry
 
 
-def list_recipes(search_paths: list[Path] | None = None,
-                 registry_manager: RegistryManager | None = None,
-                 include_hidden: bool = False,
-                 local_files: list[Path] | None = None) -> list[dict[str, Any]]:
+def list_recipes(
+    search_paths: list[Path] | None = None,
+    registry_manager: RegistryManager | None = None,
+    include_hidden: bool = False,
+    local_files: list[Path] | None = None,
+) -> list[dict[str, Any]]:
     """List all available recipes with name and path."""
     recipes: list[dict[str, Any]] = []
     seen_names: set[str] = set()
 
     # Process CWD-discovered local files first (no registry label)
-    for f in (local_files or []):
+    for f in local_files or []:
         if f.stem in seen_names:
             continue
         seen_names.add(f.stem)
@@ -1217,10 +1232,10 @@ def list_recipes(search_paths: list[Path] | None = None,
 
 
 def filter_recipes(
-        recipes: list[dict[str, Any]],
-        *,
-        runtime: str | None = None,
-        registry: str | None = None,
+    recipes: list[dict[str, Any]],
+    *,
+    runtime: str | None = None,
+    registry: str | None = None,
 ) -> list[dict[str, Any]]:
     """Filter a recipe list by runtime and/or registry.
 

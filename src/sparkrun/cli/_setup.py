@@ -254,7 +254,11 @@ def _detect_and_update_mgmt_ips(host_list, cluster_name, cluster_mgr, ssh_kwargs
     click.echo("Detecting management IPs on cluster hosts...")
     script = generate_ip_detect_script()
     results = run_remote_scripts_parallel(
-        host_list, script, timeout=15, quiet=True, **ssh_kwargs,
+        host_list,
+        script,
+        timeout=15,
+        quiet=True,
+        **ssh_kwargs,
     )
 
     # Build mapping: original host -> detected mgmt IP
@@ -858,7 +862,11 @@ def setup_docker_group(ctx, hosts, hosts_file, cluster_name, user, dry_run):
     fallback = _DOCKER_GROUP_FALLBACK_SCRIPT.format(user=user)
 
     result_map, still_failed = run_with_sudo_fallback(
-        host_list, script, fallback, ssh_kwargs, dry_run=dry_run,
+        host_list,
+        script,
+        fallback,
+        ssh_kwargs,
+        dry_run=dry_run,
     )
 
     # Report immediate successes
@@ -872,7 +880,12 @@ def setup_docker_group(ctx, hosts, hosts_file, cluster_name, user, dry_run):
         sudo_password = click.prompt("[sudo] password for %s" % user, hide_input=True)
         for h in still_failed:
             r = run_sudo_script_on_host(
-                h, fallback, sudo_password, ssh_kwargs=ssh_kwargs, timeout=30, dry_run=dry_run,
+                h,
+                fallback,
+                sudo_password,
+                ssh_kwargs=ssh_kwargs,
+                timeout=30,
+                dry_run=dry_run,
             )
             result_map[h] = r
 
@@ -958,9 +971,16 @@ def setup_fix_permissions(ctx, hosts, hosts_file, cluster_name, user, cache_dir,
     # --save-sudo: install scoped sudoers entry on each host
     if save_sudo:
         click.echo("Installing sudoers entry for passwordless chown...")
+        from sparkrun.utils.shell import validate_unix_username
+        import re as _re
+
+        validate_unix_username(user)
+        safe_cache_dir = cache_path or ""
+        if safe_cache_dir and not _re.fullmatch(r"[/a-zA-Z0-9_.~-]+", safe_cache_dir):
+            raise click.UsageError("cache_dir contains unsafe characters: %r" % safe_cache_dir)
         sudoers_script = read_script("fix_permissions_sudoers.sh").format(
             user=user,
-            cache_dir=cache_path or "",
+            cache_dir=safe_cache_dir,
         )
 
         if dry_run:
@@ -1128,6 +1148,9 @@ def setup_clear_cache(ctx, hosts, hosts_file, cluster_name, user, save_sudo, dry
     # --save-sudo: install scoped sudoers entry on each host
     if save_sudo:
         click.echo("Installing sudoers entry for passwordless cache clearing...")
+        from sparkrun.utils.shell import validate_unix_username
+
+        validate_unix_username(user)
         sudoers_script = read_script("clear_cache_sudoers.sh").format(user=user)
 
         if dry_run:
@@ -1438,14 +1461,20 @@ def setup_earlyoom(ctx, hosts, hosts_file, cluster_name, user, extra_prefer, ext
 # Diagnose
 # ---------------------------------------------------------------------------
 
+
 @setup.command("diagnose", hidden=True)
 @host_options
 @dry_run_option
-@click.option("-o", "--output", "output_file", default=None, type=click.Path(),
-              help="Output NDJSON file path (default: spark_diag_<timestamp>.ndjson)")
+@click.option(
+    "-o",
+    "--output",
+    "output_file",
+    default=None,
+    type=click.Path(),
+    help="Output NDJSON file path (default: spark_diag_<timestamp>.ndjson)",
+)
 @click.option("--json", "json_stdout", is_flag=True, help="Also print summary to stdout as JSON")
-@click.option("--sudo", "use_sudo", is_flag=True, default=False,
-              help="Also collect sudo-only diagnostics (dmidecode)")
+@click.option("--sudo", "use_sudo", is_flag=True, default=False, help="Also collect sudo-only diagnostics (dmidecode)")
 @click.pass_context
 def setup_diagnose(ctx, hosts, hosts_file, cluster_name, dry_run, output_file, json_stdout, use_sudo):
     """Collect hardware, firmware, network, and Docker diagnostics from hosts.
@@ -1462,7 +1491,10 @@ def setup_diagnose(ctx, hosts, hosts_file, cluster_name, dry_run, output_file, j
     from sparkrun.core.bootstrap import init_sparkrun
     from sparkrun.core.config import SparkrunConfig
     from sparkrun.diagnostics import (
-        NDJSONWriter, collect_config_diagnostics, collect_spark_diagnostics, collect_sudo_diagnostics,
+        NDJSONWriter,
+        collect_config_diagnostics,
+        collect_spark_diagnostics,
+        collect_sudo_diagnostics,
     )
 
     from ._common import _get_cluster_manager, _resolve_setup_context, _setup_logging
@@ -1492,18 +1524,24 @@ def setup_diagnose(ctx, hosts, hosts_file, cluster_name, dry_run, output_file, j
         except Exception:
             __version__ = "unknown"
 
-        writer.emit("diag_header", {
-            "sparkrun_version": __version__,
-            "hosts": host_list,
-            "command": "sparkrun setup diagnose",
-            "sudo": use_sudo,
-        })
+        writer.emit(
+            "diag_header",
+            {
+                "sparkrun_version": __version__,
+                "hosts": host_list,
+                "command": "sparkrun setup diagnose",
+                "sudo": use_sudo,
+            },
+        )
 
         # Local config: clusters and registries
         cluster_mgr = _get_cluster_manager()
         registry_mgr = config.get_registry_manager()
         collect_config_diagnostics(
-            writer, config=config, cluster_mgr=cluster_mgr, registry_mgr=registry_mgr,
+            writer,
+            config=config,
+            cluster_mgr=cluster_mgr,
+            registry_mgr=registry_mgr,
         )
 
         host_data = collect_spark_diagnostics(

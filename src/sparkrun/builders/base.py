@@ -80,14 +80,14 @@ class BuilderPlugin(Plugin):
         return self
 
     def prepare_image(
-            self,
-            image: str,
-            recipe: Recipe,
-            hosts: list[str],
-            config: SparkrunConfig | None = None,
-            dry_run: bool = False,
-            transfer_mode: str = "local",
-            ssh_kwargs: dict | None = None,
+        self,
+        image: str,
+        recipe: Recipe,
+        hosts: list[str],
+        config: SparkrunConfig | None = None,
+        dry_run: bool = False,
+        transfer_mode: str = "local",
+        ssh_kwargs: dict | None = None,
     ) -> str:
         """Ensure image is available. Returns final image name.
 
@@ -128,10 +128,10 @@ class BuilderPlugin(Plugin):
         return {}
 
     def collect_container_labels(
-            self,
-            container_name: str,
-            host: str,
-            ssh_kwargs: dict,
+        self,
+        container_name: str,
+        host: str,
+        ssh_kwargs: dict,
     ) -> dict[str, str]:
         """Inspect container labels and return as flat dict with 'container_' prefix.
 
@@ -157,10 +157,10 @@ class BuilderPlugin(Plugin):
             return {}
 
     def resolve_long_term_image(
-            self,
-            container_image: str,
-            runtime_info: dict[str, str],
-            recipe: Recipe,
+        self,
+        container_image: str,
+        runtime_info: dict[str, str],
+        recipe: Recipe,
     ) -> tuple[str, bool]:
         """Resolve a container image to a long-term pinned reference.
 

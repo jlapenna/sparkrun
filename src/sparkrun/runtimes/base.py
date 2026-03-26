@@ -45,6 +45,7 @@ class RuntimePlugin(Plugin):
         """Return the executor, lazily defaulting to DockerExecutor."""
         if self._executor is None:
             from sparkrun.orchestration.executor_docker import DockerExecutor
+
             self._executor = DockerExecutor()
         return self._executor
 
@@ -75,10 +76,15 @@ class RuntimePlugin(Plugin):
     # --- Runtime interface ---
 
     @abstractmethod
-    def generate_command(self, recipe: Recipe, overrides: dict[str, Any],
-                         is_cluster: bool, num_nodes: int = 1,
-                         head_ip: str | None = None,
-                         skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
+    def generate_command(
+        self,
+        recipe: Recipe,
+        overrides: dict[str, Any],
+        is_cluster: bool,
+        num_nodes: int = 1,
+        head_ip: str | None = None,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+    ) -> str:
         """Generate the serve command string from recipe + CLI overrides.
 
         Args:
@@ -129,15 +135,23 @@ class RuntimePlugin(Plugin):
         """
         return "ray"
 
+    def get_family(self) -> str:
+        """Return the canonical runtime family name.
+
+        Defaults to runtime_name. Override in subclasses to map
+        variants to their canonical family (e.g. vllm-ray -> vllm).
+        """
+        return self.runtime_name
+
     def generate_node_command(
-            self,
-            recipe: Recipe,
-            overrides: dict[str, Any],
-            head_ip: str,
-            num_nodes: int,
-            node_rank: int,
-            init_port: int = 25000,
-            skip_keys: set[str] | frozenset[str] = frozenset(),
+        self,
+        recipe: Recipe,
+        overrides: dict[str, Any],
+        head_ip: str,
+        num_nodes: int,
+        node_rank: int,
+        init_port: int = 25000,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
     ) -> str:
         """Generate the serve command for a specific node in native clustering.
 
@@ -155,17 +169,15 @@ class RuntimePlugin(Plugin):
         Returns:
             The full command string for this node.
         """
-        raise NotImplementedError(
-            "%s does not implement native clustering" % type(self).__name__
-        )
+        raise NotImplementedError("%s does not implement native clustering" % type(self).__name__)
 
     def prepare(
-            self,
-            recipe: Recipe,
-            hosts: list[str],
-            config: SparkrunConfig | None = None,
-            dry_run: bool = False,
-            transfer_mode: str = "local",
+        self,
+        recipe: Recipe,
+        hosts: list[str],
+        config: SparkrunConfig | None = None,
+        dry_run: bool = False,
+        transfer_mode: str = "local",
     ) -> None:
         """Pre-launch preparation (e.g., building container images).
 
@@ -183,12 +195,12 @@ class RuntimePlugin(Plugin):
         pass
 
     def _pre_serve(
-            self,
-            hosts_containers: list[tuple[str, str]],
-            ssh_kwargs: dict,
-            dry_run: bool,
-            recipe: Recipe | None = None,
-            config_chain=None,
+        self,
+        hosts_containers: list[tuple[str, str]],
+        ssh_kwargs: dict,
+        dry_run: bool,
+        recipe: Recipe | None = None,
+        config_chain=None,
     ) -> None:
         """Hook called after containers are launched but before serve command.
 
@@ -206,6 +218,7 @@ class RuntimePlugin(Plugin):
         """
         if recipe and recipe.pre_exec:
             from sparkrun.orchestration.hooks import run_pre_exec
+
             run_pre_exec(hosts_containers, recipe.pre_exec, config_chain, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
 
     def get_extra_volumes(self) -> dict[str, str]:
@@ -283,10 +296,10 @@ class RuntimePlugin(Plugin):
 
     @staticmethod
     def _augment_served_model_name(
-            command: str,
-            config,
-            flag: str,
-            skip_keys: set[str] | frozenset[str] = frozenset(),
+        command: str,
+        config,
+        flag: str,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
     ) -> str:
         """Append ``served_model_name`` to a rendered command if missing.
 
@@ -317,10 +330,10 @@ class RuntimePlugin(Plugin):
 
     @staticmethod
     def build_flags_from_map(
-            config,
-            flag_map: dict[str, str],
-            bool_keys: set[str] | frozenset[str] = frozenset(),
-            skip_keys: set[str] | frozenset[str] = frozenset(),
+        config,
+        flag_map: dict[str, str],
+        bool_keys: set[str] | frozenset[str] = frozenset(),
+        skip_keys: set[str] | frozenset[str] = frozenset(),
     ) -> list[str]:
         """Build CLI flag list from a config-key to CLI-flag mapping.
 
@@ -354,11 +367,11 @@ class RuntimePlugin(Plugin):
 
     @staticmethod
     def strip_flags_from_command(
-            command: str,
-            skip_keys: set[str] | frozenset[str],
-            flag_map: dict[str, str],
-            bool_keys: set[str] | frozenset[str] = frozenset(),
-            flag_aliases: dict[str, list[str]] | None = None,
+        command: str,
+        skip_keys: set[str] | frozenset[str],
+        flag_map: dict[str, str],
+        bool_keys: set[str] | frozenset[str] = frozenset(),
+        flag_aliases: dict[str, list[str]] | None = None,
     ) -> str:
         """Strip CLI flags for *skip_keys* from a rendered command string.
 
@@ -378,6 +391,7 @@ class RuntimePlugin(Plugin):
             Command string with the specified flags removed.
         """
         import re
+
         for key in skip_keys:
             # Collect all flag forms for this key: canonical + aliases
             flags_to_strip: list[str] = []
@@ -392,21 +406,23 @@ class RuntimePlugin(Plugin):
             for flag in flags_to_strip:
                 escaped = re.escape(flag)
                 if key in bool_keys:
-                    command = re.sub(r'\s*' + escaped + r'(?=\s|$)', '', command)
+                    command = re.sub(r"\s*" + escaped + r"(?=\s|$)", "", command)
                 else:
                     # Match the flag, its value, and an optional trailing
                     # backslash continuation on the same line.
                     command = re.sub(
-                        escaped + r'\s+\S+\s*\\?\s*\n?', '', command,
+                        escaped + r"\s+\S+\s*\\?\s*\n?",
+                        "",
+                        command,
                     )
 
         # Clean up artifacts from removed lines:
         # - collapse double backslash-continuations (``\ \``) into one
         # - remove blank continuation lines (``\`` followed by only whitespace)
-        command = re.sub(r'\\\s*\\\s*\n', '\\\n', command)
-        command = re.sub(r'\\\s*\n(\s*\\\s*\n)', r'\\\n', command)
+        command = re.sub(r"\\\s*\\\s*\n", "\\\n", command)
+        command = re.sub(r"\\\s*\n(\s*\\\s*\n)", r"\\\n", command)
         # Remove lines that are only whitespace (left behind after removal)
-        command = re.sub(r'\n\s*\n', '\n', command)
+        command = re.sub(r"\n\s*\n", "\n", command)
         return command
 
     def is_delegating_runtime(self) -> bool:
@@ -421,12 +437,12 @@ class RuntimePlugin(Plugin):
     # --- Log following interface ---
 
     def follow_logs(
-            self,
-            hosts: list[str],
-            cluster_id: str = "sparkrun0",
-            config: SparkrunConfig | None = None,
-            dry_run: bool = False,
-            tail: int = 100,
+        self,
+        hosts: list[str],
+        cluster_id: str = "sparkrun0",
+        config: SparkrunConfig | None = None,
+        dry_run: bool = False,
+        tail: int = 100,
     ) -> None:
         """Follow container logs after a successful launch.
 
@@ -445,19 +461,23 @@ class RuntimePlugin(Plugin):
             container_name = self.executor.container_name(cluster_id, "solo")
             ssh_kwargs = build_ssh_kwargs(config)
             stream_container_file_logs(
-                host, container_name, tail=tail, dry_run=dry_run, **ssh_kwargs,
+                host,
+                container_name,
+                tail=tail,
+                dry_run=dry_run,
+                **ssh_kwargs,
             )
             return
 
         self._follow_cluster_logs(hosts, cluster_id, config, dry_run, tail)
 
     def _follow_cluster_logs(
-            self,
-            hosts: list[str],
-            cluster_id: str,
-            config: SparkrunConfig | None,
-            dry_run: bool,
-            tail: int,
+        self,
+        hosts: list[str],
+        cluster_id: str,
+        config: SparkrunConfig | None,
+        dry_run: bool,
+        tail: int,
     ) -> None:
         """Follow logs for a multi-node cluster.
 
@@ -473,13 +493,23 @@ class RuntimePlugin(Plugin):
 
         if self._cluster_log_mode() == "file":
             from sparkrun.orchestration.ssh import stream_container_file_logs
+
             stream_container_file_logs(
-                hosts[0], container_name, tail=tail, dry_run=dry_run, **ssh_kwargs,
+                hosts[0],
+                container_name,
+                tail=tail,
+                dry_run=dry_run,
+                **ssh_kwargs,
             )
         else:
             from sparkrun.orchestration.ssh import stream_remote_logs
+
             stream_remote_logs(
-                hosts[0], container_name, tail=tail, dry_run=dry_run, **ssh_kwargs,
+                hosts[0],
+                container_name,
+                tail=tail,
+                dry_run=dry_run,
+                **ssh_kwargs,
             )
 
     def get_head_container_name(self, cluster_id: str, is_solo: bool = False) -> str:
@@ -525,24 +555,24 @@ class RuntimePlugin(Plugin):
     # primitives.
 
     def run(
-            self,
-            hosts: list[str],
-            image: str,
-            serve_command: str,
-            recipe: Recipe,
-            overrides: dict[str, Any],
-            *,
-            cluster_id: str = "sparkrun0",
-            env: dict[str, str] | None = None,
-            cache_dir: str | None = None,
-            config: SparkrunConfig | None = None,
-            dry_run: bool = False,
-            detached: bool = True,
-            nccl_env: dict[str, str] | None = None,
-            ib_ip_map: dict[str, str] | None = None,
-            skip_keys: set[str] | frozenset[str] = frozenset(),
-            executor: Executor | None = None,
-            **kwargs,
+        self,
+        hosts: list[str],
+        image: str,
+        serve_command: str,
+        recipe: Recipe,
+        overrides: dict[str, Any],
+        *,
+        cluster_id: str = "sparkrun0",
+        env: dict[str, str] | None = None,
+        cache_dir: str | None = None,
+        config: SparkrunConfig | None = None,
+        dry_run: bool = False,
+        detached: bool = True,
+        nccl_env: dict[str, str] | None = None,
+        ib_ip_map: dict[str, str] | None = None,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+        executor: Executor | None = None,
+        **kwargs,
     ) -> int:
         """Launch a workload -- delegates to solo or cluster implementation.
 
@@ -614,29 +644,27 @@ class RuntimePlugin(Plugin):
         )
 
     def _run_cluster(
-            self,
-            hosts: list[str],
-            image: str,
-            serve_command: str,
-            recipe: Recipe,
-            overrides: dict[str, Any],
-            **kwargs,
+        self,
+        hosts: list[str],
+        image: str,
+        serve_command: str,
+        recipe: Recipe,
+        overrides: dict[str, Any],
+        **kwargs,
     ) -> int:
         """Launch a multi-node cluster workload.
 
         Override in subclasses to implement cluster launch.
         The default raises :class:`NotImplementedError`.
         """
-        raise NotImplementedError(
-            "Cluster mode not supported by %s" % self.runtime_name
-        )
+        raise NotImplementedError("Cluster mode not supported by %s" % self.runtime_name)
 
     def stop(
-            self,
-            hosts: list[str],
-            cluster_id: str = "sparkrun0",
-            config: SparkrunConfig | None = None,
-            dry_run: bool = False,
+        self,
+        hosts: list[str],
+        cluster_id: str = "sparkrun0",
+        config: SparkrunConfig | None = None,
+        dry_run: bool = False,
     ) -> int:
         """Stop a running workload -- delegates to solo or cluster implementation.
 
@@ -664,37 +692,35 @@ class RuntimePlugin(Plugin):
         )
 
     def _stop_cluster(
-            self,
-            hosts: list[str],
-            cluster_id: str,
-            config: SparkrunConfig | None,
-            dry_run: bool,
+        self,
+        hosts: list[str],
+        cluster_id: str,
+        config: SparkrunConfig | None,
+        dry_run: bool,
     ) -> int:
         """Stop a multi-node cluster workload.
 
         Override in subclasses to implement cluster teardown.
         The default raises :class:`NotImplementedError`.
         """
-        raise NotImplementedError(
-            "Cluster stop not supported by %s" % self.runtime_name
-        )
+        raise NotImplementedError("Cluster stop not supported by %s" % self.runtime_name)
 
     # --- Default solo implementation (used by base and simple runtimes) ---
 
     def _run_solo(
-            self,
-            host: str,
-            image: str,
-            serve_command: str,
-            cluster_id: str = "sparkrun0",
-            env: dict[str, str] | None = None,
-            cache_dir: str | None = None,
-            config: SparkrunConfig | None = None,
-            dry_run: bool = False,
-            detached: bool = True,
-            nccl_env: dict[str, str] | None = None,
-            recipe: Recipe | None = None,
-            overrides: dict[str, Any] | None = None,
+        self,
+        host: str,
+        image: str,
+        serve_command: str,
+        cluster_id: str = "sparkrun0",
+        env: dict[str, str] | None = None,
+        cache_dir: str | None = None,
+        config: SparkrunConfig | None = None,
+        dry_run: bool = False,
+        detached: bool = True,
+        nccl_env: dict[str, str] | None = None,
+        recipe: Recipe | None = None,
+        overrides: dict[str, Any] | None = None,
     ) -> int:
         """Launch a single-node inference workload.
 
@@ -729,7 +755,9 @@ class RuntimePlugin(Plugin):
                 nccl_env = detect_infiniband_local(dry_run=dry_run)
             else:
                 nccl_env = detect_infiniband(
-                    [host], ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+                    [host],
+                    ssh_kwargs=ssh_kwargs,
+                    dry_run=dry_run,
                 )
             logger.info("Step 1/3: IB detection done (%.1fs)", time.monotonic() - t0)
 
@@ -737,7 +765,9 @@ class RuntimePlugin(Plugin):
         t0 = time.monotonic()
         logger.info(
             "Step 2/3: Launching container %s on %s (image: %s)...",
-            container_name, host, image,
+            container_name,
+            host,
+            image,
         )
         launch_script = self.executor.generate_launch_script(
             image=image,
@@ -749,7 +779,11 @@ class RuntimePlugin(Plugin):
             extra_docker_opts=self.get_extra_docker_opts() or None,
         )
         result = run_script_on_host(
-            host, launch_script, ssh_kwargs=ssh_kwargs, timeout=120, dry_run=dry_run,
+            host,
+            launch_script,
+            ssh_kwargs=ssh_kwargs,
+            timeout=120,
+            dry_run=dry_run,
         )
         if not result.success and not dry_run:
             logger.error("Failed to launch container: %s", result.stderr)
@@ -771,7 +805,11 @@ class RuntimePlugin(Plugin):
             detached=detached,
         )
         result = run_script_on_host(
-            host, exec_script, ssh_kwargs=ssh_kwargs, timeout=60, dry_run=dry_run,
+            host,
+            exec_script,
+            ssh_kwargs=ssh_kwargs,
+            timeout=60,
+            dry_run=dry_run,
         )
         logger.info("Step 3/3: Serve command dispatched (%.1fs)", time.monotonic() - t0)
 
@@ -791,11 +829,11 @@ class RuntimePlugin(Plugin):
         return result.returncode
 
     def _stop_solo(
-            self,
-            host: str,
-            cluster_id: str = "sparkrun0",
-            config: SparkrunConfig | None = None,
-            dry_run: bool = False,
+        self,
+        host: str,
+        cluster_id: str = "sparkrun0",
+        config: SparkrunConfig | None = None,
+        dry_run: bool = False,
     ) -> int:
         """Stop a solo workload by removing the container."""
         from sparkrun.orchestration.primitives import (
@@ -818,15 +856,15 @@ class RuntimePlugin(Plugin):
         return 0
 
     def _generate_node_script(
-            self,
-            image: str,
-            container_name: str,
-            serve_command: str,
-            label: str = "node",
-            env: dict[str, str] | None = None,
-            volumes: dict[str, str] | None = None,
-            nccl_env: dict[str, str] | None = None,
-            extra_docker_opts: list[str] | None = None,
+        self,
+        image: str,
+        container_name: str,
+        serve_command: str,
+        label: str = "node",
+        env: dict[str, str] | None = None,
+        volumes: dict[str, str] | None = None,
+        nccl_env: dict[str, str] | None = None,
+        extra_docker_opts: list[str] | None = None,
     ) -> str:
         """Generate a script that launches a container with a direct entrypoint command.
 
@@ -888,11 +926,11 @@ class RuntimePlugin(Plugin):
         logger.info("=" * 60)
 
     def _stop_native_cluster(
-            self,
-            hosts: list[str],
-            cluster_id: str,
-            config=None,
-            dry_run: bool = False,
+        self,
+        hosts: list[str],
+        cluster_id: str,
+        config=None,
+        dry_run: bool = False,
     ) -> int:
         """Stop a native cluster by iterating ranked node containers.
 
@@ -916,34 +954,37 @@ class RuntimePlugin(Plugin):
         for rank, host in enumerate(hosts):
             container_name = self.executor.node_container_name(cluster_id, rank)
             run_remote_command(
-                host, self.executor.stop_cmd(container_name),
-                timeout=30, dry_run=dry_run, **ssh_kwargs,
+                host,
+                self.executor.stop_cmd(container_name),
+                timeout=30,
+                dry_run=dry_run,
+                **ssh_kwargs,
             )
 
         logger.info("Cluster '%s' stopped on %d host(s)", cluster_id, len(hosts))
         return 0
 
     def _run_native_cluster(
-            self,
-            hosts: list[str],
-            image: str,
-            serve_command: str = "",
-            recipe=None,
-            overrides=None,
-            *,
-            cluster_id: str = "sparkrun0",
-            env: dict[str, str] | None = None,
-            cache_dir: str | None = None,
-            config=None,
-            dry_run: bool = False,
-            detached: bool = True,
-            nccl_env: dict[str, str] | None = None,
-            init_port: int = 25000,
-            skip_keys: set[str] | frozenset[str] = frozenset(),
-            banner_title: str = "Native Cluster Launcher",
-            port_label: str = "Init Port",
-            node_label: str = "node",
-            **kwargs,
+        self,
+        hosts: list[str],
+        image: str,
+        serve_command: str = "",
+        recipe=None,
+        overrides=None,
+        *,
+        cluster_id: str = "sparkrun0",
+        env: dict[str, str] | None = None,
+        cache_dir: str | None = None,
+        config=None,
+        dry_run: bool = False,
+        detached: bool = True,
+        nccl_env: dict[str, str] | None = None,
+        init_port: int = 25000,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+        banner_title: str = "Native Cluster Launcher",
+        port_label: str = "Init Port",
+        node_label: str = "node",
+        **kwargs,
     ) -> int:
         """Orchestrate a multi-node native cluster (shared by SGLang, vLLM distributed).
 
@@ -985,8 +1026,10 @@ class RuntimePlugin(Plugin):
         )
         from sparkrun.utils import merge_env
         from sparkrun.orchestration.ssh import (
-            run_remote_script, run_remote_command,
-            start_log_capture, stop_log_capture,
+            run_remote_script,
+            run_remote_command,
+            start_log_capture,
+            stop_log_capture,
         )
 
         num_nodes = len(hosts)
@@ -999,8 +1042,12 @@ class RuntimePlugin(Plugin):
         all_env = merge_env(runtime_env, self.get_extra_env(), env)
 
         self._print_cluster_banner(
-            banner_title, hosts, image, cluster_id,
-            {port_label: init_port}, dry_run,
+            banner_title,
+            hosts,
+            image,
+            cluster_id,
+            {port_label: init_port},
+            dry_run,
         )
 
         # Step 1: Cleanup
@@ -1009,8 +1056,11 @@ class RuntimePlugin(Plugin):
         for rank, host in enumerate(hosts):
             container_name = self.executor.node_container_name(cluster_id, rank)
             run_remote_command(
-                host, self.executor.stop_cmd(container_name),
-                timeout=30, dry_run=dry_run, **ssh_kwargs,
+                host,
+                self.executor.stop_cmd(container_name),
+                timeout=30,
+                dry_run=dry_run,
+                **ssh_kwargs,
             )
         logger.info("Step 1/6: Cleanup done (%.1fs)", time.monotonic() - t0)
 
@@ -1018,8 +1068,11 @@ class RuntimePlugin(Plugin):
         t0 = time.monotonic()
         logger.info("Step 2/6: InfiniBand detection...")
         nccl_env = resolve_nccl_env(
-            nccl_env, hosts,
-            head_host=head_host, ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+            nccl_env,
+            hosts,
+            head_host=head_host,
+            ssh_kwargs=ssh_kwargs,
+            dry_run=dry_run,
         )
         logger.info("Step 2/6: IB step done (%.1fs)", time.monotonic() - t0)
 
@@ -1036,13 +1089,17 @@ class RuntimePlugin(Plugin):
 
         # Auto-detect available init port to avoid collisions with running instances
         from sparkrun.orchestration.primitives import find_available_port
+
         init_port = find_available_port(head_host, init_port, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
 
         # Generate per-node commands
         head_command = self.generate_node_command(
-            recipe=recipe, overrides=overrides,
-            head_ip=head_ip, num_nodes=num_nodes,
-            node_rank=0, init_port=init_port,
+            recipe=recipe,
+            overrides=overrides,
+            head_ip=head_ip,
+            num_nodes=num_nodes,
+            node_rank=0,
+            init_port=init_port,
             skip_keys=skip_keys,
         )
         logger.info("Serve command (head, rank 0):")
@@ -1054,15 +1111,24 @@ class RuntimePlugin(Plugin):
         head_container = self.executor.node_container_name(cluster_id, 0)
         logger.info(
             "Step 4/6: Launching head node (rank 0) on %s as %s...",
-            head_host, head_container,
+            head_host,
+            head_container,
         )
         head_script = self._generate_node_script(
-            image=image, container_name=head_container,
-            serve_command=head_command, label=node_label,
-            env=all_env, volumes=volumes, nccl_env=nccl_env,
+            image=image,
+            container_name=head_container,
+            serve_command=head_command,
+            label=node_label,
+            env=all_env,
+            volumes=volumes,
+            nccl_env=nccl_env,
         )
         head_result = run_remote_script(
-            head_host, head_script, timeout=120, dry_run=dry_run, **ssh_kwargs,
+            head_host,
+            head_script,
+            timeout=120,
+            dry_run=dry_run,
+            **ssh_kwargs,
         )
         if not head_result.success and not dry_run:
             logger.error("Failed to launch head node: %s", head_result.stderr[:200])
@@ -1079,9 +1145,12 @@ class RuntimePlugin(Plugin):
             log_proc = start_log_capture(head_host, head_container, ssh_kwargs)
             try:
                 ready = wait_for_port(
-                    head_host, init_port,
-                    max_retries=60, retry_interval=2,
-                    ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+                    head_host,
+                    init_port,
+                    max_retries=60,
+                    retry_interval=2,
+                    ssh_kwargs=ssh_kwargs,
+                    dry_run=dry_run,
                     container_name=head_container,
                 )
             finally:
@@ -1096,7 +1165,8 @@ class RuntimePlugin(Plugin):
                 else:
                     logger.error(
                         "No logs captured. Check manually: ssh %s 'docker logs %s'",
-                        head_host, head_container,
+                        head_host,
+                        head_container,
                     )
                 return 1
             logger.info("Step 5/6: Head node ready (%.1fs)", time.monotonic() - t0)
@@ -1108,27 +1178,39 @@ class RuntimePlugin(Plugin):
         if worker_hosts:
             logger.info(
                 "Step 6/6: Launching %d worker node(s) on %s...",
-                len(worker_hosts), ", ".join(worker_hosts),
+                len(worker_hosts),
+                ", ".join(worker_hosts),
             )
             with ThreadPoolExecutor(max_workers=len(worker_hosts)) as executor:
                 futures = {}
                 for i, host in enumerate(worker_hosts):
                     rank = i + 1
                     worker_command = self.generate_node_command(
-                        recipe=recipe, overrides=overrides,
-                        head_ip=head_ip, num_nodes=num_nodes,
-                        node_rank=rank, init_port=init_port,
+                        recipe=recipe,
+                        overrides=overrides,
+                        head_ip=head_ip,
+                        num_nodes=num_nodes,
+                        node_rank=rank,
+                        init_port=init_port,
                         skip_keys=skip_keys,
                     )
                     worker_container = self.executor.node_container_name(cluster_id, rank)
                     worker_script = self._generate_node_script(
-                        image=image, container_name=worker_container,
-                        serve_command=worker_command, label=node_label,
-                        env=all_env, volumes=volumes, nccl_env=nccl_env,
+                        image=image,
+                        container_name=worker_container,
+                        serve_command=worker_command,
+                        label=node_label,
+                        env=all_env,
+                        volumes=volumes,
+                        nccl_env=nccl_env,
                     )
                     future = executor.submit(
-                        run_remote_script, host, worker_script,
-                        timeout=120, dry_run=dry_run, **ssh_kwargs,
+                        run_remote_script,
+                        host,
+                        worker_script,
+                        timeout=120,
+                        dry_run=dry_run,
+                        **ssh_kwargs,
                     )
                     futures[future] = (host, rank)
 
@@ -1138,7 +1220,9 @@ class RuntimePlugin(Plugin):
                     if not result.success and not dry_run:
                         logger.warning(
                             "  Worker rank %d on %s may have failed: %s",
-                            rank, host, result.stderr[:100],
+                            rank,
+                            host,
+                            result.stderr[:100],
                         )
 
             logger.info("Step 6/6: Workers launched (%.1fs)", time.monotonic() - t0)
@@ -1167,7 +1251,9 @@ class RuntimePlugin(Plugin):
             for rank, host in enumerate(hosts):
                 logger.info(
                     "  Node %d: ssh %s 'docker logs %s'",
-                    rank, host, self.executor.node_container_name(cluster_id, rank),
+                    rank,
+                    host,
+                    self.executor.node_container_name(cluster_id, rank),
                 )
         logger.info("=" * 60)
 
@@ -1187,12 +1273,12 @@ class RuntimePlugin(Plugin):
         }
 
     def _collect_runtime_info(
-            self,
-            host: str,
-            container_name: str,
-            ssh_kwargs: dict,
-            dry_run: bool = False,
-            builder=None,
+        self,
+        host: str,
+        container_name: str,
+        ssh_kwargs: dict,
+        dry_run: bool = False,
+        builder=None,
     ) -> dict[str, str]:
         """Run version commands inside a container, return {label: version}.
 
@@ -1228,14 +1314,11 @@ class RuntimePlugin(Plugin):
         # via a here-document.  This avoids quoting issues that arise
         # when embedding complex shell commands in bash -c '...'.
         # TODO: using 'docker exec' implies executor should be involved
-        outer_script = (
-                           "docker exec -i %s bash -s <<'SPARKRUN_VER_EOF'\n"
-                           "%s\n"
-                           "SPARKRUN_VER_EOF"
-                       ) % (container_name, inner_script)
+        outer_script = ("docker exec -i %s bash -s <<'SPARKRUN_VER_EOF'\n%s\nSPARKRUN_VER_EOF") % (container_name, inner_script)
 
         try:
             from sparkrun.orchestration.primitives import run_script_on_host
+
             result = run_script_on_host(host, outer_script, ssh_kwargs=ssh_kwargs, timeout=30, dry_run=False)
             if result.returncode != 0:
                 logger.debug("Version collection failed (rc=%d): %s", result.returncode, result.stderr)
@@ -1261,7 +1344,7 @@ class RuntimePlugin(Plugin):
                     start_idx = stdout.find(start_marker)
                     end_idx = stdout.find(end_marker)
                     if start_idx >= 0 and end_idx > start_idx:
-                        block = stdout[start_idx + len(start_marker):end_idx]
+                        block = stdout[start_idx + len(start_marker) : end_idx]
                         # Strip the leading newline from the marker line
                         if block.startswith("\n"):
                             block = block[1:]

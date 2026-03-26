@@ -31,7 +31,9 @@ _SGLANG_FLAG_MAP = {
 }
 
 _SGLANG_BOOL_FLAGS = {
-    "trust_remote_code", "enable_torch_compile", "disable_radix_cache",
+    "trust_remote_code",
+    "enable_torch_compile",
+    "disable_radix_cache",
 }
 
 
@@ -50,10 +52,15 @@ class SglangRuntime(RuntimePlugin):
         """SGLang uses native multi-node distribution, not Ray."""
         return "native"
 
-    def generate_command(self, recipe: Recipe, overrides: dict[str, Any],
-                         is_cluster: bool, num_nodes: int = 1,
-                         head_ip: str | None = None,
-                         skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
+    def generate_command(
+        self,
+        recipe: Recipe,
+        overrides: dict[str, Any],
+        is_cluster: bool,
+        num_nodes: int = 1,
+        head_ip: str | None = None,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+    ) -> str:
         """Generate the sglang launch_server command.
 
         For cluster mode this produces the *base* command without
@@ -67,25 +74,31 @@ class SglangRuntime(RuntimePlugin):
         rendered = recipe.render_command(config)
         if rendered:
             rendered = self._augment_served_model_name(
-                rendered, config, "--served-model-name", skip_keys,
+                rendered,
+                config,
+                "--served-model-name",
+                skip_keys,
             )
             if skip_keys:
                 rendered = self.strip_flags_from_command(
-                    rendered, skip_keys, _SGLANG_FLAG_MAP, _SGLANG_BOOL_FLAGS,
+                    rendered,
+                    skip_keys,
+                    _SGLANG_FLAG_MAP,
+                    _SGLANG_BOOL_FLAGS,
                 )
             return rendered
 
         return self._build_command(recipe, config, is_cluster, num_nodes, head_ip, skip_keys=skip_keys)
 
     def generate_node_command(
-            self,
-            recipe: Recipe,
-            overrides: dict[str, Any],
-            head_ip: str,
-            num_nodes: int,
-            node_rank: int,
-            init_port: int = 25000,
-            skip_keys: set[str] | frozenset[str] = frozenset(),
+        self,
+        recipe: Recipe,
+        overrides: dict[str, Any],
+        head_ip: str,
+        num_nodes: int,
+        node_rank: int,
+        init_port: int = 25000,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
     ) -> str:
         """Generate the sglang command for a specific node.
 
@@ -100,11 +113,17 @@ class SglangRuntime(RuntimePlugin):
         rendered = recipe.render_command(config)
         if rendered:
             rendered = self._augment_served_model_name(
-                rendered, config, "--served-model-name", skip_keys,
+                rendered,
+                config,
+                "--served-model-name",
+                skip_keys,
             )
             if skip_keys:
                 rendered = self.strip_flags_from_command(
-                    rendered, skip_keys, _SGLANG_FLAG_MAP, _SGLANG_BOOL_FLAGS,
+                    rendered,
+                    skip_keys,
+                    _SGLANG_FLAG_MAP,
+                    _SGLANG_BOOL_FLAGS,
                 )
             base = rendered
         else:
@@ -134,8 +153,7 @@ class SglangRuntime(RuntimePlugin):
         if gguf_path:
             config.put("model", str(gguf_path))
 
-    def _build_base_command(self, recipe: Recipe, config,
-                            skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
+    def _build_base_command(self, recipe: Recipe, config, skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
         """Build the sglang command without cluster-specific arguments."""
         # For GGUF models, use the resolved file path instead of the HF repo name
         model_path = config.get("_gguf_model_path") or recipe.model
@@ -147,16 +165,26 @@ class SglangRuntime(RuntimePlugin):
 
         skip = {"tensor_parallel"}
         skip.update(skip_keys)
-        parts.extend(self.build_flags_from_map(
-            config, _SGLANG_FLAG_MAP, bool_keys=_SGLANG_BOOL_FLAGS,
-            skip_keys=skip,
-        ))
+        parts.extend(
+            self.build_flags_from_map(
+                config,
+                _SGLANG_FLAG_MAP,
+                bool_keys=_SGLANG_BOOL_FLAGS,
+                skip_keys=skip,
+            )
+        )
 
         return " ".join(parts)
 
-    def _build_command(self, recipe: Recipe, config, is_cluster: bool,
-                       num_nodes: int, head_ip: str | None = None,
-                       skip_keys: set[str] | frozenset[str] = frozenset()) -> str:
+    def _build_command(
+        self,
+        recipe: Recipe,
+        config,
+        is_cluster: bool,
+        num_nodes: int,
+        head_ip: str | None = None,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+    ) -> str:
         """Build the sglang launch_server command from structured config.
 
         For cluster mode, includes ``--dist-init-addr`` and ``--nnodes`` but
@@ -233,11 +261,13 @@ class SglangRuntime(RuntimePlugin):
     def get_extra_volumes(self) -> dict[str, str]:
         """Mount SGLang tuning configs if available."""
         from sparkrun.tuning.sglang import get_sglang_tuning_volumes
+
         return get_sglang_tuning_volumes() or {}
 
     def get_extra_env(self) -> dict[str, str]:
         """Set SGLANG_MOE_CONFIG_DIR if tuning configs exist."""
         from sparkrun.tuning.sglang import get_sglang_tuning_env
+
         env = super().get_extra_env()
         env.update(get_sglang_tuning_env() or {})
         return env
@@ -245,11 +275,11 @@ class SglangRuntime(RuntimePlugin):
     # --- Cluster stop ---
 
     def _stop_cluster(
-            self,
-            hosts: list[str],
-            cluster_id: str,
-            config=None,
-            dry_run: bool = False,
+        self,
+        hosts: list[str],
+        cluster_id: str,
+        config=None,
+        dry_run: bool = False,
     ) -> int:
         """Stop an SGLang native cluster."""
         return self._stop_native_cluster(hosts, cluster_id, config=config, dry_run=dry_run)
@@ -257,31 +287,40 @@ class SglangRuntime(RuntimePlugin):
     # --- Cluster launch ---
 
     def _run_cluster(
-            self,
-            hosts: list[str],
-            image: str,
-            serve_command: str = "",
-            recipe=None,
-            overrides=None,
-            *,
-            cluster_id: str = "sparkrun0",
-            env: dict[str, str] | None = None,
-            cache_dir: str | None = None,
-            config=None,
-            dry_run: bool = False,
-            detached: bool = True,
-            nccl_env: dict[str, str] | None = None,
-            init_port: int = 25000,
-            skip_keys: set[str] | frozenset[str] = frozenset(),
-            **kwargs,
+        self,
+        hosts: list[str],
+        image: str,
+        serve_command: str = "",
+        recipe=None,
+        overrides=None,
+        *,
+        cluster_id: str = "sparkrun0",
+        env: dict[str, str] | None = None,
+        cache_dir: str | None = None,
+        config=None,
+        dry_run: bool = False,
+        detached: bool = True,
+        nccl_env: dict[str, str] | None = None,
+        init_port: int = 25000,
+        skip_keys: set[str] | frozenset[str] = frozenset(),
+        **kwargs,
     ) -> int:
         """Orchestrate a multi-node SGLang cluster using native distribution."""
         return self._run_native_cluster(
-            hosts=hosts, image=image, serve_command=serve_command,
-            recipe=recipe, overrides=overrides,
-            cluster_id=cluster_id, env=env, cache_dir=cache_dir,
-            config=config, dry_run=dry_run, detached=detached,
-            nccl_env=nccl_env, init_port=init_port, skip_keys=skip_keys,
+            hosts=hosts,
+            image=image,
+            serve_command=serve_command,
+            recipe=recipe,
+            overrides=overrides,
+            cluster_id=cluster_id,
+            env=env,
+            cache_dir=cache_dir,
+            config=config,
+            dry_run=dry_run,
+            detached=detached,
+            nccl_env=nccl_env,
+            init_port=init_port,
+            skip_keys=skip_keys,
             banner_title="SGLang Cluster Launcher",
             port_label="Init Port",
             node_label="sglang node",

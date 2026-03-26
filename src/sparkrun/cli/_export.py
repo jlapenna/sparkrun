@@ -36,7 +36,7 @@ def _apply_spark_arena_benchmarks(recipe, recipe_name: str):
         return  # already set
 
     if recipe_name.startswith(SPARK_ARENA_PREFIX):
-        uuid = recipe_name[len(SPARK_ARENA_PREFIX):]
+        uuid = recipe_name[len(SPARK_ARENA_PREFIX) :]
         tp = recipe.defaults.get("tensor_parallel", 1)
         recipe.metadata["spark_arena_benchmarks"] = [{"tp": tp, "uuid": uuid}]
 
@@ -122,8 +122,7 @@ def export_running(ctx, target, hosts, hosts_file, cluster_name, output_json, sa
     if recipe_state:
         # Best path: full-fidelity reconstruction
         recipe = Recipe._deserialize(recipe_state)
-        _output_export(recipe, output_json, save_path,
-                       overrides=meta_overrides, container_image=effective_image)
+        _output_export(recipe, output_json, save_path, overrides=meta_overrides, container_image=effective_image)
         return
 
     # Fallback: load recipe by name from registries
@@ -141,8 +140,7 @@ def export_running(ctx, target, hosts, hosts_file, cluster_name, output_json, sa
 
     if meta_overrides:
         # Good fallback: full overrides dict available
-        _output_export(recipe, output_json, save_path,
-                       overrides=meta_overrides, container_image=effective_image)
+        _output_export(recipe, output_json, save_path, overrides=meta_overrides, container_image=effective_image)
         return
 
     # Legacy fallback: reconstruct partial overrides from individual metadata fields
@@ -154,8 +152,7 @@ def export_running(ctx, target, hosts, hosts_file, cluster_name, output_json, sa
     if meta.get("served_model_name") is not None:
         legacy_overrides["served_model_name"] = meta["served_model_name"]
 
-    _output_export(recipe, output_json, save_path,
-                   overrides=legacy_overrides or None, container_image=effective_image)
+    _output_export(recipe, output_json, save_path, overrides=legacy_overrides or None, container_image=effective_image)
 
 
 def _output_export(recipe, output_json, save_path, overrides=None, container_image=None):
@@ -163,8 +160,9 @@ def _output_export(recipe, output_json, save_path, overrides=None, container_ima
     if save_path is None:
         click.echo(recipe.export(json=output_json, overrides=overrides, container_image=container_image))
     else:
-        click.echo("Recipe saved to %s" % recipe.export(
-            path=save_path, json=output_json, overrides=overrides, container_image=container_image))
+        click.echo(
+            "Recipe saved to %s" % recipe.export(path=save_path, json=output_json, overrides=overrides, container_image=container_image)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -359,9 +357,21 @@ def _detect_remote_sparkrun(host, ssh_kwargs, dry_run=False):
     return lines[0].strip(), lines[1].strip()
 
 
-def _resolve_recipe_for_systemd(target, config, hosts, hosts_file, cluster_name,
-                                options, tensor_parallel, pipeline_parallel,
-                                gpu_mem, max_model_len, image, port, served_model_name):
+def _resolve_recipe_for_systemd(
+    target,
+    config,
+    hosts,
+    hosts_file,
+    cluster_name,
+    options,
+    tensor_parallel,
+    pipeline_parallel,
+    gpu_mem,
+    max_model_len,
+    image,
+    port,
+    served_model_name,
+):
     """Resolve recipe, hosts, and overrides for the systemd command.
 
     Returns (recipe, overrides, host_list, effective_cluster_name).
@@ -413,9 +423,14 @@ def _resolve_recipe_for_systemd(target, config, hosts, hosts_file, cluster_name,
         extra_kw["served_model_name"] = served_model_name
 
     recipe, overrides = _apply_recipe_overrides(
-        options, tensor_parallel=tensor_parallel,
-        pipeline_parallel=pipeline_parallel, gpu_mem=gpu_mem,
-        max_model_len=max_model_len, image=image, recipe=recipe, **extra_kw,
+        options,
+        tensor_parallel=tensor_parallel,
+        pipeline_parallel=pipeline_parallel,
+        gpu_mem=gpu_mem,
+        max_model_len=max_model_len,
+        image=image,
+        recipe=recipe,
+        **extra_kw,
     )
 
     host_list, _ = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
@@ -447,10 +462,26 @@ def _build_cluster_yaml(cluster_name, hosts, ssh_user=None):
 @click.option("--service-name", default=None, help="Override service name (default: sparkrun-<slug>)")
 @dry_run_option
 @click.pass_context
-def export_systemd(ctx, target, hosts, hosts_file, cluster_name,
-                   tensor_parallel, pipeline_parallel, gpu_mem, max_model_len,
-                   options, image, port, served_model_name,
-                   do_install, do_uninstall, start, service_name, dry_run):
+def export_systemd(
+    ctx,
+    target,
+    hosts,
+    hosts_file,
+    cluster_name,
+    tensor_parallel,
+    pipeline_parallel,
+    gpu_mem,
+    max_model_len,
+    options,
+    image,
+    port,
+    served_model_name,
+    do_install,
+    do_uninstall,
+    start,
+    service_name,
+    dry_run,
+):
     """Generate a systemd service for a sparkrun inference workload.
 
     TARGET can be a recipe name (with optional overrides) or a cluster_id
@@ -477,9 +508,19 @@ def export_systemd(ctx, target, hosts, hosts_file, cluster_name,
 
     # Resolve recipe, overrides, and hosts
     recipe, overrides, host_list = _resolve_recipe_for_systemd(
-        target, config, hosts, hosts_file, cluster_name,
-        options, tensor_parallel, pipeline_parallel,
-        gpu_mem, max_model_len, image, port, served_model_name,
+        target,
+        config,
+        hosts,
+        hosts_file,
+        cluster_name,
+        options,
+        tensor_parallel,
+        pipeline_parallel,
+        gpu_mem,
+        max_model_len,
+        image,
+        port,
+        served_model_name,
     )
 
     head_host = host_list[0]
@@ -509,10 +550,19 @@ def export_systemd(ctx, target, hosts, hosts_file, cluster_name,
     sparkrun_path, user_home = _detect_remote_sparkrun(head_host, ssh_kwargs, dry_run=dry_run)
 
     unit_contents = _render_systemd_unit(
-        slug, recipe, systemd_cluster_name, ssh_user, sparkrun_path, user_home,
+        slug,
+        recipe,
+        systemd_cluster_name,
+        ssh_user,
+        sparkrun_path,
+        user_home,
     )
     install_script = _render_install_script(
-        slug, recipe_yaml, cluster_yaml, systemd_cluster_name, user_home,
+        slug,
+        recipe_yaml,
+        cluster_yaml,
+        systemd_cluster_name,
+        user_home,
     )
     sudo_install_script = _render_sudo_install_script(slug, unit_contents)
     uninstall_script = _render_uninstall_script(slug, systemd_cluster_name, user_home)
@@ -541,8 +591,7 @@ def export_systemd(ctx, target, hosts, hosts_file, cluster_name,
         return
 
     # --install mode
-    _do_install(slug, head_host, ssh_user, ssh_kwargs,
-                install_script, sudo_install_script, start, dry_run)
+    _do_install(slug, head_host, ssh_user, ssh_kwargs, install_script, sudo_install_script, start, dry_run)
 
 
 def _do_install(slug, head_host, ssh_user, ssh_kwargs, install_script, sudo_install_script, start, dry_run):
@@ -567,8 +616,11 @@ def _do_install(slug, head_host, ssh_user, ssh_kwargs, install_script, sudo_inst
     click.echo("Installing systemd unit (requires sudo)...")
     sudo_password = click.prompt("[sudo] password for %s" % ssh_user, hide_input=True)
     r = run_sudo_script_on_host(
-        head_host, sudo_install_script, sudo_password,
-        ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+        head_host,
+        sudo_install_script,
+        sudo_password,
+        ssh_kwargs=ssh_kwargs,
+        dry_run=dry_run,
     )
     if not r.success:
         click.echo("Error: Failed to install systemd unit on %s." % head_host, err=True)
@@ -583,8 +635,11 @@ def _do_install(slug, head_host, ssh_user, ssh_kwargs, install_script, sudo_inst
         click.echo("Starting %s..." % service_name)
         start_script = "systemctl start '%s'" % service_name
         r = run_sudo_script_on_host(
-            head_host, start_script, sudo_password,
-            ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+            head_host,
+            start_script,
+            sudo_password,
+            ssh_kwargs=ssh_kwargs,
+            dry_run=dry_run,
         )
         if not r.success:
             click.echo("Error: Failed to start %s." % service_name, err=True)
@@ -628,8 +683,11 @@ def _do_uninstall(slug, cluster_name, head_host, ssh_user, ssh_kwargs, dry_run):
     click.echo("Uninstalling %s from %s (requires sudo)..." % (service_name, head_host))
     sudo_password = click.prompt("[sudo] password for %s" % ssh_user, hide_input=True)
     r = run_sudo_script_on_host(
-        head_host, uninstall_script, sudo_password,
-        ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+        head_host,
+        uninstall_script,
+        sudo_password,
+        ssh_kwargs=ssh_kwargs,
+        dry_run=dry_run,
     )
     if not r.success:
         click.echo("Error: Failed to uninstall %s on %s." % (service_name, head_host), err=True)

@@ -38,13 +38,13 @@ class RemoteResult:
 
 
 def _run_subprocess(
-        cmd: list[str] | str,
-        host: str,
-        label: str,
-        timeout: int | None = None,
-        input_data: str | None = None,
-        shell: bool = False,
-        quiet: bool = False,
+    cmd: list[str] | str,
+    host: str,
+    label: str,
+    timeout: int | None = None,
+    input_data: str | None = None,
+    shell: bool = False,
+    quiet: bool = False,
 ) -> RemoteResult:
     """Run a subprocess and return a RemoteResult with standard error handling.
 
@@ -87,7 +87,10 @@ def _run_subprocess(
             log_fn = logger.debug if quiet else logger.warning
             log_fn(
                 "  %s <- %s FAILED rc=%d (%.1fs): %s",
-                label, host, proc.returncode, elapsed,
+                label,
+                host,
+                proc.returncode,
+                elapsed,
                 proc.stderr.strip()[:200],
             )
         return result
@@ -102,11 +105,11 @@ def _run_subprocess(
 
 
 def build_ssh_cmd(
-        host: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
+    host: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
 ) -> list[str]:
     """Build the base SSH command with standard options.
 
@@ -131,15 +134,15 @@ def build_ssh_cmd(
 
 
 def run_remote_script(
-        host: str,
-        script: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
-        timeout: int | None = None,
-        dry_run: bool = False,
-        quiet: bool = False,
+    host: str,
+    script: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
+    timeout: int | None = None,
+    dry_run: bool = False,
+    quiet: bool = False,
 ) -> RemoteResult:
     """Execute a script on a remote host via stdin piping.
 
@@ -160,18 +163,15 @@ def run_remote_script(
     Returns:
         RemoteResult with returncode, stdout, stderr.
     """
-    script_lines = script.count('\n')
+    script_lines = script.count("\n")
     if dry_run:
-        logger.info("[dry-run] Would execute on %s (%d lines, %d bytes)",
-                    host, script_lines, len(script))
+        logger.info("[dry-run] Would execute on %s (%d lines, %d bytes)", host, script_lines, len(script))
         return RemoteResult(host=host, returncode=0, stdout="[dry-run]", stderr="")
 
     cmd = build_ssh_cmd(host, ssh_user, ssh_key, ssh_options, connect_timeout)
     cmd.extend(["bash", "-s"])
 
-    logger.debug("  SSH script -> %s (%d bytes)%s",
-                 host, len(script),
-                 f" [timeout={timeout}s]" if timeout else "")
+    logger.debug("  SSH script -> %s (%d bytes)%s", host, len(script), f" [timeout={timeout}s]" if timeout else "")
     logger.debug("SSH command: %s", " ".join(cmd))
     logger.debug("Script: %d lines, %d bytes", script_lines, len(script))
 
@@ -188,15 +188,15 @@ def run_remote_script(
 
 
 def run_remote_command(
-        host: str,
-        command: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
-        timeout: int | None = None,
-        dry_run: bool = False,
-        quiet: bool = False,
+    host: str,
+    command: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
+    timeout: int | None = None,
+    dry_run: bool = False,
+    quiet: bool = False,
 ) -> RemoteResult:
     """Execute a single command on a remote host (not via bash -s).
 
@@ -235,13 +235,13 @@ def run_remote_command(
 
 
 def stream_remote_logs(
-        host: str,
-        container_name: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        tail: int = 100,
-        dry_run: bool = False,
+    host: str,
+    container_name: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    tail: int = 100,
+    dry_run: bool = False,
 ) -> None:
     """Stream ``docker logs -f`` output to the terminal.
 
@@ -278,8 +278,7 @@ def stream_remote_logs(
         logger.info("[dry-run] Would stream logs: %s", " ".join(cmd))
         return
 
-    logger.info("Following logs for container '%s' on %s (Ctrl-C to stop)...",
-                container_name, host or "localhost")
+    logger.info("Following logs for container '%s' on %s (Ctrl-C to stop)...", container_name, host or "localhost")
     try:
         subprocess.run(cmd)
     except KeyboardInterrupt:
@@ -287,14 +286,14 @@ def stream_remote_logs(
 
 
 def stream_container_file_logs(
-        host: str,
-        container_name: str,
-        log_file: str = "/tmp/sparkrun_serve.log",
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        tail: int = 100,
-        dry_run: bool = False,
+    host: str,
+    container_name: str,
+    log_file: str = "/tmp/sparkrun_serve.log",
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    tail: int = 100,
+    dry_run: bool = False,
 ) -> None:
     """Stream a log file from inside a running container.
 
@@ -313,8 +312,14 @@ def stream_container_file_logs(
         dry_run: If True, print the command that would run and return.
     """
     tail_cmd = [
-        "docker", "exec", container_name,
-        "tail", "-f", "--lines", str(tail), log_file,
+        "docker",
+        "exec",
+        container_name,
+        "tail",
+        "-f",
+        "--lines",
+        str(tail),
+        log_file,
     ]
 
     from sparkrun.utils import is_local_host
@@ -329,8 +334,7 @@ def stream_container_file_logs(
         logger.info("[dry-run] Would stream container file logs: %s", " ".join(cmd))
         return
 
-    logger.info("Following serve logs in container '%s' on %s (Ctrl-C to stop)...",
-                container_name, host or "localhost")
+    logger.info("Following serve logs in container '%s' on %s (Ctrl-C to stop)...", container_name, host or "localhost")
     try:
         subprocess.run(cmd)
     except KeyboardInterrupt:
@@ -338,10 +342,10 @@ def stream_container_file_logs(
 
 
 def start_log_capture(
-        host: str,
-        container_name: str,
-        ssh_kwargs: dict,
-        tail: int = 200,
+    host: str,
+    container_name: str,
+    ssh_kwargs: dict,
+    tail: int = 200,
 ) -> subprocess.Popen | None:
     """Start a background ``docker logs -f`` process, capturing output.
 
@@ -417,14 +421,14 @@ def stop_log_capture(proc: subprocess.Popen | None) -> list[str]:
 
 
 def run_remote_scripts_parallel(
-        hosts: list[str],
-        script: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        timeout: int | None = None,
-        dry_run: bool = False,
-        quiet: bool = False,
+    hosts: list[str],
+    script: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    timeout: int | None = None,
+    dry_run: bool = False,
+    quiet: bool = False,
 ) -> list[RemoteResult]:
     """Execute the same script on multiple hosts in parallel using threads.
 
@@ -443,8 +447,7 @@ def run_remote_scripts_parallel(
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    logger.info("  Running script in parallel on %d hosts: %s",
-                len(hosts), ", ".join(hosts))
+    logger.info("  Running script in parallel on %d hosts: %s", len(hosts), ", ".join(hosts))
 
     t0 = time.monotonic()
     results: list[RemoteResult] = []
@@ -469,21 +472,20 @@ def run_remote_scripts_parallel(
 
     elapsed = time.monotonic() - t0
     ok = sum(1 for r in results if r.success)
-    logger.info("  Parallel execution done: %d/%d OK (%.1fs total)",
-                ok, len(results), elapsed)
+    logger.info("  Parallel execution done: %d/%d OK (%.1fs total)", ok, len(results), elapsed)
 
     return results
 
 
 def run_remote_sudo_script(
-        host: str,
-        script: str,
-        password: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        timeout: int = 60,
-        dry_run: bool = False,
+    host: str,
+    script: str,
+    password: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    timeout: int = 60,
+    dry_run: bool = False,
 ) -> RemoteResult:
     """Execute a script on a remote host via ``sudo -S bash -s``.
 
@@ -526,11 +528,11 @@ def run_remote_sudo_script(
 
 
 def detect_sudo_on_hosts(
-        hosts: list[str],
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        dry_run: bool = False,
+    hosts: list[str],
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    dry_run: bool = False,
 ) -> set[str]:
     """Detect which hosts have passwordless sudo.
 
@@ -552,9 +554,13 @@ def detect_sudo_on_hosts(
 
     script = 'sudo -n true 2>/dev/null && echo "SUDO_OK=1" || echo "SUDO_OK=0"'
     results = run_remote_scripts_parallel(
-        hosts, script,
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
-        timeout=15, dry_run=dry_run,
+        hosts,
+        script,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        timeout=15,
+        dry_run=dry_run,
     )
 
     nopasswd_hosts: set[str] = set()
@@ -569,10 +575,10 @@ def detect_sudo_on_hosts(
 
 
 def build_ssh_opts_string(
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
 ) -> str:
     """Build a flat SSH options string for embedding in bash script templates.
 
@@ -599,15 +605,15 @@ def build_ssh_opts_string(
 
 
 def run_pipeline_to_remote(
-        host: str,
-        local_cmd: str,
-        remote_cmd: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
-        timeout: int | None = None,
-        dry_run: bool = False,
+    host: str,
+    local_cmd: str,
+    remote_cmd: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
+    timeout: int | None = None,
+    dry_run: bool = False,
 ) -> RemoteResult:
     """Run a shell pipeline that streams data from a local command to a remote command.
 
@@ -630,8 +636,10 @@ def run_pipeline_to_remote(
         RemoteResult with returncode, stdout, stderr.
     """
     ssh_opts = build_ssh_opts_string(
-        ssh_user=ssh_user, ssh_key=ssh_key,
-        ssh_options=ssh_options, connect_timeout=connect_timeout,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        connect_timeout=connect_timeout,
     )
     target = f"{ssh_user}@{host}" if ssh_user else host
     pipeline = f"{local_cmd} | ssh {ssh_opts} {target} '{remote_cmd}'"
@@ -650,17 +658,17 @@ def run_pipeline_to_remote(
 
 
 def _run_rsync_impl(
-        source: str,
-        dest: str,
-        host: str,
-        direction: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
-        rsync_options: list[str] | None = None,
-        timeout: int | None = None,
-        dry_run: bool = False,
+    source: str,
+    dest: str,
+    host: str,
+    direction: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
+    rsync_options: list[str] | None = None,
+    timeout: int | None = None,
+    dry_run: bool = False,
 ) -> RemoteResult:
     """Shared rsync implementation for both push and pull directions.
 
@@ -684,8 +692,10 @@ def _run_rsync_impl(
         rsync_options = list(_DEFAULT_RSYNC_OPTIONS)
 
     ssh_opts = build_ssh_opts_string(
-        ssh_user=ssh_user, ssh_key=ssh_key,
-        ssh_options=ssh_options, connect_timeout=connect_timeout,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        connect_timeout=connect_timeout,
     )
 
     cmd = ["rsync"] + rsync_options + ["-e", f"ssh {ssh_opts}", source, dest]
@@ -704,16 +714,16 @@ def _run_rsync_impl(
 
 
 def run_rsync(
-        source_path: str,
-        host: str,
-        dest_path: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
-        rsync_options: list[str] | None = None,
-        timeout: int | None = None,
-        dry_run: bool = False,
+    source_path: str,
+    host: str,
+    dest_path: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
+    rsync_options: list[str] | None = None,
+    timeout: int | None = None,
+    dry_run: bool = False,
 ) -> RemoteResult:
     """Rsync a local path to a remote host.
 
@@ -725,23 +735,30 @@ def run_rsync(
     src = source_path.rstrip("/") + "/"
     target = f"{ssh_user}@{host}:{dest_path}" if ssh_user else f"{host}:{dest_path}"
     return _run_rsync_impl(
-        src, target, host, "->",
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
-        connect_timeout=connect_timeout, rsync_options=rsync_options,
-        timeout=timeout, dry_run=dry_run,
+        src,
+        target,
+        host,
+        "->",
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        connect_timeout=connect_timeout,
+        rsync_options=rsync_options,
+        timeout=timeout,
+        dry_run=dry_run,
     )
 
 
 def run_pipeline_to_remotes_parallel(
-        hosts: list[str],
-        local_cmd: str,
-        remote_cmd: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
-        timeout: int | None = None,
-        dry_run: bool = False,
+    hosts: list[str],
+    local_cmd: str,
+    remote_cmd: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
+    timeout: int | None = None,
+    dry_run: bool = False,
 ) -> list[RemoteResult]:
     """Run a local-to-remote pipeline on multiple hosts in parallel.
 
@@ -764,8 +781,7 @@ def run_pipeline_to_remotes_parallel(
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    logger.info("  Running pipeline in parallel to %d hosts: %s",
-                len(hosts), ", ".join(hosts))
+    logger.info("  Running pipeline in parallel to %d hosts: %s", len(hosts), ", ".join(hosts))
 
     t0 = time.monotonic()
     results: list[RemoteResult] = []
@@ -773,10 +789,15 @@ def run_pipeline_to_remotes_parallel(
         futures = {
             executor.submit(
                 run_pipeline_to_remote,
-                host, local_cmd, remote_cmd,
-                ssh_user=ssh_user, ssh_key=ssh_key,
-                ssh_options=ssh_options, connect_timeout=connect_timeout,
-                timeout=timeout, dry_run=dry_run,
+                host,
+                local_cmd,
+                remote_cmd,
+                ssh_user=ssh_user,
+                ssh_key=ssh_key,
+                ssh_options=ssh_options,
+                connect_timeout=connect_timeout,
+                timeout=timeout,
+                dry_run=dry_run,
             ): host
             for host in hosts
         }
@@ -785,22 +806,21 @@ def run_pipeline_to_remotes_parallel(
 
     elapsed = time.monotonic() - t0
     ok = sum(1 for r in results if r.success)
-    logger.info("  Parallel pipeline done: %d/%d OK (%.1fs total)",
-                ok, len(results), elapsed)
+    logger.info("  Parallel pipeline done: %d/%d OK (%.1fs total)", ok, len(results), elapsed)
     return results
 
 
 def run_rsync_from_remote(
-        host: str,
-        source_path: str,
-        dest_path: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
-        rsync_options: list[str] | None = None,
-        timeout: int | None = None,
-        dry_run: bool = False,
+    host: str,
+    source_path: str,
+    dest_path: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
+    rsync_options: list[str] | None = None,
+    timeout: int | None = None,
+    dry_run: bool = False,
 ) -> RemoteResult:
     """Rsync a remote path to the local machine.
 
@@ -810,24 +830,31 @@ def run_rsync_from_remote(
     remote_src = source_path.rstrip("/") + "/"
     remote = f"{ssh_user}@{host}:{remote_src}" if ssh_user else f"{host}:{remote_src}"
     return _run_rsync_impl(
-        remote, dest_path, host, "<-",
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
-        connect_timeout=connect_timeout, rsync_options=rsync_options,
-        timeout=timeout, dry_run=dry_run,
+        remote,
+        dest_path,
+        host,
+        "<-",
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        connect_timeout=connect_timeout,
+        rsync_options=rsync_options,
+        timeout=timeout,
+        dry_run=dry_run,
     )
 
 
 def run_rsync_parallel(
-        source_path: str,
-        hosts: list[str],
-        dest_path: str,
-        ssh_user: str | None = None,
-        ssh_key: str | None = None,
-        ssh_options: list[str] | None = None,
-        connect_timeout: int = 10,
-        rsync_options: list[str] | None = None,
-        timeout: int | None = None,
-        dry_run: bool = False,
+    source_path: str,
+    hosts: list[str],
+    dest_path: str,
+    ssh_user: str | None = None,
+    ssh_key: str | None = None,
+    ssh_options: list[str] | None = None,
+    connect_timeout: int = 10,
+    rsync_options: list[str] | None = None,
+    timeout: int | None = None,
+    dry_run: bool = False,
 ) -> list[RemoteResult]:
     """Rsync a local path to multiple hosts in parallel.
 
@@ -851,8 +878,7 @@ def run_rsync_parallel(
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    logger.info("  Running rsync in parallel to %d hosts: %s",
-                len(hosts), ", ".join(hosts))
+    logger.info("  Running rsync in parallel to %d hosts: %s", len(hosts), ", ".join(hosts))
 
     t0 = time.monotonic()
     results: list[RemoteResult] = []
@@ -860,11 +886,16 @@ def run_rsync_parallel(
         futures = {
             executor.submit(
                 run_rsync,
-                source_path, host, dest_path,
-                ssh_user=ssh_user, ssh_key=ssh_key,
-                ssh_options=ssh_options, connect_timeout=connect_timeout,
+                source_path,
+                host,
+                dest_path,
+                ssh_user=ssh_user,
+                ssh_key=ssh_key,
+                ssh_options=ssh_options,
+                connect_timeout=connect_timeout,
                 rsync_options=rsync_options,
-                timeout=timeout, dry_run=dry_run,
+                timeout=timeout,
+                dry_run=dry_run,
             ): host
             for host in hosts
         }
@@ -873,6 +904,5 @@ def run_rsync_parallel(
 
     elapsed = time.monotonic() - t0
     ok = sum(1 for r in results if r.success)
-    logger.info("  Parallel rsync done: %d/%d OK (%.1fs total)",
-                ok, len(results), elapsed)
+    logger.info("  Parallel rsync done: %d/%d OK (%.1fs total)", ok, len(results), elapsed)
     return results

@@ -7,6 +7,7 @@ import yaml
 
 class LiteralBlockDumper(yaml.SafeDumper):
     """YAML dumper that uses literal block style (|) for multiline strings."""
+
     pass
 
 

@@ -32,8 +32,8 @@ def _get_tuning_dir(cache_subdir: str) -> Path:
 
 
 def _get_tuning_volumes(
-        tuning_dir_fn: callable,
-        container_path: str,
+    tuning_dir_fn: callable,
+    container_path: str,
 ) -> dict[str, str] | None:
     """Return volume mapping for tuning configs if they exist.
 
@@ -51,9 +51,9 @@ def _get_tuning_volumes(
 
 
 def _get_tuning_env(
-        volumes_fn: callable,
-        env_var: str,
-        container_path: str,
+    volumes_fn: callable,
+    env_var: str,
+    container_path: str,
 ) -> dict[str, str] | None:
     """Return env vars for tuning configs if they exist.
 
@@ -83,21 +83,21 @@ class BaseTuner:
     """
 
     # --- Class attributes set by subclasses ---
-    runtime_label: str          # "SGLang" or "vLLM"
-    container_name: str         # e.g. "sparkrun_tune"
-    output_path: str            # container-side output mount point
-    clone_script: str           # e.g. "sglang_clone_benchmarks.sh"
+    runtime_label: str  # "SGLang" or "vLLM"
+    container_name: str  # e.g. "sparkrun_tune"
+    output_path: str  # container-side output mount point
+    clone_script: str  # e.g. "sglang_clone_benchmarks.sh"
 
     def __init__(
-            self,
-            host: str,
-            image: str,
-            model: str,
-            config: SparkrunConfig | None = None,
-            cache_dir: str | None = None,
-            output_dir: str | None = None,
-            skip_clone: bool = False,
-            dry_run: bool = False,
+        self,
+        host: str,
+        image: str,
+        model: str,
+        config: SparkrunConfig | None = None,
+        cache_dir: str | None = None,
+        output_dir: str | None = None,
+        skip_clone: bool = False,
+        dry_run: bool = False,
     ):
         self.host = host
         self.image = image
@@ -109,6 +109,7 @@ class BaseTuner:
         self.dry_run = dry_run
 
         from sparkrun.orchestration.primitives import build_ssh_kwargs
+
         self.ssh_kwargs = build_ssh_kwargs(config)
 
     def _default_output_dir(self) -> Path:
@@ -121,9 +122,9 @@ class BaseTuner:
     # ----- public entry point -----
 
     def run_tuning(
-            self,
-            tp_sizes: tuple[int, ...] = DEFAULT_TP_SIZES,
-            parallel: int = 1,
+        self,
+        tp_sizes: tuple[int, ...] = DEFAULT_TP_SIZES,
+        parallel: int = 1,
     ) -> int:
         """Run the full tuning flow.
 
@@ -172,11 +173,16 @@ class BaseTuner:
             # Step 4: Run tuning for each TP size
             if parallel > 1 and len(tp_sizes) > 1:
                 rc = self._run_tuning_parallel(
-                    tp_sizes, triton_version, parallel, tp_timings,
+                    tp_sizes,
+                    triton_version,
+                    parallel,
+                    tp_timings,
                 )
             else:
                 rc = self._run_tuning_sequential(
-                    tp_sizes, triton_version, tp_timings,
+                    tp_sizes,
+                    triton_version,
+                    tp_timings,
                 )
 
             if rc != 0:
@@ -196,23 +202,28 @@ class BaseTuner:
     # ----- orchestration steps -----
 
     def _run_tuning_sequential(
-            self,
-            tp_sizes: tuple[int, ...],
-            triton_version: str,
-            tp_timings: list[tuple[int, float]],
+        self,
+        tp_sizes: tuple[int, ...],
+        triton_version: str,
+        tp_timings: list[tuple[int, float]],
     ) -> int:
         """Run tuning for each TP size sequentially."""
         import time
+
         for i, tp in enumerate(tp_sizes):
             if self._pre_check_tp(tp, triton_version):
                 logger.info(
                     "Step 4/5: TP=%d configs already exist, skipping (%d/%d)",
-                    tp, i + 1, len(tp_sizes),
+                    tp,
+                    i + 1,
+                    len(tp_sizes),
                 )
                 continue
             logger.info(
                 "Step 4/5: Tuning TP=%d (%d/%d)...",
-                tp, i + 1, len(tp_sizes),
+                tp,
+                i + 1,
+                len(tp_sizes),
             )
             t_tp = time.monotonic()
             rc = self._run_tune_for_tp(tp, triton_version)
@@ -223,11 +234,11 @@ class BaseTuner:
         return 0
 
     def _run_tuning_parallel(
-            self,
-            tp_sizes: tuple[int, ...],
-            triton_version: str,
-            max_workers: int,
-            tp_timings: list[tuple[int, float]],
+        self,
+        tp_sizes: tuple[int, ...],
+        triton_version: str,
+        max_workers: int,
+        tp_timings: list[tuple[int, float]],
     ) -> int:
         """Run tuning for TP sizes in parallel batches."""
         import time
@@ -236,7 +247,8 @@ class BaseTuner:
         effective_workers = min(max_workers, len(tp_sizes))
         logger.info(
             "Step 4/5: Tuning %d TP sizes with %d parallel workers...",
-            len(tp_sizes), effective_workers,
+            len(tp_sizes),
+            effective_workers,
         )
 
         # Filter out TP sizes that already have configs
@@ -259,10 +271,7 @@ class BaseTuner:
             return tp, rc, time.monotonic() - t0
 
         with ThreadPoolExecutor(max_workers=effective_workers) as executor:
-            futures = {
-                executor.submit(_tune_one, tp): tp
-                for tp in needed_tp
-            }
+            futures = {executor.submit(_tune_one, tp): tp for tp in needed_tp}
             for future in as_completed(futures):
                 tp, rc, elapsed = future.result()
                 tp_timings.append((tp, elapsed))
@@ -295,13 +304,17 @@ class BaseTuner:
         # Ensure output directory exists on the remote host (as the SSH user, not root)
         mkdir_script = "#!/bin/bash\nset -uo pipefail\nmkdir -p %s\n" % self.output_dir
         mkdir_result = run_script_on_host(
-            self.host, mkdir_script,
-            ssh_kwargs=self.ssh_kwargs, timeout=30, dry_run=self.dry_run,
+            self.host,
+            mkdir_script,
+            ssh_kwargs=self.ssh_kwargs,
+            timeout=30,
+            dry_run=self.dry_run,
         )
         if not mkdir_result.success and not self.dry_run:
             logger.error(
                 "Failed to create output directory %s: %s",
-                self.output_dir, mkdir_result.stderr,
+                self.output_dir,
+                mkdir_result.stderr,
             )
             return 1
 
@@ -317,8 +330,11 @@ class BaseTuner:
         )
 
         result = run_script_on_host(
-            self.host, launch_script,
-            ssh_kwargs=self.ssh_kwargs, timeout=120, dry_run=self.dry_run,
+            self.host,
+            launch_script,
+            ssh_kwargs=self.ssh_kwargs,
+            timeout=120,
+            dry_run=self.dry_run,
         )
 
         if not result.success and not self.dry_run:
@@ -345,8 +361,11 @@ class BaseTuner:
         script = "#!/bin/bash\nset -uo pipefail\n%s\n" % exec_cmd
 
         result = run_script_on_host(
-            self.host, script,
-            ssh_kwargs=self.ssh_kwargs, timeout=120, dry_run=self.dry_run,
+            self.host,
+            script,
+            ssh_kwargs=self.ssh_kwargs,
+            timeout=120,
+            dry_run=self.dry_run,
         )
 
         if not result.success and not self.dry_run:
@@ -365,12 +384,15 @@ class BaseTuner:
 
         detect_cmd = docker_exec_cmd(
             self.container_name,
-            "python3 -c \"import triton; print(triton.__version__)\"",
+            'python3 -c "import triton; print(triton.__version__)"',
         )
 
         result = run_command_on_host(
-            self.host, detect_cmd,
-            ssh_kwargs=self.ssh_kwargs, timeout=30, dry_run=self.dry_run,
+            self.host,
+            detect_cmd,
+            ssh_kwargs=self.ssh_kwargs,
+            timeout=30,
+            dry_run=self.dry_run,
         )
 
         if self.dry_run:
@@ -424,7 +446,7 @@ class BaseTuner:
         output_dir = self._pre_check_output_dir(tp_size, triton_version)
 
         check_script = (
-            "python3 -c \""
+            'python3 -c "'
             "import sys, os, glob; "
             "from transformers import AutoConfig; "
             "c = AutoConfig.from_pretrained('%s', trust_remote_code=True); "
@@ -434,14 +456,17 @@ class BaseTuner:
             "pattern = os.path.join('%s', 'E=%%d,N=%%d,*' %% (E, N)); "
             "matches = glob.glob(pattern); "
             "sys.exit(0 if matches else 1)"
-            "\""
+            '"'
         ) % (self.model, tp_size, output_dir)
 
         exec_cmd = docker_exec_cmd(self.container_name, check_script)
         try:
             result = run_command_on_host(
-                self.host, exec_cmd,
-                ssh_kwargs=self.ssh_kwargs, timeout=60, dry_run=False,
+                self.host,
+                exec_cmd,
+                ssh_kwargs=self.ssh_kwargs,
+                timeout=60,
+                dry_run=False,
             )
             return result.success
         except Exception:
@@ -469,8 +494,11 @@ class BaseTuner:
         # models).  Use an 8-hour timeout so remote SSH sessions aren't
         # killed prematurely.
         result = run_command_on_host(
-            self.host, exec_cmd,
-            ssh_kwargs=self.ssh_kwargs, timeout=28800, dry_run=self.dry_run,
+            self.host,
+            exec_cmd,
+            ssh_kwargs=self.ssh_kwargs,
+            timeout=28800,
+            dry_run=self.dry_run,
         )
 
         if self.dry_run:
@@ -481,7 +509,9 @@ class BaseTuner:
         if not result.success:
             logger.error(
                 "  Tuning for TP=%d failed (exit %d, %.1fs)",
-                tp_size, result.returncode, elapsed,
+                tp_size,
+                result.returncode,
+                elapsed,
             )
             if result.stdout and result.stdout.strip():
                 logger.error("  stdout:\n%s", result.stdout.rstrip())
@@ -493,9 +523,9 @@ class BaseTuner:
         return 0
 
     def _print_timing_summary(
-            self,
-            tp_timings: list[tuple[int, float]],
-            total_elapsed: float,
+        self,
+        tp_timings: list[tuple[int, float]],
+        total_elapsed: float,
     ) -> None:
         """Print a timing summary table after tuning completes."""
         logger.info("")
@@ -511,8 +541,8 @@ class BaseTuner:
         logger.info("")
         logger.info("Tuning configs saved to: %s", self.output_dir)
         logger.info(
-            "These will be auto-mounted in future 'sparkrun run' "
-            "invocations for %s recipes.", self.runtime_label,
+            "These will be auto-mounted in future 'sparkrun run' invocations for %s recipes.",
+            self.runtime_label,
         )
         logger.info("=" * 60)
 
@@ -532,8 +562,7 @@ class BaseTuner:
             return
 
         if self.dry_run:
-            logger.info("  [dry-run] Would sync configs back from %s:%s",
-                        self.host, self.output_dir)
+            logger.info("  [dry-run] Would sync configs back from %s:%s", self.host, self.output_dir)
             return
 
         from sparkrun.orchestration.ssh import run_rsync_from_remote
@@ -554,7 +583,8 @@ class BaseTuner:
         else:
             logger.warning(
                 "  Failed to sync tuning configs back from %s: %s",
-                self.host, result.stderr[:200],
+                self.host,
+                result.stderr[:200],
             )
 
     def _cleanup_container(self) -> None:
@@ -565,6 +595,9 @@ class BaseTuner:
         logger.info("Cleaning up tuning container...")
         cmd = docker_stop_cmd(self.container_name)
         run_command_on_host(
-            self.host, cmd,
-            ssh_kwargs=self.ssh_kwargs, timeout=30, dry_run=self.dry_run,
+            self.host,
+            cmd,
+            ssh_kwargs=self.ssh_kwargs,
+            timeout=30,
+            dry_run=self.dry_run,
         )

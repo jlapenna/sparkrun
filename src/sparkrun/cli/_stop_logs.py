@@ -13,22 +13,20 @@ from ._common import (
     _load_recipe,
     _resolve_hosts_or_exit,
     _setup_logging,
+    build_cluster_id_overrides,
     dry_run_option,
     host_options,
+    resolve_hosts_with_metadata_fallback,
 )
 
 
 @click.command()
 @click.argument("target", type=TARGET, required=False, default=None)
 @host_options
-@click.option("--all", "-a", "stop_all", is_flag=True, default=False,
-              help="Stop all sparkrun containers (discovers via docker ps)")
-@click.option("--tp", "--tensor-parallel", "tp_override", type=int, default=None,
-              help="Tensor parallel (to match host trimming from run)")
-@click.option("--port", type=int, default=None,
-              help="Override port (to match run-time override)")
-@click.option("--served-model-name", default=None,
-              help="Override served model name (to match run-time override)")
+@click.option("--all", "-a", "stop_all", is_flag=True, default=False, help="Stop all sparkrun containers (discovers via docker ps)")
+@click.option("--tp", "--tensor-parallel", "tp_override", type=int, default=None, help="Tensor parallel (to match host trimming from run)")
+@click.option("--port", type=int, default=None, help="Override port (to match run-time override)")
+@click.option("--served-model-name", default=None, help="Override served model name (to match run-time override)")
 @dry_run_option
 # @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
@@ -59,6 +57,7 @@ def stop(ctx, target, hosts, hosts_file, cluster_name, stop_all, tp_override, po
         sys.exit(1)
 
     from sparkrun.core.config import SparkrunConfig
+
     config = SparkrunConfig(config_path) if config_path else SparkrunConfig()
 
     if stop_all:
@@ -142,26 +141,20 @@ def _stop_by_cluster_id(target, hosts, hosts_file, cluster_name, config, dry_run
     meta = load_job_metadata(cluster_id, cache_dir=str(config.cache_dir))
 
     # Resolve hosts: CLI flags > metadata > default cluster
-    if hosts or hosts_file or cluster_name:
-        host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
-    elif meta and meta.get("hosts"):
-        host_list = meta["hosts"]
-    else:
-        # No metadata — try default cluster / config hosts
-        try:
-            host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
-        except SystemExit:
-            click.echo(
-                "Error: No job metadata for '%s' and no hosts specified.\n"
-                "  Specify hosts with --hosts or --cluster, or run from the machine that launched the job."
-                % target, err=True,
-            )
-            sys.exit(1)
+    host_list = resolve_hosts_with_metadata_fallback(
+        hosts,
+        hosts_file,
+        cluster_name,
+        config,
+        meta,
+        target,
+    )
 
     ssh_kwargs = build_ssh_kwargs(config)
     container_names = enumerate_cluster_containers(cluster_id, len(host_list))
 
     from sparkrun.utils import is_local_host
+
     is_local = len(host_list) == 1 and is_local_host(host_list[0])
     if is_local:
         cleanup_containers_local(container_names, dry_run=dry_run)
@@ -192,7 +185,10 @@ def _stop_recipe(recipe_name, hosts, hosts_file, cluster_name, config, tp_overri
     # Apply runtime-aware host trimming to match what 'run' used for cluster_id
     try:
         host_list = _apply_node_trimming(
-            host_list, recipe, tp_override=tp_override, runtime=runtime,
+            host_list,
+            recipe,
+            tp_override=tp_override,
+            runtime=runtime,
         )
     except ValueError as e:
         click.echo("Error: %s" % e, err=True)
@@ -203,18 +199,15 @@ def _stop_recipe(recipe_name, hosts, hosts_file, cluster_name, config, tp_overri
     from sparkrun.orchestration.job_metadata import generate_cluster_id
 
     # Build overrides from --port and --served-model-name so cluster_id matches the run
-    overrides = {}
-    if port is not None:
-        overrides["port"] = port
-    if served_model_name is not None:
-        overrides["served_model_name"] = served_model_name
-
-    cluster_id = generate_cluster_id(recipe, host_list, overrides=overrides if overrides else None)
+    cluster_id = generate_cluster_id(
+        recipe, host_list, overrides=build_cluster_id_overrides(port=port, served_model_name=served_model_name)
+    )
     ssh_kwargs = build_ssh_kwargs(config)
 
     container_names = enumerate_cluster_containers(cluster_id, len(host_list))
 
     from sparkrun.utils import is_local_host
+
     is_local = len(host_list) == 1 and is_local_host(host_list[0])
     if is_local:
         cleanup_containers_local(container_names, dry_run=dry_run)
@@ -258,6 +251,7 @@ def logs_cmd(ctx, target, hosts, hosts_file, cluster_name, tp_override, port, se
     if _is_cluster_id(target) is not None:
         cluster_id = _is_cluster_id(target)
         from sparkrun.orchestration.job_metadata import load_job_metadata
+
         meta = load_job_metadata(cluster_id, cache_dir=str(config.cache_dir))
 
         # Resolve runtime — from metadata if available, otherwise need hosts
@@ -273,20 +267,15 @@ def logs_cmd(ctx, target, hosts, hosts_file, cluster_name, tp_override, port, se
             runtime = None
 
         # Resolve hosts: CLI flags > metadata > default cluster
-        if hosts or hosts_file or cluster_name:
-            host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, v)
-        elif meta and meta.get("hosts"):
-            host_list = meta["hosts"]
-        else:
-            try:
-                host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, v)
-            except SystemExit:
-                click.echo(
-                    "Error: No job metadata for '%s' and no hosts specified.\n"
-                    "  Specify hosts with --hosts or --cluster, or run from the machine that launched the job."
-                    % target, err=True,
-                )
-                sys.exit(1)
+        host_list = resolve_hosts_with_metadata_fallback(
+            hosts,
+            hosts_file,
+            cluster_name,
+            config,
+            meta,
+            target,
+            v,
+        )
 
         if runtime is not None:
             runtime.follow_logs(
@@ -299,6 +288,7 @@ def logs_cmd(ctx, target, hosts, hosts_file, cluster_name, tp_override, port, se
             # No metadata / unknown runtime — fall back to generic docker logs
             from sparkrun.orchestration.primitives import build_ssh_kwargs
             from sparkrun.orchestration.ssh import stream_remote_logs
+
             ssh_kwargs = build_ssh_kwargs(config)
             container_name = cluster_id + "_head" if len(host_list) > 1 else cluster_id + "_solo"
             stream_remote_logs(host_list[0], container_name, tail=tail, **ssh_kwargs)
@@ -323,20 +313,19 @@ def logs_cmd(ctx, target, hosts, hosts_file, cluster_name, tp_override, port, se
     # Apply runtime-aware host trimming to match what 'run' used for cluster_id
     try:
         host_list = _apply_node_trimming(
-            host_list, recipe, tp_override=tp_override, runtime=runtime,
+            host_list,
+            recipe,
+            tp_override=tp_override,
+            runtime=runtime,
         )
     except ValueError as e:
         click.echo("Error: %s" % e, err=True)
         sys.exit(1)
 
     # Build overrides from --port and --served-model-name so cluster_id matches the run
-    overrides = {}
-    if port is not None:
-        overrides["port"] = port
-    if served_model_name is not None:
-        overrides["served_model_name"] = served_model_name
-
-    cluster_id = generate_cluster_id(recipe, host_list, overrides=overrides if overrides else None)
+    cluster_id = generate_cluster_id(
+        recipe, host_list, overrides=build_cluster_id_overrides(port=port, served_model_name=served_model_name)
+    )
 
     runtime.follow_logs(
         hosts=host_list,

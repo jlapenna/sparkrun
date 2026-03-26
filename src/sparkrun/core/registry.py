@@ -71,7 +71,7 @@ FALLBACK_DEFAULT_REGISTRIES = [
     ),
     RegistryEntry(
         name="eugr",
-        url='https://github.com/eugr/spark-vllm-docker',
+        url="https://github.com/eugr/spark-vllm-docker",
         subpath="recipes",
         description="Official eugr/spark-vllm-docker repo recipes",
         visible=True,
@@ -95,28 +95,40 @@ FALLBACK_DEFAULT_REGISTRIES = [
 # Git URLs whose .sparkrun/registry.yaml manifests are used for first-run
 # registry discovery (see RegistryManager._init_defaults_from_manifests).
 DEFAULT_REGISTRIES_GIT = [
-    'https://github.com/dbotwinick/sparkrun-recipe-registry.git',
-    'https://github.com/spark-arena/recipe-registry.git',
+    "https://github.com/dbotwinick/sparkrun-recipe-registry.git",
+    "https://github.com/spark-arena/recipe-registry.git",
 ]
 
 # List of git URLs for registries that have been superseded and should be cleaned up.
 # Comparison strips trailing .git from entry URLs before matching.
 DEPRECATED_REGISTRIES: list[str] = [
-    'https://github.com/scitrera/oss-spark-run',
+    "https://github.com/scitrera/oss-spark-run",
     # 'https://github.com/eugr/spark-vllm-docker',
 ]
 
 # Reserved name prefixes — only URLs from allowed GitHub orgs may use these.
 # This prevents third-party registries from impersonating official sources.
 RESERVED_NAME_PREFIXES = (
-    'arena', 'spark-arena', 'sparkarena',
-    'sparkrun', 'official', 'experimental', 'transitional', 'community',
-    'eugr', 'dbotwinick', 'raphaelamorim', 'scitrera',
+    "arena",
+    "spark-arena",
+    "sparkarena",
+    "sparkrun",
+    "official",
+    "experimental",
+    "transitional",
+    "community",
+    "eugr",
+    "dbotwinick",
+    "raphaelamorim",
+    "scitrera",
 )
 
 RESERVED_PREFIX_ALLOWED_ORGS = (
-    'spark-arena', 'scitrera',
-    'eugr', 'dbotwinick', 'raphaelamorim',
+    "spark-arena",
+    "scitrera",
+    "eugr",
+    "dbotwinick",
+    "raphaelamorim",
 )
 
 
@@ -147,6 +159,7 @@ def validate_registry_name(name: str, url: str) -> None:
     # Extract GitHub org from URL
     try:
         from urllib.parse import urlparse
+
         parsed = urlparse(url)
         if parsed.hostname and parsed.hostname.lower() in ("github.com", "www.github.com"):
             # Path is like /org/repo or /org/repo.git
@@ -160,8 +173,7 @@ def validate_registry_name(name: str, url: str) -> None:
 
     allowed = ", ".join(RESERVED_PREFIX_ALLOWED_ORGS)
     raise RegistryError(
-        "Registry name %r uses reserved prefix %r. "
-        "Only GitHub organizations [%s] may use this prefix." % (name, matched_prefix, allowed)
+        "Registry name %r uses reserved prefix %r. Only GitHub organizations [%s] may use this prefix." % (name, matched_prefix, allowed)
     )
 
 
@@ -180,9 +192,7 @@ class RegistryManager:
             cache_root: Optional cache directory, defaults to ~/.cache/sparkrun/registries
         """
         self.config_root = Path(config_root)
-        self.cache_root = (
-            Path(cache_root) if cache_root else Path.home() / ".cache/sparkrun/registries"
-        )
+        self.cache_root = Path(cache_root) if cache_root else Path.home() / ".cache/sparkrun/registries"
         self.config_root.mkdir(parents=True, exist_ok=True)
         self.cache_root.mkdir(parents=True, exist_ok=True)
         self._manifest_discovery_attempted = False
@@ -333,7 +343,8 @@ class RegistryManager:
                 if self._is_deprecated_url(entry.url):
                     logger.warning(
                         "Filtering deprecated registry %r (url: %s) from config",
-                        entry.name, entry.url,
+                        entry.name,
+                        entry.url,
                     )
                 else:
                     filtered.append(entry)
@@ -372,6 +383,7 @@ class RegistryManager:
     def _git_env() -> dict[str, str]:
         """Return environment variables for non-interactive git operations."""
         import os
+
         env = os.environ.copy()
         # Prevent git from prompting for credentials — fail immediately instead
         env["GIT_TERMINAL_PROMPT"] = "0"
@@ -383,6 +395,7 @@ class RegistryManager:
         Uses a hash of the URL to create a shared clone location.
         """
         import hashlib
+
         url_hash = hashlib.sha256(url.encode()).hexdigest()[:12]
         return self.cache_root / ("_url_%s" % url_hash)
 
@@ -493,6 +506,7 @@ class RegistryManager:
         # Remove old per-registry dir if it's a real directory (not a symlink)
         if per_registry_dir.exists() and not per_registry_dir.is_symlink():
             import shutil
+
             shutil.rmtree(per_registry_dir)
 
         # Create symlink: per_registry_dir -> shared_dir
@@ -527,8 +541,12 @@ class RegistryManager:
                 sparse_paths = self._build_sparse_paths(entry)
                 subprocess.run(
                     ["git", "-C", str(cache_dir), "sparse-checkout", "set"] + sparse_paths,
-                    capture_output=True, text=True, timeout=30,
-                    check=False, stdin=subprocess.DEVNULL, env=git_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                    stdin=subprocess.DEVNULL,
+                    env=git_env,
                 )
 
                 # Fetch + hard reset to ensure deleted files are removed
@@ -543,9 +561,7 @@ class RegistryManager:
                     env=git_env,
                 )
                 if result.returncode != 0:
-                    logger.debug(
-                        "Git fetch failed for %s: %s", entry.name, result.stderr
-                    )
+                    logger.debug("Git fetch failed for %s: %s", entry.name, result.stderr)
                     return False
                 result = subprocess.run(
                     ["git", "-C", str(cache_dir), "reset", "--hard", "FETCH_HEAD"],
@@ -557,9 +573,7 @@ class RegistryManager:
                     env=git_env,
                 )
                 if result.returncode != 0:
-                    logger.debug(
-                        "Git reset failed for %s: %s", entry.name, result.stderr
-                    )
+                    logger.debug("Git reset failed for %s: %s", entry.name, result.stderr)
                     return False
             else:
                 # Fresh clone with sparse checkout
@@ -586,9 +600,7 @@ class RegistryManager:
                     env=git_env,
                 )
                 if result.returncode != 0:
-                    logger.debug(
-                        "Git clone failed for %s: %s", entry.name, result.stderr
-                    )
+                    logger.debug("Git clone failed for %s: %s", entry.name, result.stderr)
                     return False
 
                 # Configure sparse checkout for all subpaths
@@ -600,7 +612,8 @@ class RegistryManager:
                         str(cache_dir),
                         "sparse-checkout",
                         "set",
-                    ] + sparse_paths,
+                    ]
+                    + sparse_paths,
                     capture_output=True,
                     text=True,
                     timeout=30,
@@ -801,6 +814,7 @@ class RegistryManager:
                 cache_dir = self._cache_dir(entry.name)
                 if cache_dir.exists():
                     import shutil
+
                     if cache_dir.is_symlink():
                         cache_dir.unlink()
                     else:
@@ -816,6 +830,7 @@ class RegistryManager:
             # Clean up orphaned shared clones: if no remaining registry
             # references a deprecated URL, remove the shared _url_* dir.
             import shutil
+
             remaining_urls = {e.url for e in remaining}
             for dep_url in deprecated_urls:
                 if dep_url not in remaining_urls:
@@ -940,9 +955,9 @@ class RegistryManager:
         raise RegistryError(f"Registry {name!r} not found")
 
     def update(
-            self,
-            name: str | None = None,
-            progress: Callable[[str, bool], None] | None = None,
+        self,
+        name: str | None = None,
+        progress: Callable[[str, bool], None] | None = None,
     ) -> dict[str, bool]:
         """Update one or all registries.
 
@@ -1026,9 +1041,7 @@ class RegistryManager:
             if recipe_dir:
                 paths.append(recipe_dir)
             else:
-                logger.debug(
-                    "Registry %s not cached or recipe path not found", entry.name
-                )
+                logger.debug("Registry %s not cached or recipe path not found", entry.name)
 
         return paths
 
@@ -1215,12 +1228,14 @@ class RegistryManager:
                     continue
                 runtime = runtime_dir.name
                 for f in sorted(runtime_dir.rglob("*.json")):
-                    configs.append({
-                        "registry": entry.name,
-                        "runtime": runtime,
-                        "file": f.name,
-                        "path": str(f),
-                    })
+                    configs.append(
+                        {
+                            "registry": entry.name,
+                            "runtime": runtime,
+                            "file": f.name,
+                            "path": str(f),
+                        }
+                    )
         return configs
 
     def _benchmark_dir(self, entry: RegistryEntry) -> Path | None:
@@ -1239,7 +1254,9 @@ class RegistryManager:
         return benchmark_path if benchmark_path.exists() else None
 
     def find_benchmark_profile_in_registries(
-            self, name: str, include_hidden: bool = False,
+        self,
+        name: str,
+        include_hidden: bool = False,
     ) -> list[tuple[str, Path]]:
         """Find benchmark profile by file stem across registries.
 
@@ -1266,7 +1283,9 @@ class RegistryManager:
         return matches
 
     def list_benchmark_profiles(
-            self, registry_name: str | None = None, include_hidden: bool = False,
+        self,
+        registry_name: str | None = None,
+        include_hidden: bool = False,
     ) -> list[dict[str, Any]]:
         """List all benchmark profiles across registries.
 
@@ -1310,11 +1329,13 @@ class RegistryManager:
                             profile_name = metadata["name"]
                 except Exception:
                     pass
-                profiles.append({
-                    "registry": entry.name,
-                    "file": f.stem,
-                    "name": profile_name,
-                    "description": description,
-                    "path": str(f),
-                })
+                profiles.append(
+                    {
+                        "registry": entry.name,
+                        "file": f.stem,
+                        "name": profile_name,
+                        "description": description,
+                        "path": str(f),
+                    }
+                )
         return profiles

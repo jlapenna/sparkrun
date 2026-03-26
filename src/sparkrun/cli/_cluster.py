@@ -12,6 +12,7 @@ from ._common import (
     _get_cluster_manager,
     _is_cluster_id,
     _resolve_hosts_or_exit,
+    build_cluster_id_overrides,
     dry_run_option,
     host_options,
 )
@@ -31,15 +32,20 @@ def cluster(ctx):
 @click.option("-d", "--description", default="", help="Cluster description")
 @click.option("--user", "-u", default=None, help="SSH username for this cluster")
 @click.option("--cache-dir", default=None, help="HuggingFace cache directory for this cluster")
-@click.option("--transfer-mode", default=None,
-              type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
-              help="Resource transfer mode (auto, local, push, delegated)")
-@click.option("--transfer-interface", default=None,
-              type=click.Choice(["auto", "cx7", "mgmt"], case_sensitive=False),
-              help="Network interface for transfers (auto=default, cx7=InfiniBand, mgmt=management)")
+@click.option(
+    "--transfer-mode",
+    default=None,
+    type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
+    help="Resource transfer mode (auto, local, push, delegated)",
+)
+@click.option(
+    "--transfer-interface",
+    default=None,
+    type=click.Choice(["auto", "cx7", "mgmt"], case_sensitive=False),
+    help="Network interface for transfers (auto=default, cx7=InfiniBand, mgmt=management)",
+)
 @click.pass_context
-def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode,
-                   transfer_interface):
+def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode, transfer_interface):
     """Create a new named cluster."""
     from sparkrun.core.cluster_manager import ClusterError
     from sparkrun.core.hosts import parse_hosts_file
@@ -58,8 +64,9 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
 
     mgr = _get_cluster_manager()
     try:
-        mgr.create(name, host_list, description, user=user, cache_dir=cache_dir,
-                   transfer_mode=transfer_mode, transfer_interface=transfer_interface)
+        mgr.create(
+            name, host_list, description, user=user, cache_dir=cache_dir, transfer_mode=transfer_mode, transfer_interface=transfer_interface
+        )
         click.echo(f"Cluster '{name}' created with {len(host_list)} host(s).")
     except ClusterError as e:
         click.echo(f"Error: {e}", err=True)
@@ -75,15 +82,20 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
 @click.option("-d", "--description", default=None, help="Cluster description")
 @click.option("--user", "-u", default=None, help="SSH username for this cluster")
 @click.option("--cache-dir", default=None, help="HuggingFace cache directory for this cluster")
-@click.option("--transfer-mode", default=None,
-              type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
-              help="Resource transfer mode (auto, local, push, delegated)")
-@click.option("--transfer-interface", default=None,
-              type=click.Choice(["auto", "cx7", "mgmt"], case_sensitive=False),
-              help="Network interface for transfers (auto=default, cx7=InfiniBand, mgmt=management)")
+@click.option(
+    "--transfer-mode",
+    default=None,
+    type=click.Choice(["auto", "local", "push", "delegated"], case_sensitive=False),
+    help="Resource transfer mode (auto, local, push, delegated)",
+)
+@click.option(
+    "--transfer-interface",
+    default=None,
+    type=click.Choice(["auto", "cx7", "mgmt"], case_sensitive=False),
+    help="Network interface for transfers (auto=default, cx7=InfiniBand, mgmt=management)",
+)
 @click.pass_context
-def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host, description, user,
-                   cache_dir, transfer_mode, transfer_interface):
+def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host, description, user, cache_dir, transfer_mode, transfer_interface):
     """Update an existing cluster.
 
     \b
@@ -120,12 +132,20 @@ def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host, descript
     transfer_interface_provided = ctx.get_parameter_source("transfer_interface") == ParameterSource.COMMANDLINE
 
     has_host_change = host_list is not None or add_host or remove_host
-    if (not has_host_change and description is None and not user_provided
-            and not cache_dir_provided and not transfer_mode_provided
-            and not transfer_interface_provided):
-        click.echo("Error: Nothing to update. Provide --hosts, --hosts-file, --add-host, "
-                   "--remove-host, -d, --user, --cache-dir, --transfer-mode, "
-                   "or --transfer-interface.", err=True)
+    if (
+        not has_host_change
+        and description is None
+        and not user_provided
+        and not cache_dir_provided
+        and not transfer_mode_provided
+        and not transfer_interface_provided
+    ):
+        click.echo(
+            "Error: Nothing to update. Provide --hosts, --hosts-file, --add-host, "
+            "--remove-host, -d, --user, --cache-dir, --transfer-mode, "
+            "or --transfer-interface.",
+            err=True,
+        )
         sys.exit(1)
 
     mgr = _get_cluster_manager()
@@ -205,7 +225,7 @@ def cluster_list(ctx):
         # Break hosts into lines of 2 addresses each
         host_lines = []
         for i in range(0, len(c.hosts), 2):
-            host_lines.append(", ".join(c.hosts[i:i + 2]))
+            host_lines.append(", ".join(c.hosts[i : i + 2]))
         first_hosts = host_lines[0] if host_lines else ""
         click.echo(f"{marker}{c.name:<20} {first_hosts:<40} {desc:<30}")
         for extra in host_lines[1:]:
@@ -315,8 +335,7 @@ def cluster_default(ctx):
 @dry_run_option
 @click.option("--interval", "-i", default=2, type=int, help="Sampling interval in seconds")
 @click.option("--simple", is_flag=True, default=False, help="Use plain-text output instead of TUI")
-@click.option("--json", "output_json", is_flag=True, default=False,
-              help="Stream updates as newline-delimited JSON objects")
+@click.option("--json", "output_json", is_flag=True, default=False, help="Stream updates as newline-delimited JSON objects")
 @click.pass_context
 def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, simple, output_json):
     """Live-monitor CPU, RAM, and GPU metrics across cluster hosts.
@@ -362,13 +381,14 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
         def _render_json(states):
             """Emit one JSON object per update tick with all host data."""
             import time as _time
+
             snapshot = {"timestamp": _time.time(), "hosts": {}}
             for host in host_list:
                 state = states.get(host)
                 if state is None or state.latest is None:
-                    snapshot["hosts"][host] = {"status": "error", "error": state.error} if (
-                            state and state.error
-                    ) else {"status": "connecting"}
+                    snapshot["hosts"][host] = (
+                        {"status": "error", "error": state.error} if (state and state.error) else {"status": "connecting"}
+                    )
                     continue
                 entry = asdict(state.latest)
                 if state.error:
@@ -450,16 +470,14 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, config_path=No
     ssh_kwargs = build_ssh_kwargs(config)
 
     if dry_run:
-        docker_cmd = (
-            "docker ps --filter 'name=sparkrun_' "
-            "--format '{{.Names}}\\t{{.Status}}\\t{{.Image}}'"
-        )
+        docker_cmd = "docker ps --filter 'name=sparkrun_' --format '{{.Names}}\\t{{.Status}}\\t{{.Image}}'"
         click.echo("[dry-run] Would run on %d host(s): %s" % (len(host_list), docker_cmd))
         return
 
     # Query and classify — business logic lives in cluster_manager
     result = query_cluster_status(
-        host_list, ssh_kwargs=ssh_kwargs,
+        host_list,
+        ssh_kwargs=ssh_kwargs,
         cache_dir=str(config.cache_dir),
     )
 
@@ -486,6 +504,7 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, config_path=No
     # Display solo / ungrouped containers (same format as cluster jobs)
     if result.solo_entries:
         from sparkrun.orchestration.job_metadata import load_job_metadata
+
         for host, name, status, image in result.solo_entries:
             cid = name.removesuffix("_solo")
             meta = load_job_metadata(cid, cache_dir=str(config.cache_dir)) or {}
@@ -526,9 +545,7 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, config_path=No
                 extra = f"  image={op['image']}"
             click.echo(f"  {label}: {detail} ({elapsed_str}){extra}")
         click.echo()
-        click.echo(
-            "  Note: pending operations will consume VRAM once launched."
-        )
+        click.echo("  Note: pending operations will consume VRAM once launched.")
         click.echo()
 
     # Summary
@@ -543,18 +560,17 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, config_path=No
 @cluster.command("check-job")
 @click.argument("target", type=TARGET)
 @host_options
-@click.option("--tp", "--tensor-parallel", "tp_override", type=int, default=None,
-              help="Tensor parallelism override (used for cluster_id generation)")
+@click.option(
+    "--tp", "--tensor-parallel", "tp_override", type=int, default=None, help="Tensor parallelism override (used for cluster_id generation)"
+)
 @click.option("--port", type=int, default=None, help="Port override (used for cluster_id generation and health check)")
 @click.option("--served-model-name", default=None, help="Served model name override (used for cluster_id generation)")
-@click.option("--check-http-models", is_flag=True, default=False,
-              help="Also verify the inference server responds to health checks at /v1/models")
-@click.option("--json", "output_json", is_flag=True, default=False,
-              help="Output result as JSON")
+@click.option(
+    "--check-http-models", is_flag=True, default=False, help="Also verify the inference server responds to health checks at /v1/models"
+)
+@click.option("--json", "output_json", is_flag=True, default=False, help="Output result as JSON")
 @click.pass_context
-def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
-                      tp_override, port, served_model_name,
-                      check_http_models, output_json):
+def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override, port, served_model_name, check_http_models, output_json):
     """Check if a sparkrun job is running.
 
     TARGET can be a cluster ID (sparkrun_<hex>) or a recipe name.
@@ -584,9 +600,10 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
         # --- Cluster ID path ---
         cid = _is_cluster_id(target)
         from sparkrun.orchestration.job_metadata import load_job_metadata
+
         meta = load_job_metadata(cid, cache_dir=str(config.cache_dir))
 
-        # Resolve hosts: CLI flags > metadata > default cluster
+        # Resolve hosts: CLI flags > metadata > default cluster (None means "let check_job_running decide")
         host_list = None
         if hosts or hosts_file or cluster_name:
             host_list, _ = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
@@ -594,9 +611,12 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
             host_list = meta["hosts"]
 
         status = check_job_running(
-            cluster_id=cid, hosts=host_list,
-            ssh_kwargs=ssh_kwargs, cache_dir=str(config.cache_dir),
-            check_http_models=check_http_models, port=port,
+            cluster_id=cid,
+            hosts=host_list,
+            ssh_kwargs=ssh_kwargs,
+            cache_dir=str(config.cache_dir),
+            check_http_models=check_http_models,
+            port=port,
         )
     else:
         # --- Recipe path ---
@@ -616,26 +636,27 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name,
 
         try:
             host_list = _apply_node_trimming(
-                host_list, recipe, tp_override=tp_override, runtime=runtime, quiet=True,
+                host_list,
+                recipe,
+                tp_override=tp_override,
+                runtime=runtime,
+                quiet=True,
             )
         except ValueError as e:
             click.echo("Error: %s" % e, err=True)
             sys.exit(1)
 
         # Build overrides for cluster_id generation
-        overrides = {}
-        if port is not None:
-            overrides["port"] = port
-        if served_model_name is not None:
-            overrides["served_model_name"] = served_model_name
-        if tp_override is not None:
-            overrides["tensor_parallel"] = tp_override
-
-        cid = generate_cluster_id(recipe, host_list, overrides=overrides or None)
+        cid = generate_cluster_id(
+            recipe, host_list, overrides=build_cluster_id_overrides(port=port, served_model_name=served_model_name, tp_override=tp_override)
+        )
         status = check_job_running(
-            cluster_id=cid, hosts=host_list,
-            ssh_kwargs=ssh_kwargs, cache_dir=str(config.cache_dir),
-            check_http_models=check_http_models, port=port,
+            cluster_id=cid,
+            hosts=host_list,
+            ssh_kwargs=ssh_kwargs,
+            cache_dir=str(config.cache_dir),
+            check_http_models=check_http_models,
+            port=port,
         )
 
     # --- Output ---

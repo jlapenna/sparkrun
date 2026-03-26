@@ -163,9 +163,7 @@ def resolve_hosts(
         try:
             cluster = cluster_manager.get(cluster_name)
             resolved = cluster.hosts
-            logger.debug(
-                "Resolved %d hosts from cluster '%s'", len(resolved), cluster_name
-            )
+            logger.debug("Resolved %d hosts from cluster '%s'", len(resolved), cluster_name)
             return resolved
         except ClusterError as e:
             logger.warning("Failed to resolve cluster '%s': %s", cluster_name, e)

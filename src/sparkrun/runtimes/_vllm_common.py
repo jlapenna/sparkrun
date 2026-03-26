@@ -13,11 +13,13 @@ class VllmMixin:
     def get_extra_volumes(self) -> dict[str, str]:
         """Mount vLLM tuning configs if available."""
         from sparkrun.tuning.vllm import get_vllm_tuning_volumes
+
         return get_vllm_tuning_volumes() or {}
 
     def get_extra_env(self) -> dict[str, str]:
         """Set VLLM_TUNED_CONFIG_FOLDER if tuning configs exist."""
         from sparkrun.tuning.vllm import get_vllm_tuning_env
+
         env = super().get_extra_env()
         env.update(get_vllm_tuning_env() or {})
         return env
@@ -50,6 +52,8 @@ VLLM_FLAG_MAP = {
 
 # Boolean flags (present = True, absent = False)
 VLLM_BOOL_FLAGS = {
-    "enforce_eager", "enable_prefix_caching", "trust_remote_code",
+    "enforce_eager",
+    "enable_prefix_caching",
+    "trust_remote_code",
     "enable_auto_tool_choice",
 }

@@ -31,11 +31,11 @@ class RunDiagnosticsCollector:
     """
 
     def __init__(
-            self,
-            output_path: str,
-            hosts: list[str],
-            ssh_kwargs: dict,
-            dry_run: bool = False,
+        self,
+        output_path: str,
+        hosts: list[str],
+        ssh_kwargs: dict,
+        dry_run: bool = False,
     ):
         self._writer = NDJSONWriter(output_path)
         self._hosts = hosts
@@ -98,10 +98,13 @@ class RunDiagnosticsCollector:
 
     def emit_serve_command(self, command: str, container_image: str) -> None:
         """Emit ``run_serve_command`` with the generated command and image."""
-        self._writer.emit("run_serve_command", {
-            "command": command,
-            "container_image": container_image,
-        })
+        self._writer.emit(
+            "run_serve_command",
+            {
+                "command": command,
+                "container_image": container_image,
+            },
+        )
 
     def phase_start(self, name: str) -> None:
         """Record the start of a named phase."""
@@ -137,12 +140,15 @@ class RunDiagnosticsCollector:
 
     def emit_health_check(self, url: str, attempt: int, status_code: int | None, success: bool) -> None:
         """Emit ``run_health_check`` for one health-check attempt."""
-        self._writer.emit("run_health_check", {
-            "url": url,
-            "attempt": attempt,
-            "status_code": status_code,
-            "success": success,
-        })
+        self._writer.emit(
+            "run_health_check",
+            {
+                "url": url,
+                "attempt": attempt,
+                "status_code": status_code,
+                "success": success,
+            },
+        )
 
     def capture_container_logs(self, host: str, container: str, ssh_kwargs: dict, tail: int = 200) -> None:
         """Capture tail of container logs and emit as ``run_container_logs``."""
@@ -151,12 +157,15 @@ class RunDiagnosticsCollector:
         script = "docker logs --tail %d %s 2>&1 || echo '[no logs]'" % (tail, container)
         result = run_remote_script(host, script, dry_run=self._dry_run, **ssh_kwargs)
         lines = result.stdout.strip().splitlines() if result.success else []
-        self._writer.emit("run_container_logs", {
-            "host": host,
-            "container": container,
-            "lines": lines,
-            "tail": tail,
-        })
+        self._writer.emit(
+            "run_container_logs",
+            {
+                "host": host,
+                "container": container,
+                "lines": lines,
+                "tail": tail,
+            },
+        )
 
     def emit_error(self, phase: str, error: str | Exception, tb: str | None = None) -> None:
         """Emit ``run_error`` with phase context and optional traceback."""
@@ -164,11 +173,14 @@ class RunDiagnosticsCollector:
         if tb is None and isinstance(error, Exception):
             tb = traceback.format_exception(type(error), error, error.__traceback__)
             tb = "".join(tb)
-        self._writer.emit("run_error", {
-            "phase": phase,
-            "error": str(error),
-            "traceback": tb,
-        })
+        self._writer.emit(
+            "run_error",
+            {
+                "phase": phase,
+                "error": str(error),
+                "traceback": tb,
+            },
+        )
 
     def emit_summary(self) -> None:
         """Emit ``run_summary`` with total duration and phase timings."""
@@ -181,11 +193,14 @@ class RunDiagnosticsCollector:
                 "duration_seconds": round(end - start, 2),
                 "error": info.get("error"),
             }
-        self._writer.emit("run_summary", {
-            "total_duration_seconds": round(total, 2),
-            "phases": phases,
-            "success": self._success,
-        })
+        self._writer.emit(
+            "run_summary",
+            {
+                "total_duration_seconds": round(total, 2),
+                "phases": phases,
+                "success": self._success,
+            },
+        )
 
     def __enter__(self) -> RunDiagnosticsCollector:
         return self.open()

@@ -62,7 +62,9 @@ def get_vllm_tuning_env() -> dict[str, str] | None:
         tuning configs are available.
     """
     return _get_tuning_env(
-        get_vllm_tuning_volumes, "VLLM_TUNED_CONFIG_FOLDER", VLLM_TUNING_CONTAINER_PATH,
+        get_vllm_tuning_volumes,
+        "VLLM_TUNED_CONFIG_FOLDER",
+        VLLM_TUNING_CONTAINER_PATH,
     )
 
 

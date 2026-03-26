@@ -38,19 +38,23 @@ def _try_fix_remote_permissions(
     a warning is logged with a hint about ``--save-sudo``.
     """
     script = (
-        'set -euo pipefail\n'
+        "set -euo pipefail\n"
         'CACHE_DIR="{cache_dir}"\n'
         '[ -d "$CACHE_DIR" ] || exit 0\n'
         'OWNER=$(stat -c "%U" "$CACHE_DIR" 2>/dev/null || echo "")\n'
-        'ME=$(id -un)\n'
+        "ME=$(id -un)\n"
         '[ "$OWNER" = "$ME" ] && exit 0\n'
         'sudo -n /usr/bin/chown -R "$ME" "$CACHE_DIR" 2>/dev/null\n'
     ).format(cache_dir=cache_dir)
 
     results = run_remote_scripts_parallel(
-        hosts, script,
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
-        timeout=30, dry_run=dry_run,
+        hosts,
+        script,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        timeout=30,
+        dry_run=dry_run,
     )
 
     failed = [r.host for r in results if not r.success]
@@ -127,8 +131,11 @@ def distribute_model_from_local(
 
     # Step 2: best-effort fix of remote cache ownership before rsync
     _try_fix_remote_permissions(
-        remote_cache, hosts,
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
+        remote_cache,
+        hosts,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
         dry_run=dry_run,
     )
 
@@ -136,9 +143,14 @@ def distribute_model_from_local(
     local_model_path = model_cache_path(model_id, local_cache)
     remote_model_path = model_cache_path(model_id, remote_cache)
     results = run_rsync_parallel(
-        local_model_path, xfer, remote_model_path,
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
-        timeout=timeout, dry_run=dry_run,
+        local_model_path,
+        xfer,
+        remote_model_path,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        timeout=timeout,
+        dry_run=dry_run,
     )
 
     # Map transfer IPs back to management hosts for failure reporting
@@ -193,28 +205,34 @@ def distribute_model_from_head(
 
     cache = resolve_cache_dir(cache_dir)
     head = hosts[0]
-    logger.info("Distributing model '%s' from head (%s) to %d host(s)",
-                model_id, head, len(hosts))
+    logger.info("Distributing model '%s' from head (%s) to %d host(s)", model_id, head, len(hosts))
 
     # Build ensure script (download model on head)
     from sparkrun.models.download import is_gguf_model, parse_gguf_model_spec
+
     revision_flag = "--revision %s " % revision if revision else ""
     if is_gguf_model(model_id):
         repo_id, quant = parse_gguf_model_spec(model_id)
         ensure_script = read_script("model_sync_gguf.sh").format(
-            repo_id=repo_id, quant=quant or "", cache=cache,
+            repo_id=repo_id,
+            quant=quant or "",
+            cache=cache,
             revision_flag=revision_flag,
         )
     else:
         ensure_script = read_script("model_sync.sh").format(
-            model_id=model_id, cache=cache, revision_flag=revision_flag,
+            model_id=model_id,
+            cache=cache,
+            revision_flag=revision_flag,
         )
 
     # Build distribute script (rsync from head to workers)
     targets = worker_transfer_hosts or hosts[1:]
     model_path = model_cache_path(model_id, cache)
     ssh_opts = build_ssh_opts_string(
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
     )
     dist_script = read_script("model_distribute.sh").format(
         model_path=model_path,
@@ -224,10 +242,14 @@ def distribute_model_from_head(
     )
 
     return _distribute_from_head(
-        head=head, hosts=hosts,
+        head=head,
+        hosts=hosts,
         ensure_script=ensure_script,
         distribute_script=dist_script,
         resource_label="Model '%s'" % model_id,
-        ssh_user=ssh_user, ssh_key=ssh_key, ssh_options=ssh_options,
-        timeout=timeout, dry_run=dry_run,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        ssh_options=ssh_options,
+        timeout=timeout,
+        dry_run=dry_run,
     )

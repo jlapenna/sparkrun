@@ -25,10 +25,7 @@ logger = logging.getLogger(__name__)
 EUGR_REPO_URL = "https://github.com/eugr/spark-vllm-docker.git"
 
 # Build-index URL for eugr nightly builds (used for long-term image resolution)
-EUGR_BUILD_INDEX_URL = (
-    "https://raw.githubusercontent.com/spark-arena/dgx-vllm"
-    "/refs/heads/main/build-index.json"
-)
+EUGR_BUILD_INDEX_URL = "https://raw.githubusercontent.com/spark-arena/dgx-vllm/refs/heads/main/build-index.json"
 EUGR_BUILD_INDEX_CACHE_NAME = "eugr-vllm-build-index.json"
 
 # GHCR image names for standard eugr nightly variants
@@ -52,8 +49,8 @@ _VLLM_RELEASE_TAG = "prebuilt-vllm-current"
 _FLASHINFER_RELEASE_TAG = "prebuilt-flashinfer-current"
 
 # Regexes to extract commit hashes from GitHub release names
-_RE_VLLM_COMMIT = re.compile(r'\+g([0-9a-f]{6,})\.')
-_RE_FLASHINFER_COMMIT = re.compile(r'\([\d.]+\w*-([0-9a-f]{6,})-d\d{8}\)')
+_RE_VLLM_COMMIT = re.compile(r"\+g([0-9a-f]{6,})\.")
+_RE_FLASHINFER_COMMIT = re.compile(r"\([\d.]+\w*-([0-9a-f]{6,})-d\d{8}\)")
 
 # build_args values that are eligible for cache skip checks
 _CACHEABLE_BUILD_ARGS: list[list[str]] = [[], ["--tf5"]]
@@ -129,14 +126,14 @@ class EugrBuilder(BuilderPlugin):
         return self
 
     def prepare_image(
-            self,
-            image: str,
-            recipe: Recipe,
-            hosts: list[str],
-            config: SparkrunConfig | None = None,
-            dry_run: bool = False,
-            transfer_mode: str = "local",
-            ssh_kwargs: dict | None = None,
+        self,
+        image: str,
+        recipe: Recipe,
+        hosts: list[str],
+        config: SparkrunConfig | None = None,
+        dry_run: bool = False,
+        transfer_mode: str = "local",
+        ssh_kwargs: dict | None = None,
     ) -> str:
         """Build container image and inject mod pre_exec commands.
 
@@ -172,7 +169,7 @@ class EugrBuilder(BuilderPlugin):
         if image.strip() == GHCR_EUGR_NIGHTLY_TF5 + ":latest" and (build_args == ["--tf5"] or not build_args):
             # use sparkrun prefixed names to avoid collisions with other user images
             image = LOCAL_EUGR_NIGHTLY_TF5
-            build_args = ['--tf5']
+            build_args = ["--tf5"]
             needs_build = True
             logger.info("Mapped eugr nightly tf5 image to use direct build via container name '%s' (build_args cleared)", image)
         elif image.strip() == GHCR_EUGR_NIGHTLY + ":latest" and not build_args:
@@ -197,6 +194,7 @@ class EugrBuilder(BuilderPlugin):
                         needs_build = True
                 else:
                     from sparkrun.containers.registry import image_exists_locally
+
                     if not image_exists_locally(image):
                         logger.info("eugr image '%s' not found locally; will build", image)
                         needs_build = True
@@ -221,8 +219,8 @@ class EugrBuilder(BuilderPlugin):
             skip_ssh = ssh_kwargs if delegated else None
             if self._can_skip_build(image, build_args, config, host=skip_host, ssh_kwargs=skip_ssh):
                 logger.info(
-                    "Build cache hit — skipping rebuild of '%s' "
-                    "(upstream wheels unchanged)", image,
+                    "Build cache hit — skipping rebuild of '%s' (upstream wheels unchanged)",
+                    image,
                 )
                 needs_build = False
 
@@ -267,11 +265,12 @@ class EugrBuilder(BuilderPlugin):
         everything above it.
         """
         import re
-        for m in re.finditer(r'^[a-z]\w*: ', text, re.MULTILINE):
+
+        for m in re.finditer(r"^[a-z]\w*: ", text, re.MULTILINE):
             # Skip URL-like lines (https: //, http: //)
-            if text[m.start():m.start() + 8].startswith(("https://", "http://")):
+            if text[m.start() : m.start() + 8].startswith(("https://", "http://")):
                 continue
-            return text[m.start():]
+            return text[m.start() :]
         return text
 
     def process_version_info(self, raw: dict[str, str]) -> dict[str, str]:
@@ -281,6 +280,7 @@ class EugrBuilder(BuilderPlugin):
             return {}
         try:
             import yaml
+
             content = self._strip_container_banner(content)
             data = yaml.safe_load(content)
             if not isinstance(data, dict):
@@ -293,10 +293,10 @@ class EugrBuilder(BuilderPlugin):
     # --- Long-term image resolution ---
 
     def resolve_long_term_image(
-            self,
-            container_image: str,
-            runtime_info: dict[str, str],
-            recipe: Recipe,
+        self,
+        container_image: str,
+        runtime_info: dict[str, str],
+        recipe: Recipe,
     ) -> tuple[str, bool]:
         """Resolve an eugr container image to a pinned GHCR nightly tag.
 
@@ -324,14 +324,22 @@ class EugrBuilder(BuilderPlugin):
 
         # Try build-index.json first (fast, cached)
         resolved = self._match_via_build_index(
-            ghcr_image, repo_commit, vllm_hash, flashinfer_hash, recipe,
+            ghcr_image,
+            repo_commit,
+            vllm_hash,
+            flashinfer_hash,
+            recipe,
         )
         if resolved:
             return resolved, True
 
         # Fall back to GHCR API tag enumeration
         resolved = self._match_via_ghcr_api(
-            ghcr_image, ghcr_pkg, repo_commit, vllm_hash, flashinfer_hash,
+            ghcr_image,
+            ghcr_pkg,
+            repo_commit,
+            vllm_hash,
+            flashinfer_hash,
         )
         if resolved:
             return resolved, True
@@ -340,9 +348,9 @@ class EugrBuilder(BuilderPlugin):
         return container_image, False
 
     def _resolve_ghcr_target(
-            self,
-            container_image: str,
-            recipe: Recipe,
+        self,
+        container_image: str,
+        recipe: Recipe,
     ) -> tuple[str, str] | tuple[None, None]:
         """Determine the GHCR image name and package path for resolution.
 
@@ -352,7 +360,7 @@ class EugrBuilder(BuilderPlugin):
         build_args = recipe.runtime_config.get("build_args", [])
 
         # Only resolve standard variants
-        is_tf5 = build_args == ["--tf5"] or ('-tf5' in container_image)
+        is_tf5 = build_args == ["--tf5"] or ("-tf5" in container_image)
         is_plain = not build_args
 
         if not (is_tf5 or is_plain):
@@ -371,12 +379,12 @@ class EugrBuilder(BuilderPlugin):
         return None, None
 
     def _match_via_build_index(
-            self,
-            ghcr_image: str,
-            repo_commit: str,
-            vllm_hash: str,
-            flashinfer_hash: str,
-            recipe: Recipe,
+        self,
+        ghcr_image: str,
+        repo_commit: str,
+        vllm_hash: str,
+        flashinfer_hash: str,
+        recipe: Recipe,
     ) -> str | None:
         """Try to match via the spark-arena build-index.json."""
         from sparkrun.builders._ghcr import fetch_build_index
@@ -388,6 +396,7 @@ class EugrBuilder(BuilderPlugin):
         cache_dir = None
         try:
             from sparkrun.core.config import resolve_cache_dir
+
             cache_dir = Path(resolve_cache_dir(None))
         except Exception:
             pass
@@ -420,12 +429,12 @@ class EugrBuilder(BuilderPlugin):
         return None
 
     def _match_via_ghcr_api(
-            self,
-            ghcr_image: str,
-            ghcr_pkg: str,
-            repo_commit: str,
-            vllm_hash: str,
-            flashinfer_hash: str,
+        self,
+        ghcr_image: str,
+        ghcr_pkg: str,
+        repo_commit: str,
+        vllm_hash: str,
+        flashinfer_hash: str,
     ) -> str | None:
         """Fall back to GHCR API: enumerate tags and check OCI labels."""
         from sparkrun.builders._ghcr import ghcr_list_tags, ghcr_get_labels
@@ -460,10 +469,10 @@ class EugrBuilder(BuilderPlugin):
     # --- Mod -> pre_exec conversion ---
 
     def _inject_mod_pre_exec(
-            self,
-            recipe: Recipe,
-            mods: list[str],
-            source_host: str | None = None,
+        self,
+        recipe: Recipe,
+        mods: list[str],
+        source_host: str | None = None,
     ) -> None:
         """Convert mod entries to pre_exec commands on the recipe.
 
@@ -487,8 +496,8 @@ class EugrBuilder(BuilderPlugin):
             # Strip leading 'mods/' if present — recipes may specify either
             # "fix-something" or "mods/fix-something"; normalise to avoid
             # doubling the path component.
-            clean_name = mod_name.removeprefix('mods/')
-            mod_path = self._repo_dir / 'mods' / clean_name
+            clean_name = mod_name.removeprefix("mods/")
+            mod_path = self._repo_dir / "mods" / clean_name
             mod_basename = Path(clean_name).name
             dest = "/workspace/mods/%s" % mod_basename
 
@@ -501,9 +510,7 @@ class EugrBuilder(BuilderPlugin):
                 copy_entry["source_host"] = source_host
             recipe.pre_exec.append(copy_entry)
             # Add exec entry (run the mod script with WORKSPACE_DIR set)
-            recipe.pre_exec.append(
-                "export WORKSPACE_DIR=$PWD && cd %s && chmod +x run.sh && ./run.sh" % dest
-            )
+            recipe.pre_exec.append("export WORKSPACE_DIR=$PWD && cd %s && chmod +x run.sh && ./run.sh" % dest)
 
         logger.info("Injected %d mod(s) as pre_exec entries", len(mods))
 
@@ -518,6 +525,7 @@ class EugrBuilder(BuilderPlugin):
     def _get_image_id_on_host(image: str, host: str, ssh_kwargs: dict | None = None) -> str | None:
         """Return the Docker image ID on a remote host, or None on failure."""
         from sparkrun.orchestration.primitives import run_script_on_host
+
         script = "docker image inspect --format '{{.Id}}' %s 2>/dev/null" % image
         result = run_script_on_host(host, script, ssh_kwargs=ssh_kwargs, timeout=30)
         if result.success and result.stdout.strip():
@@ -528,6 +536,7 @@ class EugrBuilder(BuilderPlugin):
     def _get_repo_head_on_host(repo_path: str, host: str, ssh_kwargs: dict | None = None) -> str | None:
         """Return ``git rev-parse HEAD`` on a remote host, or None on failure."""
         from sparkrun.orchestration.primitives import run_script_on_host
+
         script = "git -C %s rev-parse HEAD 2>/dev/null" % repo_path
         result = run_script_on_host(host, script, ssh_kwargs=ssh_kwargs, timeout=30)
         if result.success and result.stdout.strip():
@@ -538,17 +547,18 @@ class EugrBuilder(BuilderPlugin):
         """Resolve the cache directory for build cache storage."""
         try:
             from sparkrun.core.config import resolve_cache_dir
+
             return Path(resolve_cache_dir(config.cache_dir if config else None))
         except Exception:
             return None
 
     def _can_skip_build(
-            self,
-            image: str,
-            build_args: list[str],
-            config: SparkrunConfig | None = None,
-            host: str | None = None,
-            ssh_kwargs: dict | None = None,
+        self,
+        image: str,
+        build_args: list[str],
+        config: SparkrunConfig | None = None,
+        host: str | None = None,
+        ssh_kwargs: dict | None = None,
     ) -> bool:
         """Check whether a build can be skipped based on cached metadata.
 
@@ -584,6 +594,7 @@ class EugrBuilder(BuilderPlugin):
             current_id = self._get_image_id_on_host(image, host, ssh_kwargs)
         else:
             from sparkrun.containers.registry import get_image_id
+
             current_id = get_image_id(image)
         if not current_id or current_id != entry.get("image_id"):
             return False
@@ -599,7 +610,8 @@ class EugrBuilder(BuilderPlugin):
             try:
                 result = subprocess.run(
                     ["git", "-C", str(self._repo_dir), "rev-parse", "HEAD"],
-                    capture_output=True, text=True,
+                    capture_output=True,
+                    text=True,
                 )
                 if result.returncode != 0:
                     return False
@@ -622,12 +634,12 @@ class EugrBuilder(BuilderPlugin):
         return True
 
     def _save_build_metadata(
-            self,
-            image: str,
-            build_args: list[str],
-            config: SparkrunConfig | None = None,
-            host: str | None = None,
-            ssh_kwargs: dict | None = None,
+        self,
+        image: str,
+        build_args: list[str],
+        config: SparkrunConfig | None = None,
+        host: str | None = None,
+        ssh_kwargs: dict | None = None,
     ) -> None:
         """Save build metadata to the cache after a successful build.
 
@@ -648,7 +660,8 @@ class EugrBuilder(BuilderPlugin):
                 try:
                     result = subprocess.run(
                         ["git", "-C", str(self._repo_dir), "rev-parse", "HEAD"],
-                        capture_output=True, text=True,
+                        capture_output=True,
+                        text=True,
                     )
                     if result.returncode == 0:
                         repo_commit = result.stdout.strip()
@@ -661,6 +674,7 @@ class EugrBuilder(BuilderPlugin):
         if host:
             try:
                 from sparkrun.orchestration.primitives import run_script_on_host
+
                 script = "docker run --rm %s cat /workspace/build-metadata.yaml" % image
                 r = run_script_on_host(host, script, ssh_kwargs=ssh_kwargs, timeout=30)
                 if r.success and r.stdout.strip():
@@ -673,7 +687,9 @@ class EugrBuilder(BuilderPlugin):
             try:
                 result = subprocess.run(
                     ["docker", "run", "--rm", image, "cat", "/workspace/build-metadata.yaml"],
-                    capture_output=True, text=True, timeout=30,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     info = self.process_version_info({"build_metadata": result.stdout})
@@ -687,6 +703,7 @@ class EugrBuilder(BuilderPlugin):
             image_id = self._get_image_id_on_host(image, host, ssh_kwargs)
         else:
             from sparkrun.containers.registry import get_image_id
+
             image_id = get_image_id(image)
 
         key = self._cache_key(image, host)
@@ -736,15 +753,16 @@ class EugrBuilder(BuilderPlugin):
         ``True`` when the exit code is 0.
         """
         from sparkrun.orchestration.primitives import run_script_on_host
+
         script = "docker image inspect %s >/dev/null 2>&1" % image
         result = run_script_on_host(host, script, ssh_kwargs=ssh_kwargs, timeout=30)
         return result.success
 
     def _ensure_repo_remote(
-            self,
-            head: str,
-            ssh_kwargs: dict | None = None,
-            dry_run: bool = False,
+        self,
+        head: str,
+        ssh_kwargs: dict | None = None,
+        dry_run: bool = False,
     ) -> str:
         """Clone or update the eugr repo on the head node.
 
@@ -755,16 +773,16 @@ class EugrBuilder(BuilderPlugin):
         # TODO: hard-coded inline script
         remote_path = "~/.cache/sparkrun/eugr-spark-vllm-docker"
         script = (
-                     "set -e\n"
-                     "REPO_DIR=%(path)s\n"
-                     "if [ -d \"$REPO_DIR/.git\" ]; then\n"
-                     "  git -C \"$REPO_DIR\" pull --ff-only || true\n"
-                     "else\n"
-                     "  mkdir -p \"$(dirname \"$REPO_DIR\")\"\n"
-                     "  git clone %(url)s \"$REPO_DIR\"\n"
-                     "fi\n"
-                     "echo \"$REPO_DIR\"\n"
-                 ) % {"path": remote_path, "url": EUGR_REPO_URL}
+            "set -e\n"
+            "REPO_DIR=%(path)s\n"
+            'if [ -d "$REPO_DIR/.git" ]; then\n'
+            '  git -C "$REPO_DIR" pull --ff-only || true\n'
+            "else\n"
+            '  mkdir -p "$(dirname "$REPO_DIR")"\n'
+            '  git clone %(url)s "$REPO_DIR"\n'
+            "fi\n"
+            'echo "$REPO_DIR"\n'
+        ) % {"path": remote_path, "url": EUGR_REPO_URL}
 
         logger.info("Ensuring eugr repo on head node %s...", head)
 
@@ -773,20 +791,17 @@ class EugrBuilder(BuilderPlugin):
 
         result = run_script_on_host(head, script, ssh_kwargs=ssh_kwargs, timeout=120)
         if not result.success:
-            raise RuntimeError(
-                "Failed to ensure eugr repo on %s: %s"
-                % (head, result.stderr.strip() if result.stderr else "(no output)")
-            )
+            raise RuntimeError("Failed to ensure eugr repo on %s: %s" % (head, result.stderr.strip() if result.stderr else "(no output)"))
 
         return remote_path
 
     def _build_image_remote(
-            self,
-            image: str,
-            build_args: list[str],
-            head: str,
-            ssh_kwargs: dict | None = None,
-            dry_run: bool = False,
+        self,
+        image: str,
+        build_args: list[str],
+        head: str,
+        ssh_kwargs: dict | None = None,
+        dry_run: bool = False,
     ) -> None:
         """Build container image on the head node via SSH.
 
@@ -802,12 +817,11 @@ class EugrBuilder(BuilderPlugin):
         # TODO: hard-coded inline script
         remote_path = "~/.cache/sparkrun/eugr-spark-vllm-docker"
         args_str = " ".join(build_args) if build_args else ""
-        script = (
-                     "set -e\n"
-                     "cd %(path)s\n"
-                     "chmod +x build-and-copy.sh\n"
-                     "./build-and-copy.sh -t %(image)s %(args)s\n"
-                 ) % {"path": remote_path, "image": image, "args": args_str}
+        script = ("set -e\ncd %(path)s\nchmod +x build-and-copy.sh\n./build-and-copy.sh -t %(image)s %(args)s\n") % {
+            "path": remote_path,
+            "image": image,
+            "args": args_str,
+        }
 
         logger.info("Building eugr container on %s: %s -t %s %s", head, remote_path, image, args_str)
 
@@ -816,17 +830,14 @@ class EugrBuilder(BuilderPlugin):
 
         result = run_script_on_host(head, script, ssh_kwargs=ssh_kwargs, timeout=1800)
         if not result.success:
-            raise RuntimeError(
-                "eugr remote container build failed on %s (exit %d)"
-                % (head, result.returncode)
-            )
+            raise RuntimeError("eugr remote container build failed on %s (exit %d)" % (head, result.returncode))
 
     # --- Repo management ---
 
     def ensure_repo(
-            self,
-            cache_dir: Path | None = None,
-            registry_cache_root: Path | None = None,
+        self,
+        cache_dir: Path | None = None,
+        registry_cache_root: Path | None = None,
     ) -> Path:
         """Clone or update the eugr repo in sparkrun's cache.
 
@@ -849,6 +860,7 @@ class EugrBuilder(BuilderPlugin):
                 cache_dir = Path(get_working_path(v=self._v)) / "cache"
             else:
                 from sparkrun.core.config import resolve_cache_dir
+
                 cache_dir = Path(resolve_cache_dir(None))
         repo_dir = cache_dir / "eugr-spark-vllm-docker"
 
@@ -857,14 +869,9 @@ class EugrBuilder(BuilderPlugin):
         else:
             logger.info("Cloning eugr/spark-vllm-docker...")
             repo_dir.parent.mkdir(parents=True, exist_ok=True)
-            result = subprocess.run(
-                ["git", "clone", EUGR_REPO_URL, str(repo_dir)],
-                capture_output=True, text=True
-            )
+            result = subprocess.run(["git", "clone", EUGR_REPO_URL, str(repo_dir)], capture_output=True, text=True)
             if result.returncode != 0:
-                raise RuntimeError(
-                    "Failed to clone eugr repo: %s" % result.stderr.strip()
-                )
+                raise RuntimeError("Failed to clone eugr repo: %s" % result.stderr.strip())
 
         return repo_dir
 
@@ -877,7 +884,8 @@ class EugrBuilder(BuilderPlugin):
         logger.debug("Disabling sparse checkout on %s", repo_dir)
         subprocess.run(
             ["git", "-C", str(repo_dir), "sparse-checkout", "disable"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
 
     @staticmethod
@@ -886,7 +894,8 @@ class EugrBuilder(BuilderPlugin):
         logger.info("Updating eugr/spark-vllm-docker repo...")
         result = subprocess.run(
             ["git", "-C", str(repo_dir), "pull", "--ff-only"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             logger.warning(

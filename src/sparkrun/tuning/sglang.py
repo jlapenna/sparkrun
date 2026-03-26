@@ -67,7 +67,9 @@ def get_sglang_tuning_env() -> dict[str, str] | None:
         tuning configs are available.
     """
     return _get_tuning_env(
-        get_sglang_tuning_volumes, "SGLANG_MOE_CONFIG_DIR", TUNING_ENV_PATH,
+        get_sglang_tuning_volumes,
+        "SGLANG_MOE_CONFIG_DIR",
+        TUNING_ENV_PATH,
     )
 
 
@@ -118,16 +120,14 @@ class SglangTuner(BaseTuner):
 
         # Pipe the Python patch script into docker exec -i via heredoc
         # to avoid all shell quoting issues.
-        patch_script = (
-            "#!/bin/bash\n"
-            "docker exec -i %s python3 << 'PYEOF'\n"
-            "%s\n"
-            "PYEOF\n"
-        ) % (self.container_name, patch_py)
+        patch_script = ("#!/bin/bash\ndocker exec -i %s python3 << 'PYEOF'\n%s\nPYEOF\n") % (self.container_name, patch_py)
 
         result = run_script_on_host(
-            self.host, patch_script,
-            ssh_kwargs=self.ssh_kwargs, timeout=15, dry_run=self.dry_run,
+            self.host,
+            patch_script,
+            ssh_kwargs=self.ssh_kwargs,
+            timeout=15,
+            dry_run=self.dry_run,
         )
         if result.success or self.dry_run:
             logger.debug("  Patched common_utils.py for MoE config compatibility")

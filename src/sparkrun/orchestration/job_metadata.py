@@ -34,15 +34,15 @@ class JobStatus:
 
 
 def check_job_running(
-        *,
-        cluster_id: str | None = None,
-        recipe: "Recipe | None" = None,
-        hosts: list[str] | None = None,
-        overrides: dict | None = None,
-        ssh_kwargs: dict | None = None,
-        cache_dir: str | None = None,
-        check_http_models: bool = False,
-        port: int | None = None,
+    *,
+    cluster_id: str | None = None,
+    recipe: "Recipe | None" = None,
+    hosts: list[str] | None = None,
+    overrides: dict | None = None,
+    ssh_kwargs: dict | None = None,
+    cache_dir: str | None = None,
+    check_http_models: bool = False,
+    port: int | None = None,
 ) -> JobStatus:
     """Check whether a sparkrun job is currently running.
 
@@ -106,6 +106,7 @@ def check_job_running(
     healthy: bool | None = None
     if check_http_models and running:
         from sparkrun.orchestration.primitives import wait_for_healthy
+
         effective_port = port or (meta.get("port") if meta else None) or 8000
         url = "http://%s:%d/v1/models" % (head_host, effective_port)
         healthy = wait_for_healthy(url, max_retries=1, retry_interval=0, max_consecutive_refused=2)
@@ -152,16 +153,16 @@ def generate_cluster_id(recipe: "Recipe", hosts: list[str], overrides: dict | No
 
 
 def save_job_metadata(
-        cluster_id: str,
-        recipe: "Recipe",
-        hosts: list[str],
-        overrides: dict | None = None,
-        cache_dir: str | None = None,
-        ib_ip_map: dict[str, str] | None = None,
-        mgmt_ip_map: dict[str, str] | None = None,
-        recipe_ref: str | None = None,
-        runtime_info: dict[str, str] | None = None,
-        container_image: Optional[str] = None,
+    cluster_id: str,
+    recipe: "Recipe",
+    hosts: list[str],
+    overrides: dict | None = None,
+    cache_dir: str | None = None,
+    ib_ip_map: dict[str, str] | None = None,
+    mgmt_ip_map: dict[str, str] | None = None,
+    recipe_ref: str | None = None,
+    runtime_info: dict[str, str] | None = None,
+    container_image: Optional[str] = None,
 ) -> None:
     """Persist job metadata so ``cluster status`` can display recipe info.
 
@@ -170,6 +171,7 @@ def save_job_metadata(
     """
     if cache_dir is None:
         from sparkrun.core.config import DEFAULT_CACHE_DIR
+
         cache_dir = str(DEFAULT_CACHE_DIR)
 
     digest = cluster_id.removeprefix("sparkrun_")
@@ -243,6 +245,7 @@ def remove_job_metadata(cluster_id: str, cache_dir: str | None = None) -> None:
     """
     if cache_dir is None:
         from sparkrun.core.config import DEFAULT_CACHE_DIR
+
         cache_dir = str(DEFAULT_CACHE_DIR)
 
     digest = cluster_id.removeprefix("sparkrun_")
@@ -255,6 +258,7 @@ def load_job_metadata(cluster_id: str, cache_dir: str | None = None) -> dict | N
     """Load job metadata for a cluster_id.  Returns ``None`` if not found."""
     if cache_dir is None:
         from sparkrun.core.config import DEFAULT_CACHE_DIR
+
         cache_dir = str(DEFAULT_CACHE_DIR)
 
     digest = cluster_id.removeprefix("sparkrun_")
@@ -263,6 +267,7 @@ def load_job_metadata(cluster_id: str, cache_dir: str | None = None) -> dict | N
         return None
     try:
         from sparkrun.utils import load_yaml
+
         data = load_yaml(meta_path)
         return data or None
     except Exception:

@@ -30,19 +30,26 @@ def tune(ctx):
 @tune.command("sglang")
 @click.argument("recipe_name", type=RECIPE_NAME)
 @host_options
-@click.option("--tp", "tp_sizes", type=int, multiple=True,
-              help="TP size(s) to tune (repeatable; default: 1,2,4,8)")
+@click.option("--tp", "tp_sizes", type=int, multiple=True, help="TP size(s) to tune (repeatable; default: 1,2,4,8)")
 @click.option("--image", default=None, help="Override container image")
 @click.option("--output-dir", default=None, help="Override tuning config output directory")
 @click.option("--skip-clone", is_flag=True, help="Skip cloning SGLang repo (scripts already in image)")
-@click.option("--parallel", "-j", type=int, default=1,
-              help="Run N tuning jobs concurrently (default: 1 = sequential)")
+@click.option("--parallel", "-j", type=int, default=1, help="Run N tuning jobs concurrently (default: 1 = sequential)")
 @dry_run_option
 @click.pass_context
 def tune_sglang(
-        ctx, recipe_name, hosts, hosts_file, cluster_name,
-        tp_sizes, image, output_dir, skip_clone, parallel, dry_run,
-        config_path=None,
+    ctx,
+    recipe_name,
+    hosts,
+    hosts_file,
+    cluster_name,
+    tp_sizes,
+    image,
+    output_dir,
+    skip_clone,
+    parallel,
+    dry_run,
+    config_path=None,
 ):
     """Tune SGLang fused MoE Triton kernels for DGX Spark.
 
@@ -115,19 +122,26 @@ VLLM_RUNTIMES = {"vllm-ray", "vllm-distributed", "eugr-vllm"}
 @tune.command("vllm")
 @click.argument("recipe_name", type=RECIPE_NAME)
 @host_options
-@click.option("--tp", "tp_sizes", type=int, multiple=True,
-              help="TP size(s) to tune (repeatable; default: 1,2,4,8)")
+@click.option("--tp", "tp_sizes", type=int, multiple=True, help="TP size(s) to tune (repeatable; default: 1,2,4,8)")
 @click.option("--image", default=None, help="Override container image")
 @click.option("--output-dir", default=None, help="Override tuning config output directory")
 @click.option("--skip-clone", is_flag=True, help="Skip cloning vLLM repo (scripts already in image)")
-@click.option("--parallel", "-j", type=int, default=1,
-              help="Run N tuning jobs concurrently (default: 1 = sequential)")
+@click.option("--parallel", "-j", type=int, default=1, help="Run N tuning jobs concurrently (default: 1 = sequential)")
 @dry_run_option
 @click.pass_context
 def tune_vllm(
-        ctx, recipe_name, hosts, hosts_file, cluster_name,
-        tp_sizes, image, output_dir, skip_clone, parallel, dry_run,
-        config_path=None,
+    ctx,
+    recipe_name,
+    hosts,
+    hosts_file,
+    cluster_name,
+    tp_sizes,
+    image,
+    output_dir,
+    skip_clone,
+    parallel,
+    dry_run,
+    config_path=None,
 ):
     """Tune vLLM fused MoE Triton kernels for DGX Spark.
 
