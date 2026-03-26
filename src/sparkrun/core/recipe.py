@@ -223,9 +223,9 @@ def resolve_builder(data: dict[str, Any]) -> str:
     runtime_config = data.get("runtime_config") or {}
     runtime = data.get("runtime", "")
     if runtime in ("vllm", "") and (
-        data.get("build_args")
-        or data.get("mods")
-        or (isinstance(runtime_config, dict) and (runtime_config.get("build_args") or runtime_config.get("mods")))
+            data.get("build_args")
+            or data.get("mods")
+            or (isinstance(runtime_config, dict) and (runtime_config.get("build_args") or runtime_config.get("mods")))
     ):
         return "eugr"
     return ""
@@ -274,7 +274,7 @@ def expand_recipe_shortcut(name: str) -> str:
         @spark-arena/UUID  ->  https://spark-arena.com/api/recipes/UUID/raw
     """
     if name.startswith(SPARK_ARENA_PREFIX):
-        recipe_id = name[len(SPARK_ARENA_PREFIX) :]
+        recipe_id = name[len(SPARK_ARENA_PREFIX):]
         return SPARK_ARENA_API_URL % recipe_id
     return name
 
@@ -580,6 +580,26 @@ class Recipe:
             kd = self.metadata.get("kv_dtype")
             if kd is not None and bytes_per_element(str(kd)) is None:
                 issues.append("metadata.kv_dtype %r is not a recognized dtype" % kd)
+            mq = self.metadata.get("quantization")
+            if mq is not None:
+                _KNOWN_QUANT_METHODS = {
+                    "awq",
+                    "gptq",
+                    "marlin",
+                    "fp8",
+                    "nvfp4",
+                    "mxfp4",
+                    "bitsandbytes",
+                    "compressed-tensors",
+                    "auto-round",
+                    "autoround",
+                    "auto_round",
+                    "int4",
+                    "int8",
+                    "none",
+                }
+                if str(mq).lower().strip() not in _KNOWN_QUANT_METHODS:
+                    issues.append("metadata.quantization %r is not a recognized method" % mq)
 
         return issues
 
@@ -615,10 +635,10 @@ class Recipe:
         return recipe
 
     def estimate_vram(
-        self,
-        cli_overrides: dict[str, Any] | None = None,
-        auto_detect: bool = True,
-        cache_dir: str | None = None,
+            self,
+            cli_overrides: dict[str, Any] | None = None,
+            auto_detect: bool = True,
+            cache_dir: str | None = None,
     ) -> VRAMEstimate:
         """Estimate VRAM usage for this recipe.
 
@@ -641,6 +661,11 @@ class Recipe:
             fetch_safetensors_size,
             parse_param_count,
         )
+        from sparkrun.models.quantization import (
+            QuantizationInfo,
+            fetch_hf_quant_config,
+            resolve_quantization,
+        )
 
         config = self.build_config_chain(cli_overrides)
 
@@ -657,27 +682,34 @@ class Recipe:
         head_dim = self.metadata.get("head_dim")
         model_vram = self.metadata.get("model_vram")
         kv_vram_per_token = self.metadata.get("kv_vram_per_token")
+        quant_info: QuantizationInfo | None = None
 
         # Auto-detect from HF if fields are missing and model is specified
         if auto_detect and self.model:
             needs_detection = (model_vram is None and (not model_dtype or model_params_raw is None)) or (
-                kv_vram_per_token is None and (not num_layers or not num_kv_heads or not head_dim)
+                    kv_vram_per_token is None and (not num_layers or not num_kv_heads or not head_dim)
             )
             if needs_detection:
                 hf_config = fetch_model_config(self.model, revision=self.model_revision, cache_dir=cache_dir)
+                hf_quant_config = fetch_hf_quant_config(self.model, revision=self.model_revision, cache_dir=cache_dir)
                 if hf_config:
                     hf_info = extract_model_info(hf_config)
+
+                    # Resolve quantization from all sources
+                    recipe_quant_meta = self.metadata.get("quantization")
+                    recipe_quant_default = config.get("quantization")
+                    # metadata.quantization is strongest, then defaults quantization
+                    effective_recipe_quant = recipe_quant_meta or (str(recipe_quant_default) if recipe_quant_default else None)
+                    quant_info = resolve_quantization(
+                        hf_config=hf_config,
+                        hf_quant_config=hf_quant_config,
+                        recipe_quant=effective_recipe_quant,
+                    )
+
                     # Fill in missing fields (metadata takes precedence)
                     if not model_dtype:
-                        # Resolve model_dtype with quantization awareness:
-                        # 1. Recipe defaults "quantization" key (e.g. quantization: fp8)
-                        # 2. HF quantization_config.quant_method (extracted as quant_dtype)
-                        # 3. HF torch_dtype (fallback — often bfloat16 even for quant models)
-                        recipe_quant = config.get("quantization")
-                        if recipe_quant and str(recipe_quant).lower() not in ("none", "auto", ""):
-                            model_dtype = str(recipe_quant).lower()
-                        elif hf_info.get("quant_dtype"):
-                            model_dtype = hf_info["quant_dtype"]
+                        if quant_info:
+                            model_dtype = quant_info.weight_dtype
                         else:
                             model_dtype = hf_info.get("model_dtype")
                     if not num_layers:
@@ -686,6 +718,10 @@ class Recipe:
                         num_kv_heads = hf_info.get("num_kv_heads")
                     if not head_dim:
                         head_dim = hf_info.get("head_dim")
+
+                    # Use kv_cache_quant from hf_quant_config to inform kv_dtype
+                    if not kv_dtype and quant_info and quant_info.kv_cache_quant:
+                        kv_dtype = quant_info.kv_cache_quant
 
         # Parse model_params
         model_params = parse_param_count(model_params_raw) if model_params_raw is not None else None
@@ -744,6 +780,12 @@ class Recipe:
             self.metadata["head_dim"] = int(head_dim)
         if model_params is not None and "model_params" not in self.metadata:
             self.metadata["model_params"] = model_params
+        if quant_info and "quantization" not in self.metadata:
+            self.metadata["quantization"] = quant_info.method
+        if quant_info and quant_info.bits and "quant_bits" not in self.metadata:
+            self.metadata["quant_bits"] = quant_info.bits
+        if kv_dtype:
+            self.metadata["kv_dtype"] = normalize_dtype(str(kv_dtype))
 
         return result
 
@@ -928,11 +970,14 @@ class Recipe:
         # transfer SELECTED model parameters to recipe
         if meta and meta.get("model_dtype", None) is not None:
             meta["model_dtype"] = str(meta["model_dtype"])
-        # TODO: kv_dtype should be included and reflect command overrides on kv dtype not just hf auto-detect
-        # if meta and meta.get('kv_dtype', None) is not None:
-        #     meta['kv_dtype'] = str(meta['kv_dtype'])
+        if meta and meta.get("kv_dtype", None) is not None:
+            meta["kv_dtype"] = str(meta["kv_dtype"])
         if meta and meta.get("model_params", None) is not None:
             meta["model_params"] = str(meta["model_params"])
+        if meta and meta.get("quantization", None) is not None:
+            meta["quantization"] = str(meta["quantization"])
+        if meta and meta.get("quant_bits", None) is not None:
+            meta["quant_bits"] = int(meta["quant_bits"])
 
         # -- Builder --
         if self.builder:
@@ -964,11 +1009,11 @@ class Recipe:
         return d
 
     def export(
-        self,
-        path: Optional[str | Path] = None,
-        json: bool = False,
-        overrides: Optional[dict] = None,
-        container_image: Optional[str] = None,
+            self,
+            path: Optional[str | Path] = None,
+            json: bool = False,
+            overrides: Optional[dict] = None,
+            container_image: Optional[str] = None,
     ) -> Optional[str | Path]:
         """Export the recipe as canonical YAML.
 
@@ -1037,10 +1082,10 @@ class Recipe:
 
 
 def find_recipe(
-    name: str,
-    search_paths: list[Path] | None = None,
-    registry_manager: RegistryManager | None = None,
-    local_files: list[Path] | None = None,
+        name: str,
+        search_paths: list[Path] | None = None,
+        registry_manager: RegistryManager | None = None,
+        local_files: list[Path] | None = None,
 ) -> Path:
     """Find a recipe by name across search paths.
 
@@ -1183,10 +1228,10 @@ def recipe_summary(path: Path, registry_name: str | None = None) -> dict[str, An
 
 
 def list_recipes(
-    search_paths: list[Path] | None = None,
-    registry_manager: RegistryManager | None = None,
-    include_hidden: bool = False,
-    local_files: list[Path] | None = None,
+        search_paths: list[Path] | None = None,
+        registry_manager: RegistryManager | None = None,
+        include_hidden: bool = False,
+        local_files: list[Path] | None = None,
 ) -> list[dict[str, Any]]:
     """List all available recipes with name and path."""
     recipes: list[dict[str, Any]] = []
@@ -1232,10 +1277,10 @@ def list_recipes(
 
 
 def filter_recipes(
-    recipes: list[dict[str, Any]],
-    *,
-    runtime: str | None = None,
-    registry: str | None = None,
+        recipes: list[dict[str, Any]],
+        *,
+        runtime: str | None = None,
+        registry: str | None = None,
 ) -> list[dict[str, Any]]:
     """Filter a recipe list by runtime and/or registry.
 

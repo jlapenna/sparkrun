@@ -218,29 +218,21 @@ def fetch_safetensors_size(
 def _resolve_quant_dtype(quantization_config: dict[str, Any]) -> str | None:
     """Derive a model weight dtype from a HuggingFace quantization_config block.
 
-    Handles common quant methods: fp8, awq, gptq, bitsandbytes, compressed-tensors.
+    Handles common quant methods: fp8, awq, gptq, marlin, bitsandbytes,
+    mxfp4, nvfp4, compressed-tensors.
     Returns a dtype string recognized by :func:`bytes_per_element`, or ``None``
     if the method is unrecognized.
+
+    .. note::
+       This is a thin wrapper around
+       :func:`sparkrun.models.quantization._resolve_from_quantization_config`
+       kept for backward compatibility.  New code should use
+       :func:`~sparkrun.models.quantization.resolve_quantization` instead.
     """
-    method = str(quantization_config.get("quant_method", "")).lower().strip()
-    if not method:
-        return None
+    from sparkrun.models.quantization import _resolve_from_quantization_config
 
-    if method == "fp8":
-        return "fp8"
-
-    bits = quantization_config.get("bits")
-    if method == "awq":
-        return "awq4" if bits is None or int(bits) == 4 else f"awq{int(bits)}"
-    if method in ("gptq", "marlin"):
-        return "gptq" if bits is None or int(bits) == 4 else f"int{int(bits)}"
-    if method == "bitsandbytes":
-        if quantization_config.get("load_in_4bit") or quantization_config.get("quant_type") == "nf4":
-            return "int4"
-        if quantization_config.get("load_in_8bit"):
-            return "int8"
-
-    return None
+    info = _resolve_from_quantization_config(quantization_config)
+    return info.weight_dtype if info else None
 
 
 def _extract_from_config(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -316,9 +308,12 @@ def extract_model_info(hf_config: dict[str, Any]) -> dict[str, Any]:
     # an FP8 model will have torch_dtype=bfloat16 but quant_method=fp8).
     qc = hf_config.get("quantization_config")
     if isinstance(qc, dict):
-        qd = _resolve_quant_dtype(qc)
-        if qd:
-            info["quant_dtype"] = qd
+        from sparkrun.models.quantization import _resolve_from_quantization_config
+
+        qi = _resolve_from_quantization_config(qc)
+        if qi:
+            info["quant_dtype"] = qi.weight_dtype
+            info["quant_info"] = qi
 
     return info
 
