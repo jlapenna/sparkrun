@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from pathlib import Path
@@ -18,33 +17,6 @@ logger = logging.getLogger(__name__)
 def generate_submission_id() -> str:
     """Generate a submission ID based on current timestamp."""
     return "sub%d" % int(time.time() * 1000)
-
-
-def _classify_file(path: Path) -> str | None:
-    """Determine the upload folder for a file based on extension.
-
-    Returns 'recipes', 'logs', 'metadata', or None if unsupported.
-    """
-    suffix = path.suffix.lower()
-    name = path.name.lower()
-
-    # Benchmark YAML metadata (sparkrun benchmark output)
-    if suffix in (".yaml", ".yml") and name.startswith("benchmark_"):
-        return "metadata"
-
-    # Recipe YAML
-    if suffix in (".yaml", ".yml"):
-        return "recipes"
-
-    # CSV results
-    if suffix == ".csv":
-        return "logs"
-
-    # JSON results
-    if suffix == ".json":
-        return "metadata"
-
-    return None
 
 
 def upload_file(
@@ -92,15 +64,18 @@ def upload_file(
 
 def upload_benchmark_results(
         refresh_token: str,
-        file_paths: list[Path],
-        recipe_yaml_path: Path | None = None,
-) -> tuple[bool, str | None]:
+        upload_files: list[tuple[Path, str]],
+        submission_id: str | None = None,
+) -> tuple[bool, str]:
     """Upload benchmark result files to Spark Arena.
 
     Args:
         refresh_token: User's refresh token.
-        file_paths: List of result file paths (YAML, CSV, JSON).
-        recipe_yaml_path: Optional path to the recipe YAML file.
+        upload_files: List of ``(file_path, folder)`` tuples where *folder*
+            is the Firebase Storage sub-folder (e.g. ``"recipes"``,
+            ``"logs"``, ``"metadata"``).
+        submission_id: Optional pre-generated submission ID.  One is created
+            when not supplied.
 
     Returns:
         (success, submission_id) tuple.
@@ -109,28 +84,17 @@ def upload_benchmark_results(
     result = exchange_token(refresh_token)
     id_token, user_id, bucket = result.id_token, result.user_id, result.bucket
 
-    submission_id = generate_submission_id()
-    all_ok = True
+    if submission_id is None:
+        submission_id = generate_submission_id()
 
-    # Upload result files
-    for fpath in file_paths:
+    all_ok = True
+    for fpath, folder in upload_files:
         fpath = Path(fpath)
         if not fpath.is_file():
             logger.warning("Skipping missing file: %s", fpath)
             continue
 
-        folder = _classify_file(fpath)
-        if folder is None:
-            logger.warning("Skipping unsupported file type: %s", fpath)
-            continue
-
         ok = upload_file(id_token, bucket, user_id, submission_id, fpath, folder)
-        if not ok:
-            all_ok = False
-
-    # Upload recipe YAML separately (always goes to recipes/)
-    if recipe_yaml_path and recipe_yaml_path.is_file():
-        ok = upload_file(id_token, bucket, user_id, submission_id, recipe_yaml_path, "recipes")
         if not ok:
             all_ok = False
 

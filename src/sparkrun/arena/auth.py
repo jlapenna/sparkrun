@@ -216,8 +216,8 @@ def run_browser_login() -> str | None:
         def log_message(self, format, *args):
             logger.debug("callback server: %s", format % args)
 
-    # TODO: use orchestration primitives to determine available port using default port as initial guess
-    callback_port = _CALLBACK_PORT
+    from sparkrun.orchestration.primitives import find_available_port
+    callback_port = find_available_port("localhost", _CALLBACK_PORT)
 
     # noinspection PyTypeChecker
     server = HTTPServer(("127.0.0.1", callback_port), CallbackHandler)

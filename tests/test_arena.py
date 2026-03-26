@@ -23,7 +23,6 @@ from sparkrun.arena.auth import (
 )
 from sparkrun.arena.upload import (
     generate_submission_id,
-    _classify_file,
     upload_file,
     upload_benchmark_results,
 )
@@ -216,29 +215,6 @@ class TestSubmissionId:
 
 
 # ---------------------------------------------------------------------------
-# Upload: file classification
-# ---------------------------------------------------------------------------
-
-class TestClassifyFile:
-    def test_recipe_yaml(self):
-        assert _classify_file(Path("my-recipe.yaml")) == "recipes"
-        assert _classify_file(Path("recipe.yml")) == "recipes"
-
-    def test_benchmark_yaml(self):
-        assert _classify_file(Path("benchmark_test_default_tp1.yaml")) == "metadata"
-
-    def test_csv(self):
-        assert _classify_file(Path("tests.csv")) == "logs"
-
-    def test_json(self):
-        assert _classify_file(Path("results.json")) == "metadata"
-
-    def test_unsupported(self):
-        assert _classify_file(Path("data.bin")) is None
-        assert _classify_file(Path("image.png")) is None
-
-
-# ---------------------------------------------------------------------------
 # Upload: upload_file
 # ---------------------------------------------------------------------------
 
@@ -304,12 +280,18 @@ class TestUploadFile:
 
 class TestUploadBenchmarkResults:
     def test_orchestration(self, tmp_path):
-        csv_file = tmp_path / "results.csv"
+        csv_file = tmp_path / "benchmark.csv"
         csv_file.write_text("col1,col2\n1,2\n")
-        yaml_file = tmp_path / "benchmark_test.yaml"
-        yaml_file.write_text("results: true\n")
+        meta_file = tmp_path / "metadata.json"
+        meta_file.write_text('{"key": "value"}\n')
         recipe_file = tmp_path / "recipe.yaml"
         recipe_file.write_text("model: test\n")
+
+        upload_files = [
+            (recipe_file, "recipes"),
+            (csv_file, "logs"),
+            (meta_file, "metadata"),
+        ]
 
         with mock.patch("sparkrun.arena.upload.exchange_token") as mock_exchange, \
              mock.patch("sparkrun.arena.upload.upload_file", return_value=True) as mock_upload:
@@ -317,14 +299,29 @@ class TestUploadBenchmarkResults:
 
             success, sub_id = upload_benchmark_results(
                 refresh_token="refresh-tok",
-                file_paths=[csv_file, yaml_file],
-                recipe_yaml_path=recipe_file,
+                upload_files=upload_files,
             )
 
             assert success is True
             assert sub_id.startswith("sub")
-            # csv + benchmark yaml + recipe yaml = 3 uploads
             assert mock_upload.call_count == 3
+
+    def test_explicit_submission_id(self, tmp_path):
+        csv_file = tmp_path / "benchmark.csv"
+        csv_file.write_text("data")
+
+        with mock.patch("sparkrun.arena.upload.exchange_token") as mock_exchange, \
+             mock.patch("sparkrun.arena.upload.upload_file", return_value=True):
+            mock_exchange.return_value = ExchangeResult(id_token="id-tok", user_id="uid-123", bucket="bucket-name")
+
+            success, sub_id = upload_benchmark_results(
+                refresh_token="tok",
+                upload_files=[(csv_file, "logs")],
+                submission_id="sub-custom-123",
+            )
+
+            assert success is True
+            assert sub_id == "sub-custom-123"
 
     def test_missing_files_skipped(self, tmp_path):
         existing = tmp_path / "results.csv"
@@ -337,7 +334,7 @@ class TestUploadBenchmarkResults:
 
             success, sub_id = upload_benchmark_results(
                 refresh_token="tok",
-                file_paths=[existing, missing],
+                upload_files=[(existing, "logs"), (missing, "logs")],
             )
 
             assert success is True
@@ -422,21 +419,17 @@ class TestArenaCLI:
 
 class TestBenchmarkResult:
     def test_defaults(self):
-        from sparkrun.cli._benchmark import BenchmarkResult
+        from sparkrun.benchmarking.base import BenchmarkResult
         r = BenchmarkResult()
         assert r.success is False
-        assert r.output_yaml is None
-        assert r.output_csv is None
-        assert r.output_json is None
+        assert r.results is None
+        assert r.outputs is None
 
     def test_populated(self):
-        from sparkrun.cli._benchmark import BenchmarkResult
+        from sparkrun.benchmarking.base import BenchmarkResult
         r = BenchmarkResult(
             success=True,
-            output_yaml="results.yaml",
-            output_csv="results.csv",
             recipe_name="test-recipe",
         )
         assert r.success is True
-        assert r.output_yaml == "results.yaml"
         assert r.recipe_name == "test-recipe"

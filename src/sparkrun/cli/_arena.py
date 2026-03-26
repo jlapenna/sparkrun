@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
+import json
 import logging
 import sys
 
@@ -11,7 +11,6 @@ import click
 from ._common import (
     # PROFILE_NAME,
     RECIPE_NAME,
-    _setup_logging,
     dry_run_option,
     host_options,
     recipe_override_options,
@@ -20,25 +19,6 @@ from ._common import (
 logger = logging.getLogger(__name__)
 
 _BENCHMARK_PROFILE = '@official/spark-arena-v1'
-
-_PARALLELISM_KEYS = [
-    ('tensor_parallel', 'tp'),
-    ('pipeline_parallel', 'pp'),
-    ('data_parallel', 'dp'),
-    ('expert_parallel', 'ep'),
-    ('context_parallel', 'cp'),
-]
-
-
-def _build_cluster_meta(recipe, overrides, cluster_id):
-    """Build cluster metadata dict with only non-default parallelism values."""
-    config_chain = recipe.build_config_chain(overrides)
-    meta = {'cluster_id': cluster_id}
-    for key, short in _PARALLELISM_KEYS:
-        val = config_chain.get(key)
-        if val is not None:
-            meta[short] = int(val)
-    return meta
 
 
 @click.group()
@@ -144,7 +124,6 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
 
       sparkrun arena benchmark qwen3-1.7b-sglang --tp 2
     """
-    from pathlib import Path
     from sparkrun import __version__
     from sparkrun.arena.auth import load_refresh_token, exchange_token
     from sparkrun.arena.upload import upload_benchmark_results
@@ -219,37 +198,34 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
         click.echo("[dry-run] Would upload results to Spark Arena")
         return
 
-    # TODO: modify upload approach, we've got csv data ready + metadata + recipe, so we upload those
-    # TODO: I guess let's do write files into .cache directory... and then upload them
-    #       csv data is just text to output (benchmark_csv)
-    #       metadata is dict (metadata)
-    #       recipe is a yaml string to output (effective_recipe)
+    # --- Write files to cache directory ---
+    from sparkrun.arena.upload import generate_submission_id
+    from sparkrun.core.config import DEFAULT_CACHE_DIR
 
-    # --- Collect upload files ---
-    upload_files: list[Path] = []
-    recipe_yaml_path = None
+    submission_id = generate_submission_id()
+    cache_dir = DEFAULT_CACHE_DIR / "benchmarks" / submission_id
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
-    if bench_result.output_yaml:
-        upload_files.append(Path(bench_result.output_yaml))
-    if bench_result.output_csv:
-        upload_files.append(Path(bench_result.output_csv))
-    if bench_result.output_json:
-        upload_files.append(Path(bench_result.output_json))
+    recipe_path = cache_dir / "recipe.yaml"
+    csv_path = cache_dir / "benchmark.csv"
+    meta_path = cache_dir / "metadata.json"
+
+    recipe_path.write_text(effective_recipe)
+    csv_path.write_text(benchmark_csv)
+    meta_path.write_text(json.dumps(metadata, indent=2))
+
+    upload_files = [
+        (recipe_path, "recipes"),
+        (csv_path, "logs"),
+        (meta_path, "metadata"),
+    ]
 
     if local_test:
         click.echo()
-        click.echo("[local-test] Upload files that would be sent:")
-        for f in upload_files:
-            click.echo("  %s" % f)
-        if recipe_yaml_path:
-            click.echo("  %s (recipe)" % recipe_yaml_path)
-        if not upload_files:
-            click.echo("  (none)")
+        click.echo("[local-test] Benchmark files written to: %s" % cache_dir)
+        for fpath, folder in upload_files:
+            click.echo("  %s -> %s/" % (fpath.name, folder))
         click.echo("[local-test] Skipping actual upload.")
-        return
-
-    if not upload_files:
-        click.echo("No result files to upload.", err=True)
         return
 
     # --- Upload results ---
@@ -257,17 +233,17 @@ def arena_benchmark(ctx, recipe_name, hosts, hosts_file, cluster_name,
     click.echo("Uploading results to Spark Arena...")
 
     try:
-        success, submission_id = upload_benchmark_results(
+        success, sid = upload_benchmark_results(
             refresh_token=refresh_token,
-            file_paths=upload_files,
-            recipe_yaml_path=recipe_yaml_path,
+            upload_files=upload_files,
+            submission_id=submission_id,
         )
     except RuntimeError as e:
         click.echo("Upload failed: %s" % e, err=True)
         sys.exit(1)
 
     if success:
-        click.echo("Results uploaded successfully (submission: %s)" % submission_id)
+        click.echo("Results uploaded successfully (submission: %s)" % sid)
     else:
-        click.echo("Some files failed to upload (submission: %s)" % submission_id, err=True)
+        click.echo("Some files failed to upload (submission: %s)" % sid, err=True)
         sys.exit(1)
