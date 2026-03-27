@@ -36,7 +36,7 @@ def _apply_spark_arena_benchmarks(recipe, recipe_name: str):
         return  # already set
 
     if recipe_name.startswith(SPARK_ARENA_PREFIX):
-        uuid = recipe_name[len(SPARK_ARENA_PREFIX) :]
+        uuid = recipe_name[len(SPARK_ARENA_PREFIX):]
         tp = recipe.defaults.get("tensor_parallel", 1)
         recipe.metadata["spark_arena_benchmarks"] = [{"tp": tp, "uuid": uuid}]
 
@@ -321,13 +321,14 @@ def _render_uninstall_script(slug, cluster_name, user_home):
 def _detect_remote_sparkrun(host, ssh_kwargs, dry_run=False):
     """Detect sparkrun path and user home on a remote host.
 
-    Returns (sparkrun_path, user_home) or exits with error.
+    Returns (sparkrun_path, user_home) on success, or (None, None) if not found.
     """
     from sparkrun.orchestration.ssh import run_remote_script
 
     script = textwrap.dedent("""\
         #!/usr/bin/env bash
         set -euo pipefail
+        export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
         SPARKRUN_PATH=$(which sparkrun 2>/dev/null || true)
         if [ -z "$SPARKRUN_PATH" ]; then
             echo "ERROR: sparkrun not found on PATH" >&2
@@ -342,35 +343,59 @@ def _detect_remote_sparkrun(host, ssh_kwargs, dry_run=False):
 
     result = run_remote_script(host, script, **ssh_kwargs, timeout=15)
     if not result.success:
-        click.echo("Error: sparkrun not found on head node '%s'." % host, err=True)
-        stderr = result.stderr.strip()
-        if stderr:
-            click.echo("  %s" % stderr, err=True)
-        click.echo("  Install sparkrun on the head node before using --install.", err=True)
-        sys.exit(1)
+        return None, None
 
     lines = result.stdout.strip().splitlines()
     if len(lines) < 2:
-        click.echo("Error: Unexpected response from head node '%s'." % host, err=True)
-        sys.exit(1)
+        return None, None
 
     return lines[0].strip(), lines[1].strip()
 
 
+def _install_remote_sparkrun(host, ssh_kwargs, dry_run=False):
+    """Install sparkrun on a remote host via uvx.
+
+    Returns True on success, False on failure.
+    """
+    from sparkrun.orchestration.ssh import run_remote_script
+
+    script = textwrap.dedent("""\
+        #!/usr/bin/env bash
+        set -euo pipefail
+        export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+        UV_PATH=$(which uv 2>/dev/null || true)
+        if [ -z "$UV_PATH" ]; then
+            echo "ERROR: uv not found — cannot auto-install sparkrun" >&2
+            echo "Install uv first: https://docs.astral.sh/uv/" >&2
+            exit 1
+        fi
+        "$UV_PATH" x sparkrun setup install --no-update-registries
+    """)
+
+    if dry_run:
+        click.echo("Would install sparkrun on %s via: uvx sparkrun setup install" % host)
+        return True
+
+    result = run_remote_script(host, script, **ssh_kwargs, timeout=120)
+    if result.stderr.strip():
+        click.echo(result.stderr.strip(), err=True)
+    return result.success
+
+
 def _resolve_recipe_for_systemd(
-    target,
-    config,
-    hosts,
-    hosts_file,
-    cluster_name,
-    options,
-    tensor_parallel,
-    pipeline_parallel,
-    gpu_mem,
-    max_model_len,
-    image,
-    port,
-    served_model_name,
+        target,
+        config,
+        hosts,
+        hosts_file,
+        cluster_name,
+        options,
+        tensor_parallel,
+        pipeline_parallel,
+        gpu_mem,
+        max_model_len,
+        image,
+        port,
+        served_model_name,
 ):
     """Resolve recipe, hosts, and overrides for the systemd command.
 
@@ -463,24 +488,24 @@ def _build_cluster_yaml(cluster_name, hosts, ssh_user=None):
 @dry_run_option
 @click.pass_context
 def export_systemd(
-    ctx,
-    target,
-    hosts,
-    hosts_file,
-    cluster_name,
-    tensor_parallel,
-    pipeline_parallel,
-    gpu_mem,
-    max_model_len,
-    options,
-    image,
-    port,
-    served_model_name,
-    do_install,
-    do_uninstall,
-    start,
-    service_name,
-    dry_run,
+        ctx,
+        target,
+        hosts,
+        hosts_file,
+        cluster_name,
+        tensor_parallel,
+        pipeline_parallel,
+        gpu_mem,
+        max_model_len,
+        options,
+        image,
+        port,
+        served_model_name,
+        do_install,
+        do_uninstall,
+        start,
+        service_name,
+        dry_run,
 ):
     """Generate a systemd service for a sparkrun inference workload.
 
@@ -546,8 +571,19 @@ def export_systemd(
         _do_uninstall(slug, systemd_cluster_name, head_host, ssh_user, ssh_kwargs, dry_run)
         return
 
-    # Detect sparkrun on head node (needed for unit file)
+    # Detect sparkrun on head node (needed for unit file), auto-install if missing
     sparkrun_path, user_home = _detect_remote_sparkrun(head_host, ssh_kwargs, dry_run=dry_run)
+    if sparkrun_path is None:
+        click.echo("sparkrun not found on %s, attempting auto-install..." % head_host)
+        if not _install_remote_sparkrun(head_host, ssh_kwargs, dry_run=dry_run):
+            click.echo("Error: Failed to install sparkrun on '%s'." % head_host, err=True)
+            click.echo("  Install manually: ssh %s 'uvx sparkrun setup install'" % head_host, err=True)
+            sys.exit(1)
+        sparkrun_path, user_home = _detect_remote_sparkrun(head_host, ssh_kwargs, dry_run=dry_run)
+        if sparkrun_path is None:
+            click.echo("Error: sparkrun installed but not found on PATH on '%s'." % head_host, err=True)
+            sys.exit(1)
+        click.echo("sparkrun installed on %s" % head_host)
 
     unit_contents = _render_systemd_unit(
         slug,
@@ -565,7 +601,7 @@ def export_systemd(
         user_home,
     )
     sudo_install_script = _render_sudo_install_script(slug, unit_contents)
-    uninstall_script = _render_uninstall_script(slug, systemd_cluster_name, user_home)
+    # uninstall_script = _render_uninstall_script(slug, systemd_cluster_name, user_home)
 
     if not do_install:
         # Dry-run mode: display all generated artifacts
@@ -585,8 +621,8 @@ def export_systemd(
         click.echo(install_script)
         click.echo("--- Install script (sudo) ---")
         click.echo(sudo_install_script)
-        click.echo("--- Uninstall script (sudo) ---")
-        click.echo(uninstall_script)
+        # click.echo("--- Uninstall script (sudo) ---")
+        # click.echo(uninstall_script)
         click.echo("To deploy, re-run with --install")
         return
 
