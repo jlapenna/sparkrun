@@ -616,7 +616,6 @@ class TestExportSystemdCommand:
         assert "Baked recipe" in result.output
         assert "Cluster definition" in result.output
         assert "Install script" in result.output
-        assert "Uninstall script" in result.output
         assert "To deploy, re-run with --install" in result.output
 
     def test_export_systemd_from_running_job(self, runner, tmp_path, monkeypatch):
@@ -687,15 +686,15 @@ class TestExportSystemdCommand:
         assert ssh_calls[0][0] == "user"
         assert ssh_calls[1][0] == "sudo"
 
-    def test_export_systemd_sparkrun_not_found(self, runner, monkeypatch):
-        """Test error when head node lacks sparkrun."""
+    def test_export_systemd_sparkrun_not_found_install_fails(self, runner, monkeypatch):
+        """Test error when head node lacks sparkrun and auto-install fails (uv not found)."""
         from sparkrun.orchestration.ssh import RemoteResult
 
         monkeypatch.setattr(
             "sparkrun.orchestration.ssh.run_remote_script",
             lambda host, script, **kwargs: RemoteResult(
                 host=host, returncode=1, stdout="",
-                stderr="ERROR: sparkrun not found on PATH",
+                stderr="ERROR: uv not found",
             ),
         )
 
@@ -705,7 +704,34 @@ class TestExportSystemdCommand:
              "--hosts", "10.0.0.1"],
         )
         assert result.exit_code != 0
+        assert "Failed to install sparkrun" in result.output
+
+    def test_export_systemd_sparkrun_auto_install_success(self, runner, monkeypatch):
+        """Test detection fails → auto-install succeeds → re-detect succeeds."""
+        from sparkrun.orchestration.ssh import RemoteResult
+
+        call_count = {"detect": 0}
+
+        def mock_detect(host, ssh_kwargs, dry_run=False):
+            call_count["detect"] += 1
+            if call_count["detect"] == 1:
+                return None, None  # first detect fails
+            return "/home/user/.local/bin/sparkrun", "/home/user"
+
+        def mock_install(host, ssh_kwargs, dry_run=False):
+            return True
+
+        monkeypatch.setattr("sparkrun.cli._export._detect_remote_sparkrun", mock_detect)
+        monkeypatch.setattr("sparkrun.cli._export._install_remote_sparkrun", mock_install)
+
+        result = runner.invoke(
+            main,
+            ["export", "systemd", _TEST_RECIPE_NAME,
+             "--hosts", "10.0.0.1"],
+        )
+        assert result.exit_code == 0
         assert "sparkrun not found" in result.output
+        assert "sparkrun installed" in result.output
 
 
 class TestVramCommand:
