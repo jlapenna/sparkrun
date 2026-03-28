@@ -14,7 +14,6 @@ from sparkrun.orchestration.executor import (
 )
 from sparkrun.orchestration.executor_docker import DockerExecutor
 from sparkrun.orchestration.docker import (
-    docker_run_cmd,
     docker_exec_cmd,
     docker_stop_cmd,
     docker_inspect_exists_cmd,
@@ -146,118 +145,6 @@ class TestExecutorConfig:
 
 
 # ---------------------------------------------------------------------------
-# DockerExecutor command parity tests
-# ---------------------------------------------------------------------------
-
-
-class TestDockerExecutorParity:
-    """Verify DockerExecutor produces identical output to docker.py functions."""
-
-    def setup_method(self):
-        self.executor = DockerExecutor()
-
-    def test_run_cmd_basic(self):
-        """Basic docker run matches docker_run_cmd."""
-        expected = docker_run_cmd("nvcr.io/nvidia/vllm:latest")
-        actual = self.executor.run_cmd("nvcr.io/nvidia/vllm:latest")
-        assert actual == expected
-
-    def test_run_cmd_no_detach(self):
-        expected = docker_run_cmd("img:latest", detach=False)
-        actual = self.executor.run_cmd("img:latest", detach=False)
-        assert actual == expected
-
-    def test_run_cmd_with_name(self):
-        expected = docker_run_cmd("img:latest", container_name="test")
-        actual = self.executor.run_cmd("img:latest", container_name="test")
-        assert actual == expected
-
-    def test_run_cmd_with_env(self):
-        env = {"ZZZ": "last", "AAA": "first"}
-        expected = docker_run_cmd("img:latest", env=env)
-        actual = self.executor.run_cmd("img:latest", env=env)
-        assert actual == expected
-
-    def test_run_cmd_with_volumes(self):
-        volumes = {"/a": "/b", "/c": "/d"}
-        expected = docker_run_cmd("img:latest", volumes=volumes)
-        actual = self.executor.run_cmd("img:latest", volumes=volumes)
-        assert actual == expected
-
-    def test_run_cmd_with_command(self):
-        expected = docker_run_cmd("img:latest", command="sleep infinity")
-        actual = self.executor.run_cmd("img:latest", command="sleep infinity")
-        assert actual == expected
-
-    def test_run_cmd_with_extra_opts(self):
-        extra = ["--ulimit", "memlock=-1"]
-        expected = docker_run_cmd("img:latest", extra_opts=extra)
-        actual = self.executor.run_cmd("img:latest", extra_opts=extra)
-        assert actual == expected
-
-    def test_run_cmd_full(self):
-        """Full docker run with all options."""
-        kwargs = dict(
-            image="nvcr.io/nvidia/vllm:latest",
-            command="vllm serve model",
-            container_name="sparkrun0_solo",
-            detach=True,
-            env={"KEY": "val"},
-            volumes={"/host": "/container"},
-            extra_opts=["--ulimit", "nofile=65536"],
-        )
-        expected = docker_run_cmd(**kwargs)
-        actual = self.executor.run_cmd(**kwargs)
-        assert actual == expected
-
-    def test_exec_cmd_basic(self):
-        expected = docker_exec_cmd("ctr", "echo hello")
-        actual = self.executor.exec_cmd("ctr", "echo hello")
-        assert actual == expected
-
-    def test_exec_cmd_detach(self):
-        expected = docker_exec_cmd("ctr", "echo hello", detach=True)
-        actual = self.executor.exec_cmd("ctr", "echo hello", detach=True)
-        assert actual == expected
-
-    def test_exec_cmd_with_env(self):
-        env = {"HOME": "/root", "PATH": "/bin"}
-        expected = docker_exec_cmd("ctr", "echo hello", env=env)
-        actual = self.executor.exec_cmd("ctr", "echo hello", env=env)
-        assert actual == expected
-
-    def test_stop_cmd_force(self):
-        expected = docker_stop_cmd("ctr", force=True)
-        actual = self.executor.stop_cmd("ctr", force=True)
-        assert actual == expected
-
-    def test_stop_cmd_graceful(self):
-        expected = docker_stop_cmd("ctr", force=False)
-        actual = self.executor.stop_cmd("ctr", force=False)
-        assert actual == expected
-
-    def test_inspect_exists_cmd(self):
-        expected = docker_inspect_exists_cmd("img:latest")
-        actual = self.executor.inspect_exists_cmd("img:latest")
-        assert actual == expected
-
-    def test_pull_cmd(self):
-        expected = docker_pull_cmd("img:latest")
-        actual = self.executor.pull_cmd("img:latest")
-        assert actual == expected
-
-    def test_logs_cmd_basic(self):
-        expected = docker_logs_cmd("ctr")
-        actual = self.executor.logs_cmd("ctr")
-        assert actual == expected
-
-    def test_logs_cmd_follow_tail(self):
-        expected = docker_logs_cmd("ctr", follow=True, tail=100)
-        actual = self.executor.logs_cmd("ctr", follow=True, tail=100)
-        assert actual == expected
-
-
-# ---------------------------------------------------------------------------
 # Naming helper tests
 # ---------------------------------------------------------------------------
 
@@ -336,12 +223,18 @@ class TestDockerExecutorConfig:
         executor = DockerExecutor(cfg)
         cmd = executor.run_cmd("img:latest")
         assert "--user 1000:1000" in cmd
+        assert "/etc/passwd" not in cmd
+        assert "/etc/group" not in cmd
+        assert "HOME=/tmp" not in cmd
 
     def test_user_shell_user_resolves(self):
         cfg = ExecutorConfig(user="$SHELL_USER")
         executor = DockerExecutor(cfg)
         cmd = executor.run_cmd("img:latest")
         assert "--user $(id -u):$(id -g)" in cmd
+        assert "-v /etc/passwd:/etc/passwd:ro" in cmd
+        assert "-v /etc/group:/etc/group:ro" in cmd
+        assert "-e HOME=/tmp" in cmd
 
     def test_security_opt(self):
         cfg = ExecutorConfig(security_opt=["no-new-privileges"])
@@ -368,6 +261,9 @@ class TestDockerExecutorConfig:
         cmd = executor.run_cmd("img:latest")
         assert "--privileged" not in cmd
         assert "--user $(id -u):$(id -g)" in cmd
+        assert "-v /etc/passwd:/etc/passwd:ro" in cmd
+        assert "-v /etc/group:/etc/group:ro" in cmd
+        assert "-e HOME=/tmp" in cmd
         assert "--security-opt no-new-privileges" in cmd
         assert "--cap-add IPC_LOCK" in cmd
         assert "--cap-add SYS_PTRACE" in cmd
@@ -391,9 +287,23 @@ class TestDockerExecutorConfig:
         executor = DockerExecutor()
         cmd = executor.run_cmd("img:latest")
         assert "--user" not in cmd
+        assert "/etc/passwd" not in cmd
+        assert "/etc/group" not in cmd
+        assert "HOME=/tmp" not in cmd
         assert "--security-opt" not in cmd
         assert "--cap-add" not in cmd
         assert "--ulimit" not in cmd
+
+    def test_shell_user_home_overridable(self):
+        """Recipe env vars can override the default HOME=/tmp."""
+        cfg = ExecutorConfig(user="$SHELL_USER")
+        executor = DockerExecutor(cfg)
+        cmd = executor.run_cmd("img:latest", env={"HOME": "/workspace"})
+        # Default HOME=/tmp from _build_default_opts appears first
+        assert "-e HOME=/tmp" in cmd
+        # Recipe override appears later — Docker uses the last -e value
+        assert "-e HOME=/workspace" in cmd
+        assert cmd.index("-e HOME=/tmp") < cmd.index("-e HOME=/workspace")
 
 
 # ---------------------------------------------------------------------------

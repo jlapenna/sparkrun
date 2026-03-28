@@ -36,6 +36,9 @@ class DockerExecutor(Executor):
         if cfg.user:
             if cfg.user == "$SHELL_USER":
                 opts.extend(["--user", "$(id -u):$(id -g)"])
+                opts.extend(["-v", "/etc/passwd:/etc/passwd:ro"])
+                opts.extend(["-v", "/etc/group:/etc/group:ro"])
+                opts.extend(["-e", "HOME=/tmp"])
             else:
                 opts.extend(["--user", cfg.user])
         if cfg.security_opt:
