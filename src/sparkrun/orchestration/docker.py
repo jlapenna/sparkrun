@@ -12,97 +12,12 @@ import shlex
 
 logger = logging.getLogger(__name__)
 
-# Standard docker run options for DGX Spark GPU workloads
-_DEFAULT_DOCKER_OPTS = [
-    "--privileged",
-    "--gpus all",
-    "--ipc=host",
-    "--shm-size=10.24gb",
-    "--network host",
-]
-
-
-def docker_run_cmd(
-    image: str,
-    command: str = "",
-    container_name: str | None = None,
-    detach: bool = True,
-    env: dict[str, str] | None = None,
-    volumes: dict[str, str] | None = None,
-    extra_opts: list[str] | None = None,
-    auto_remove: bool = True,
-    restart_policy: str | None = None,
-) -> str:
-    """Generate a ``docker run`` command string.
-
-    Args:
-        image: Container image reference (e.g. ``nvcr.io/nvidia/vllm:latest``).
-        command: Command to run inside the container.
-        container_name: Optional ``--name`` for the container.
-        detach: Run in detached mode (``-d``).
-        env: Environment variables to set (``-e KEY=VALUE``).
-        volumes: Volume mounts (``-v host:container``).
-        extra_opts: Additional docker run options.
-        auto_remove: Add ``--rm`` flag (default True). Forced to False
-            when *restart_policy* is set (Docker does not allow both).
-        restart_policy: Docker restart policy (e.g. ``always``,
-            ``unless-stopped``, ``on-failure:3``).
-
-    Returns:
-        Complete ``docker run`` command string.
-    """
-    # Docker does not allow --rm with --restart
-    if restart_policy:
-        auto_remove = False
-
-    parts = ["docker", "run"]
-
-    if detach:
-        parts.append("-d")
-
-    parts.extend(_DEFAULT_DOCKER_OPTS)
-
-    if auto_remove:
-        parts.append("--rm")
-
-    if restart_policy:
-        parts.extend(["--restart", restart_policy])
-
-    if container_name:
-        parts.extend(["--name", container_name])
-
-    if env:
-        for key, value in sorted(env.items()):
-            parts.extend(["-e", f"{key}={value}"])
-
-    if volumes:
-        for host_path, container_path in sorted(volumes.items()):
-            parts.extend(["-v", f"{host_path}:{container_path}"])
-
-    if extra_opts:
-        parts.extend(extra_opts)
-
-    parts.append(shlex.quote(image))
-
-    if command:
-        parts.append(command)
-
-    result = " ".join(parts)
-
-    if env:
-        logger.debug("docker run %s env (%d vars):", container_name or image, len(env))
-        for key, value in sorted(env.items()):
-            logger.debug("  %s=%s", key, value)
-    logger.debug("docker run command: %s", result)
-
-    return result
-
 
 def docker_exec_cmd(
-    container_name: str,
-    command: str,
-    detach: bool = False,
-    env: dict[str, str] | None = None,
+        container_name: str,
+        command: str,
+        detach: bool = False,
+        env: dict[str, str] | None = None,
 ) -> str:
     """Generate a ``docker exec`` command string.
 
@@ -167,9 +82,9 @@ def docker_pull_cmd(image: str) -> str:
 
 
 def docker_logs_cmd(
-    container_name: str,
-    follow: bool = False,
-    tail: int | None = None,
+        container_name: str,
+        follow: bool = False,
+        tail: int | None = None,
 ) -> str:
     """Generate a ``docker logs`` command.
 
