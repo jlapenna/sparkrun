@@ -381,6 +381,7 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                         ssh_key=config.ssh_key,
                         discover_ips=(len(host_list) >= 2),
                         dry_run=dry_run,
+                        control_is_member=(self_ip is not None and self_ip in seen),
                     )
                     results["ssh"] = "OK" if ok else "failed"
                 except Exception as e:

@@ -339,7 +339,7 @@ def _detect_and_update_mgmt_ips(host_list, cluster_name, cluster_mgr, ssh_kwargs
     return host_list
 
 
-def _run_ssh_mesh(mesh_hosts, user, cluster_hosts=None, ssh_key=None, discover_ips=True, dry_run=False):
+def _run_ssh_mesh(mesh_hosts, user, cluster_hosts=None, ssh_key=None, discover_ips=True, dry_run=False, control_is_member=False):
     """Run SSH mesh (mesh_ssh_keys.sh) and optionally discover/distribute host keys.
 
     Shared core logic used by ``setup_ssh`` and the setup wizard.
@@ -352,6 +352,10 @@ def _run_ssh_mesh(mesh_hosts, user, cluster_hosts=None, ssh_key=None, discover_i
         ssh_key: SSH key path (optional).
         discover_ips: Run Phase 2 (discover IPs, distribute host keys).
         dry_run: Preview mode.
+        control_is_member: The control machine is a cluster member (e.g.
+            ``127.0.0.1`` was resolved to a routable IP).  When True and the
+            SSH user differs from the OS user, loopback host keys are included
+            in the distribution so that ``ssh <user>@127.0.0.1`` works.
 
     Returns:
         ``True`` if mesh completed successfully, ``False`` otherwise.
@@ -417,10 +421,8 @@ def _run_ssh_mesh(mesh_hosts, user, cluster_hosts=None, ssh_key=None, discover_i
     # ``ssh <user>@127.0.0.1`` works without host-key prompts.
     import os
 
-    from sparkrun.core.hosts import is_control_in_cluster
-
     _os_user = os.environ.get("USER")
-    if user != _os_user and is_control_in_cluster(cluster_hosts):
+    if control_is_member and user != _os_user:
         for loopback in ("127.0.0.1", "localhost"):
             if loopback not in seen_ips:
                 all_discovered_ips.append(loopback)
@@ -602,6 +604,7 @@ def setup_ssh(ctx, hosts, hosts_file, cluster_name, extra_hosts, include_self, u
         ssh_key=config.ssh_key,
         discover_ips=discover_ips,
         dry_run=dry_run,
+        control_is_member=_resolved_loopback or (self_host is not None and self_host in set(cluster_hosts)),
     )
     sys.exit(0 if ok else 1)
 
