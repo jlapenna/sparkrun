@@ -517,8 +517,10 @@ class ResolvedClusterConfig:
         if self.cache_dir:
             remote_cache_dir = self.cache_dir
         elif self.user and self.user != os.environ.get("USER"):
-            # Cross-user: derive remote cache from the SSH user's home
-            remote_cache_dir = "~%s/.cache/huggingface" % self.user
+            # Cross-user: derive remote cache from the SSH user's home.
+            # Use absolute path (not ~user) because tilde isn't expanded
+            # inside quoted strings in bash scripts.
+            remote_cache_dir = "/home/%s/.cache/huggingface" % self.user
         else:
             remote_cache_dir = local_cache_dir
         effective_transfer_mode = transfer_mode_override or self.transfer_mode or "auto"

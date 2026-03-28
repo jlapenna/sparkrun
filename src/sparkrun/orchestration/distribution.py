@@ -456,7 +456,7 @@ def distribute_resources(
             )
 
     if img_failed:
-        logger.warning("Image distribution failed on: %s", ", ".join(img_failed))
+        raise RuntimeError("Image distribution failed on: %s" % ", ".join(img_failed))
 
     # Step 3: Distribute model
     if model:
@@ -518,7 +518,7 @@ def distribute_resources(
                 )
 
         if mdl_failed:
-            logger.warning("Model distribution failed on: %s", ", ".join(mdl_failed))
+            raise RuntimeError("Model distribution failed on: %s" % ", ".join(mdl_failed))
 
     logger.info("Distribution complete.")
     return nccl_env, ib_ip_map, mgmt_ip_map
