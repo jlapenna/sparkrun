@@ -216,6 +216,54 @@ def run_indirect_sudo_script(
     return result
 
 
+def dispatch_sudo_script(
+    host: str,
+    script: str,
+    sudo_password: str,
+    ssh_kwargs: dict | None = None,
+    indirect_sudo_user: str | None = None,
+    timeout: int = 300,
+    dry_run: bool = False,
+) -> RemoteResult:
+    """Run a sudo script on a host, dispatching direct vs indirect.
+
+    When *indirect_sudo_user* is set, uses :func:`run_indirect_sudo_script`
+    (SSH as cluster user, ``su`` to sudo user).  Otherwise uses
+    :func:`run_sudo_script_on_host` directly.
+
+    Args:
+        host: Target hostname or IP.
+        script: Bash script content to execute as root.
+        sudo_password: Sudo password.
+        ssh_kwargs: SSH connection parameters.
+        indirect_sudo_user: If set, SSH as cluster user and ``su`` to this
+            user for sudo access.
+        timeout: Execution timeout in seconds.
+        dry_run: If True, skip actual execution.
+
+    Returns:
+        RemoteResult from the executed script.
+    """
+    if indirect_sudo_user:
+        return run_indirect_sudo_script(
+            host,
+            script,
+            sudo_user=indirect_sudo_user,
+            sudo_password=sudo_password,
+            ssh_kwargs=ssh_kwargs,
+            timeout=timeout,
+            dry_run=dry_run,
+        )
+    return run_sudo_script_on_host(
+        host,
+        script,
+        sudo_password,
+        ssh_kwargs=ssh_kwargs,
+        timeout=timeout,
+        dry_run=dry_run,
+    )
+
+
 def run_with_sudo_fallback(
     host_list: list[str],
     script: str,

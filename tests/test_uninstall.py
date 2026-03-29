@@ -32,7 +32,7 @@ def setup_env(tmp_path: Path):
 
 def _invoke_uninstall(config_root, args):
     """Invoke uninstall command with mocked config root."""
-    from sparkrun.cli._uninstall import setup_uninstall
+    from sparkrun.cli._setup._uninstall import setup_uninstall
 
     with patch("sparkrun.core.config.SparkrunConfig"):
         with patch("sparkrun.core.config.get_config_root", return_value=config_root):
@@ -87,7 +87,7 @@ def test_uninstall_keep_cluster(setup_env):
 
 def test_uninstall_no_cluster():
     """Uninstall with no cluster and no default exits with error."""
-    from sparkrun.cli._uninstall import setup_uninstall
+    from sparkrun.cli._setup._uninstall import setup_uninstall
 
     with patch("sparkrun.core.config.SparkrunConfig"):
         with patch("sparkrun.core.config.get_config_root") as mock_root:
@@ -144,7 +144,7 @@ def test_uninstall_summary_shown(setup_env):
 
 def test_teardown_phases_order():
     """Teardown phases are in reverse installation order."""
-    from sparkrun.cli._uninstall import TEARDOWN_PHASES
+    from sparkrun.cli._setup._uninstall import TEARDOWN_PHASES
 
     assert TEARDOWN_PHASES[0] == "earlyoom"  # Safest first
     assert TEARDOWN_PHASES[-1] == "ssh_mesh"  # Most dangerous last
@@ -152,7 +152,7 @@ def test_teardown_phases_order():
 
 def test_dangerous_phases():
     """Dangerous phases are correctly identified."""
-    from sparkrun.cli._uninstall import DANGEROUS_PHASES
+    from sparkrun.cli._setup._uninstall import DANGEROUS_PHASES
 
     assert "cx7" in DANGEROUS_PHASES
     assert "ssh_mesh" in DANGEROUS_PHASES

@@ -50,17 +50,20 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
         distribute_cx7_host_keys,
     )
     from sparkrun.orchestration.primitives import build_ssh_kwargs, local_ip_for
-    from sparkrun.orchestration.sudo import run_with_sudo_fallback, run_sudo_script_on_host, run_indirect_sudo_script
+    from sparkrun.orchestration.sudo import dispatch_sudo_script, run_with_sudo_fallback, run_sudo_script_on_host
     from sparkrun.scripts import read_script
 
-    from ._common import _get_cluster_manager
-    from ._setup import (
-        setup_install,
-        _run_ssh_mesh,
+    from .._common import _get_cluster_manager
+    from ._commands import setup_install
+    from ._phases import (
         EARLYOOM_PREFER_PATTERNS,
         EARLYOOM_AVOID_PATTERNS,
         _build_earlyoom_regex,
+        _DOCKER_GROUP_SCRIPT,
+        _DOCKER_GROUP_FALLBACK_SCRIPT,
+        _docker_group_summary,
     )
+    from ._ssh import _run_ssh_mesh, _detect_and_update_mgmt_ips
 
     # Manifest tracking
     from sparkrun.core.setup_manifest import ManifestManager
@@ -413,7 +416,7 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                 results["ssh"] = "skipped"
             click.echo()
 
-        # Build SSH kwargs for remaining phases
+        # Build SSH kwargs once for remaining phases
         ssh_kwargs = build_ssh_kwargs(config)
         if user:
             ssh_kwargs["ssh_user"] = user
@@ -427,21 +430,12 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
 
         def _run_sudo_on_host(host, script, password, timeout=300):
             """Dispatch to direct or indirect sudo based on _indirect_sudo_user."""
-            if _indirect_sudo_user:
-                return run_indirect_sudo_script(
-                    host,
-                    script,
-                    sudo_user=_indirect_sudo_user,
-                    sudo_password=password,
-                    ssh_kwargs=ssh_kwargs,
-                    timeout=timeout,
-                    dry_run=dry_run,
-                )
-            return run_sudo_script_on_host(
+            return dispatch_sudo_script(
                 host,
                 script,
                 password,
-                ssh_kwargs=sudo_ssh_kwargs,
+                ssh_kwargs=ssh_kwargs if _indirect_sudo_user else sudo_ssh_kwargs,
+                indirect_sudo_user=_indirect_sudo_user,
                 timeout=timeout,
                 dry_run=dry_run,
             )
@@ -450,8 +444,6 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
         # After SSH mesh, detect each host's management IP and update the
         # cluster definition if the user provided CX7 or other non-mgmt IPs.
         if host_list and cluster_name and results.get("ssh") == "OK":
-            from ._setup import _detect_and_update_mgmt_ips
-
             prev_len = len(host_list)
             _detect_and_update_mgmt_ips(
                 host_list,
@@ -510,7 +502,6 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                 sudo_password = click.prompt("[sudo] password for %s" % alt_user, hide_input=True)
 
                 # Use indirect sudo: SSH as cluster user, su to alt_user
-                # Store the alt user so sudo phases can use run_indirect_sudo_script
                 nonlocal _indirect_sudo_user
                 _indirect_sudo_user = alt_user
 
@@ -595,12 +586,6 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
 
             if run_docker:
                 try:
-                    from ._setup import (
-                        _DOCKER_GROUP_SCRIPT,
-                        _DOCKER_GROUP_FALLBACK_SCRIPT,
-                        _docker_group_summary,
-                    )
-
                     dg_script = _DOCKER_GROUP_SCRIPT.format(user=user)
                     dg_fallback = _DOCKER_GROUP_FALLBACK_SCRIPT.format(user=user)
 

@@ -194,10 +194,8 @@ def _teardown_ssh_mesh(host_list, manifest_phase, user, ssh_kwargs, dry_run):
         return {}
 
     # Step 2: Remove matching lines from authorized_keys on each host
-    # Build a sed script that removes lines containing each key's unique part
     remove_cmds = []
     for key in pubkeys:
-        # Use the key content (middle part) to match — avoids comment differences
         parts = key.split()
         if len(parts) >= 2:
             key_data = parts[1]
