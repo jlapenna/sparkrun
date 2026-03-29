@@ -196,12 +196,17 @@ def run_remote_script_streaming(
     connect_timeout: int = 10,
     timeout: int | None = None,
     dry_run: bool = False,
+    quiet: bool = False,
 ) -> RemoteResult:
     """Execute a script on a remote host with real-time stdout/stderr.
 
     Like :func:`run_remote_script` but connects the remote process's
     stdout and stderr directly to the terminal so output streams in
     real time.  Useful for long-running operations like container builds.
+
+    When *quiet* is True, stdout/stderr are captured instead of
+    streamed to the terminal.  Captured output is logged at DEBUG
+    level.
 
     Args:
         host: Remote hostname or IP.
@@ -212,10 +217,11 @@ def run_remote_script_streaming(
         connect_timeout: SSH connection timeout in seconds.
         timeout: Overall execution timeout in seconds.
         dry_run: If True, log the script but don't execute.
+        quiet: If True, capture output instead of streaming to terminal.
 
     Returns:
-        RemoteResult with returncode (stdout/stderr are empty since
-        they were streamed to the terminal).
+        RemoteResult with returncode (stdout/stderr are empty when
+        streaming, or captured when quiet).
     """
     if dry_run:
         logger.info("[dry-run] Would execute (streaming) on %s (%d bytes)", host, len(script))
@@ -228,21 +234,36 @@ def run_remote_script_streaming(
 
     t0 = time.monotonic()
     try:
-        proc = subprocess.run(
-            cmd,
-            input=script,
-            text=True,
-            timeout=timeout,
-            # stdout/stderr go to terminal (no capture)
-            stdout=None,
-            stderr=None,
-        )
+        if quiet:
+            proc = subprocess.run(
+                cmd,
+                input=script,
+                text=True,
+                timeout=timeout,
+                capture_output=True,
+            )
+        else:
+            proc = subprocess.run(
+                cmd,
+                input=script,
+                text=True,
+                timeout=timeout,
+                # stdout/stderr go to terminal (no capture)
+                stdout=None,
+                stderr=None,
+            )
         elapsed = time.monotonic() - t0
         if proc.returncode == 0:
             logger.debug("  SSH script (streaming) <- %s OK (%.1fs)", host, elapsed)
         else:
             logger.warning("  SSH script (streaming) <- %s FAILED rc=%d (%.1fs)", host, proc.returncode, elapsed)
-        return RemoteResult(host=host, returncode=proc.returncode, stdout="", stderr="")
+        stdout = getattr(proc, "stdout", "") or ""
+        stderr = getattr(proc, "stderr", "") or ""
+        if quiet and stdout:
+            logger.debug("Captured stdout on %s:\n%s", host, stdout[-2000:])
+        if quiet and stderr:
+            logger.debug("Captured stderr on %s:\n%s", host, stderr[-2000:])
+        return RemoteResult(host=host, returncode=proc.returncode, stdout=stdout, stderr=stderr)
     except subprocess.TimeoutExpired:
         elapsed = time.monotonic() - t0
         logger.error("  SSH script (streaming) <- %s TIMEOUT after %.0fs", host, elapsed)

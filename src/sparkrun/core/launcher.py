@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from sparkrun.core.config import SparkrunConfig
     from sparkrun.core.context import SparkrunContext
+    from sparkrun.core.progress import LaunchProgress
     from sparkrun.core.recipe import Recipe
     from sparkrun.core.registry import RegistryManager
     from sparkrun.runtimes.base import RuntimePlugin
@@ -78,6 +79,7 @@ def launch_inference(
     # note: transition to rootless by default
     rootless: bool = True,
     auto_user: bool = True,
+    progress: LaunchProgress | None = None,
 ) -> LaunchResult:
     """Launch an inference workload.
 
@@ -129,14 +131,21 @@ def launch_inference(
     from sparkrun.orchestration.job_metadata import generate_cluster_id, save_job_metadata
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
-    # Resolve config and v from sctx when provided
+    # Resolve config, v, and progress from sctx when provided
     if sctx is not None:
         if config is None:
             config = sctx.config
         if v is None:
             v = sctx.variables
+        if progress is None:
+            progress = sctx.progress
+    p = progress  # short alias
 
     from sparkrun.orchestration.distribution import resolve_auto_transfer_mode
+
+    # -- Phase 1: Prepare --
+    if p:
+        p.phase(1)
 
     effective_cache_dir = cache_dir or str(config.hf_cache_dir)
     effective_local_cache = local_cache_dir or effective_cache_dir
@@ -171,9 +180,14 @@ def launch_inference(
     # Resolve container image
     container_image = runtime.resolve_container(recipe, overrides)
 
-    # Builder phase
+    if p:
+        p.phase_end()
+
+    # -- Phase 2: Builder --
     builder = None
     if recipe.builder:
+        if p:
+            p.phase(2)
         from sparkrun.core.bootstrap import get_builder
 
         try:
@@ -189,6 +203,11 @@ def launch_inference(
             )
         except ValueError:
             logger.warning("Builder '%s' not found, skipping", recipe.builder)
+        if p:
+            p.phase_end()
+    else:
+        if p:
+            p.phase_skip(2, "no builder")
 
     # Save job metadata
     if not dry_run:
@@ -214,10 +233,12 @@ def launch_inference(
         transfer_mode=effective_transfer_mode,
     )
 
-    # Distribution phase
+    # -- Phase 3: Distribution --
     nccl_env = None
     ib_ip_map: dict[str, str] = {}
     if not runtime.is_delegating_runtime():
+        if p:
+            p.phase(3)
         from sparkrun.orchestration.distribution import distribute_resources
 
         nccl_env, ib_ip_map, mgmt_ip_map = distribute_resources(
@@ -248,8 +269,21 @@ def launch_inference(
                 )
             except Exception:
                 logger.debug("Failed to update job metadata: %s", cluster_id, exc_info=True)
+        if p:
+            p.phase_end()
+    else:
+        if p:
+            p.phase_skip(3, "delegating runtime")
 
-    # Sync registry tuning configs
+    # -- Phase 4: Tuning --
+    _needs_tuning = (sync_tuning and not dry_run) or not runtime.is_delegating_runtime()
+    if _needs_tuning:
+        if p:
+            p.phase(4)
+    else:
+        if p:
+            p.phase_skip(4, "disabled")
+
     if sync_tuning and not dry_run:
         from sparkrun.tuning.sync import sync_registry_tuning
 
@@ -285,6 +319,9 @@ def launch_inference(
         except Exception:
             logger.debug("Failed to distribute tuning configs", exc_info=True)
 
+    if _needs_tuning and p:
+        p.phase_end()
+
     # GGUF model resolution
     from sparkrun.models.download import is_gguf_model, resolve_gguf_container_path
 
@@ -313,6 +350,10 @@ def launch_inference(
         from sparkrun.orchestration.primitives import try_clear_page_cache
 
         try_clear_page_cache(host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
+
+    # -- Phase 5: Launch runtime --
+    if p:
+        p.phase(5)
 
     # Build runtime.run() kwargs — include runtime-specific options only
     # when they were explicitly provided.
@@ -380,8 +421,12 @@ def launch_inference(
         ib_ip_map=ib_ip_map,
         skip_keys=skip_keys,
         executor=executor,
+        progress=progress,
         **run_kwargs,
     )
+
+    if p:
+        p.phase_end()
 
     # Collect runtime version info from the head container (non-blocking)
     runtime_info: dict[str, str] = {}
@@ -463,6 +508,7 @@ def post_launch_lifecycle(
     remote_cache_dir: str,
     trust: bool = False,
     dry_run: bool = False,
+    progress: LaunchProgress | None = None,
 ) -> None:
     """Run post-serve lifecycle: port polling, health checks, hooks, conditional stop.
 
@@ -494,6 +540,10 @@ def post_launch_lifecycle(
     from sparkrun.orchestration.primitives import build_ssh_kwargs, detect_host_ip
     from sparkrun.orchestration.docker import generate_container_name, generate_node_container_name
     from sparkrun.utils import is_local_host
+
+    p = progress  # short alias
+    if p:
+        p.phase(6)
 
     recipe = result.recipe
     runtime = result.runtime
@@ -580,6 +630,8 @@ def post_launch_lifecycle(
         sys.exit(1)
 
     click.echo("Post hooks completed successfully.")
+    if p:
+        p.phase_end()
 
     # If stop_after_post, stop the workload and exit
     if recipe.stop_after_post:

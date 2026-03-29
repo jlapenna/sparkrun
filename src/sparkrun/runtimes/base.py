@@ -623,6 +623,9 @@ class RuntimePlugin(Plugin):
         if executor is not None:
             self._executor = executor
 
+        # Extract progress from kwargs (flows through from launcher)
+        progress = kwargs.pop("progress", None)
+
         if len(hosts) <= 1:
             return self._run_solo(
                 host=hosts[0] if hosts else "localhost",
@@ -637,6 +640,7 @@ class RuntimePlugin(Plugin):
                 nccl_env=nccl_env,
                 recipe=recipe,
                 overrides=overrides,
+                progress=progress,
             )
         return self._run_cluster(
             hosts=hosts,
@@ -653,6 +657,7 @@ class RuntimePlugin(Plugin):
             nccl_env=nccl_env,
             ib_ip_map=ib_ip_map,
             skip_keys=skip_keys,
+            progress=progress,
             **kwargs,
         )
 
@@ -734,6 +739,7 @@ class RuntimePlugin(Plugin):
             nccl_env: dict[str, str] | None = None,
             recipe: Recipe | None = None,
             overrides: dict[str, Any] | None = None,
+            progress=None,
     ) -> int:
         """Launch a single-node inference workload.
 
@@ -765,11 +771,19 @@ class RuntimePlugin(Plugin):
         )
 
         # Step 1: InfiniBand detection (skip if pre-detected nccl_env provided)
+        if progress:
+            progress.begin_runtime_steps(3)
         t0 = time.monotonic()
         if nccl_env is not None:
-            logger.info("Step 1/3: Using pre-detected NCCL env (%d vars)", len(nccl_env))
+            if progress:
+                progress.step("Using pre-detected NCCL env")
+            else:
+                logger.info("Step 1/3: Using pre-detected NCCL env (%d vars)", len(nccl_env))
         else:
-            logger.info("Step 1/3: Detecting InfiniBand on %s...", host)
+            if progress:
+                progress.step("Detecting InfiniBand")
+            else:
+                logger.info("Step 1/3: Detecting InfiniBand on %s...", host)
             if is_local:
                 nccl_env = detect_infiniband_local(dry_run=dry_run)
             else:
@@ -782,12 +796,15 @@ class RuntimePlugin(Plugin):
 
         # Step 2: Launch container
         t0 = time.monotonic()
-        logger.info(
-            "Step 2/3: Launching container %s on %s (image: %s)...",
-            container_name,
-            host,
-            image,
-        )
+        if progress:
+            progress.step("Launching container")
+        else:
+            logger.info(
+                "Step 2/3: Launching container %s on %s (image: %s)...",
+                container_name,
+                host,
+                image,
+            )
         launch_script = self.executor.generate_launch_script(
             image=image,
             container_name=container_name,
@@ -815,7 +832,10 @@ class RuntimePlugin(Plugin):
 
         # Step 3: Execute serve command
         t0 = time.monotonic()
-        logger.info("Step 3/3: Executing serve command in %s...", container_name)
+        if progress:
+            progress.step("Executing serve command")
+        else:
+            logger.info("Step 3/3: Executing serve command in %s...", container_name)
         logger.debug("Serve command: %s", serve_command)
         exec_script = self.executor.generate_exec_serve_script(
             container_name=container_name,
@@ -1003,6 +1023,7 @@ class RuntimePlugin(Plugin):
             banner_title: str = "Native Cluster Launcher",
             port_label: str = "Init Port",
             node_label: str = "node",
+            progress=None,
             **kwargs,
     ) -> int:
         """Orchestrate a multi-node native cluster (shared by SGLang, vLLM distributed).
@@ -1038,6 +1059,7 @@ class RuntimePlugin(Plugin):
             banner_title: Title for the launch banner.
             port_label: Label for the port in the banner (e.g. "Init Port").
             node_label: Label for nodes in log messages (e.g. "sglang node").
+            progress: Optional LaunchProgress for structured output.
         """
         from sparkrun.runtimes._cluster_ops import ClusterContext, run_native_cluster
 
@@ -1064,6 +1086,7 @@ class RuntimePlugin(Plugin):
             node_label=node_label,
             detached=detached,
             follow=kwargs.get("follow", True),
+            progress=progress,
         )
 
     def _print_connection_info(self, hosts, cluster_id, *, per_node_logs=False):

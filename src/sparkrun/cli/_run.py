@@ -209,7 +209,11 @@ def run(
     )
 
     # Display summary before launch
+    from sparkrun import __version__
+
     container_image = runtime.resolve_container(recipe, overrides)
+    click.echo("sparkrun v%s" % __version__)
+    click.echo()
     click.echo("Runtime:   %s" % runtime.runtime_name)
     click.echo("Image:     %s" % container_image)
     click.echo("Model:     %s" % recipe.model)
@@ -326,7 +330,10 @@ def run(
     if result.rc == 0 and has_post_hooks and not foreground:
         from sparkrun.core.launcher import post_launch_lifecycle
 
-        post_launch_lifecycle(result, remote_cache_dir=remote_cache_dir, trust=trust, dry_run=dry_run)
+        post_launch_lifecycle(result, remote_cache_dir=remote_cache_dir, trust=trust, dry_run=dry_run, progress=sctx.progress)
+    else:
+        if sctx.progress:
+            sctx.progress.phase_skip(6)
 
     # Follow container logs after a successful detached launch
     if result.rc == 0 and not foreground and not dry_run and not no_follow:

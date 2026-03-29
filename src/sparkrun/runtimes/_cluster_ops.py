@@ -312,6 +312,7 @@ def run_native_cluster(
         node_label: str = "node",
         detached: bool = True,
         follow: bool = True,
+        progress=None,
 ) -> int:
     """Orchestrate a multi-node native cluster.
 
@@ -337,21 +338,33 @@ def run_native_cluster(
 
     executor = runtime.executor
 
+    if progress:
+        progress.begin_runtime_steps(7)
+
     # Step 1: Cleanup
     t0 = time.monotonic()
-    logger.info("Step 1/7: Cleaning up existing containers for cluster '%s'...", ctx.cluster_id)
+    if progress:
+        progress.step("Cleaning up existing containers")
+    else:
+        logger.info("Step 1/7: Cleaning up existing containers for cluster '%s'...", ctx.cluster_id)
     cleanup_ranked_containers(ctx, executor)
     logger.info("Step 1/7: Cleanup done (%.1fs)", time.monotonic() - t0)
 
     # Step 2: InfiniBand detection
     t0 = time.monotonic()
-    logger.info("Step 2/7: InfiniBand detection...")
+    if progress:
+        progress.step("Detecting InfiniBand")
+    else:
+        logger.info("Step 2/7: InfiniBand detection...")
     nccl_env = resolve_ib_env(ctx, nccl_env)
     logger.info("Step 2/7: IB step done (%.1fs)", time.monotonic() - t0)
 
     # Step 3: Detect head node IP
     t0 = time.monotonic()
-    logger.info("Step 3/7: Detecting head node IP on %s...", ctx.head_host)
+    if progress:
+        progress.step("Detecting head node IP")
+    else:
+        logger.info("Step 3/7: Detecting head node IP on %s...", ctx.head_host)
     try:
         head_ip = detect_head_ip(ctx)
     except RuntimeError as e:
@@ -385,7 +398,10 @@ def run_native_cluster(
 
     # Step 4: Launch ALL containers with sleep infinity
     t0 = time.monotonic()
-    logger.info("Step 4/7: Launching containers with sleep infinity on all %d host(s)...", ctx.num_nodes)
+    if progress:
+        progress.step("Launching containers")
+    else:
+        logger.info("Step 4/7: Launching containers with sleep infinity on all %d host(s)...", ctx.num_nodes)
 
     all_nodes: list[tuple[str, int, str]] = []
     for rank, host in enumerate(ctx.hosts):
@@ -402,7 +418,10 @@ def run_native_cluster(
 
     # Step 5: Pre-serve hooks
     t0 = time.monotonic()
-    logger.info("Step 5/7: Running pre-serve hooks...")
+    if progress:
+        progress.step("Running pre-serve hooks")
+    else:
+        logger.info("Step 5/7: Running pre-serve hooks...")
     hosts_containers = [(host, cname) for host, _rank, cname in all_nodes]
     run_pre_serve_hooks(runtime, ctx, hosts_containers, recipe, overrides)
     logger.info("Step 5/7: Pre-serve hooks done (%.1fs)", time.monotonic() - t0)
@@ -410,7 +429,10 @@ def run_native_cluster(
     # Step 6: Exec head serve command and wait for init port
     t0 = time.monotonic()
     head_container = all_nodes[0][2]
-    logger.info("Step 6/7: Executing serve command on head node (rank 0) %s...", ctx.head_host)
+    if progress:
+        progress.step("Starting head node serve")
+    else:
+        logger.info("Step 6/7: Executing serve command on head node (rank 0) %s...", ctx.head_host)
     head_exec_script = executor.generate_exec_serve_script(
         container_name=head_container,
         serve_command=head_command,
@@ -459,10 +481,13 @@ def run_native_cluster(
     # Step 7: Exec worker serve commands in parallel
     t0 = time.monotonic()
     if ctx.worker_hosts:
-        logger.info(
-            "Step 7/7: Executing serve on %d worker node(s) on %s...",
-            len(ctx.worker_hosts), ", ".join(ctx.worker_hosts),
-        )
+        if progress:
+            progress.step("Starting worker nodes")
+        else:
+            logger.info(
+                "Step 7/7: Executing serve on %d worker node(s) on %s...",
+                len(ctx.worker_hosts), ", ".join(ctx.worker_hosts),
+            )
         with ThreadPoolExecutor(max_workers=len(ctx.worker_hosts)) as pool:
             futures = {}
             for i, host in enumerate(ctx.worker_hosts):
@@ -498,9 +523,14 @@ def run_native_cluster(
                         rank, host, result.stderr[:100],
                     )
 
-        logger.info("Step 7/7: Workers launched (%.1fs)", time.monotonic() - t0)
+        if not progress:
+            logger.info("Step 7/7: Workers launched (%.1fs)", time.monotonic() - t0)
     else:
-        logger.info("Step 7/7: No worker hosts, skipping")
+        if progress:
+            progress.step("Starting worker nodes")
+            progress.detail("  No worker hosts, skipping")
+        else:
+            logger.info("Step 7/7: No worker hosts, skipping")
 
     runtime._print_connection_info(ctx.hosts, ctx.cluster_id, per_node_logs=True)
 
