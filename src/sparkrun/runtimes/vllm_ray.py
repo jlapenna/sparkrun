@@ -166,31 +166,35 @@ class VllmRayRuntime(VllmMixin, RuntimePlugin):
         5. Execute serve command on head node.
         """
         import time
-        from sparkrun.orchestration.primitives import (
-            build_ssh_kwargs,
-            build_volumes,
-            cleanup_containers,
-            is_valid_ip,
-            resolve_nccl_env,
+        from sparkrun.runtimes._cluster_ops import (
+            ClusterContext, cleanup_named_containers, resolve_ib_env,
+            find_port, run_pre_serve_hooks,
         )
-        from sparkrun.utils import merge_env
+        from sparkrun.orchestration.primitives import is_valid_ip, wait_for_port
         from sparkrun.orchestration.ssh import run_remote_script, run_remote_scripts_parallel
 
-        head_host = hosts[0]
-        worker_hosts = hosts[1:]
+        ctx = ClusterContext.build(self, hosts, image, cluster_id, env, cache_dir, config, dry_run)
         head_container = self.executor.container_name(cluster_id, "head")
         worker_container = self.executor.container_name(cluster_id, "worker")
-        ssh_kwargs = build_ssh_kwargs(config)
-        volumes = build_volumes(cache_dir, extra=self.get_extra_volumes())
-        runtime_env = self.get_cluster_env(head_ip="<pending>", num_nodes=len(hosts))
-        # Runtime defaults first, recipe env overrides (power users can tweak)
-        all_env = merge_env(
-            self.get_common_env(),  # common env
-            runtime_env,  # cluster-specific env
-            env,  # recipe env
-            self.get_extra_env(),  # tuning/overrides
-        )
 
+        # Step 1: Cleanup
+        t0 = time.monotonic()
+        logger.info("Step 1/5: Cleaning up existing containers for cluster '%s'...", cluster_id)
+        cleanup_named_containers(ctx, [head_container, worker_container])
+        logger.info("Step 1/5: Cleanup done (%.1fs)", time.monotonic() - t0)
+
+        # Step 2: InfiniBand detection (skip if pre-detected nccl_env provided)
+        t0 = time.monotonic()
+        logger.info("Step 2/5: InfiniBand detection...")
+        nccl_env = resolve_ib_env(ctx, nccl_env)
+        logger.info("Step 2/5: IB step done (%.1fs)", time.monotonic() - t0)
+
+        # Auto-detect available ports to avoid collisions with running instances
+        ray_port = find_port(ctx, ctx.head_host, ray_port)
+        if dashboard:
+            dashboard_port = find_port(ctx, ctx.head_host, dashboard_port)
+
+        # print banner AFTER finalizing ports
         self._print_cluster_banner(
             "Ray Cluster Launcher",
             hosts,
@@ -200,55 +204,25 @@ class VllmRayRuntime(VllmMixin, RuntimePlugin):
             dry_run,
         )
 
-        # Step 1: Cleanup
-        t0 = time.monotonic()
-        logger.info("Step 1/5: Cleaning up existing containers for cluster '%s'...", cluster_id)
-        cleanup_containers(
-            hosts,
-            [head_container, worker_container],
-            ssh_kwargs=ssh_kwargs,
-            dry_run=dry_run,
-        )
-        logger.info("Step 1/5: Cleanup done (%.1fs)", time.monotonic() - t0)
-
-        # Step 2: InfiniBand detection (skip if pre-detected nccl_env provided)
-        t0 = time.monotonic()
-        logger.info("Step 2/5: InfiniBand detection...")
-        nccl_env = resolve_nccl_env(
-            nccl_env,
-            hosts,
-            head_host=head_host,
-            ssh_kwargs=ssh_kwargs,
-            dry_run=dry_run,
-        )
-        logger.info("Step 2/5: IB step done (%.1fs)", time.monotonic() - t0)
-
-        # Auto-detect available ports to avoid collisions with running instances
-        from sparkrun.orchestration.primitives import find_available_port
-
-        ray_port = find_available_port(head_host, ray_port, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
-        if dashboard:
-            dashboard_port = find_available_port(head_host, dashboard_port, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
-
         # Step 3: Launch Ray head
         t0 = time.monotonic()
-        logger.info("Step 3/5: Launching Ray head on %s...", head_host)
+        logger.info("Step 3/5: Launching Ray head on %s...", ctx.head_host)
         head_script = self.executor.generate_ray_head_script(
             image=image,
             container_name=head_container,
             ray_port=ray_port,
             dashboard_port=dashboard_port,
             dashboard=dashboard,
-            env=all_env,
-            volumes=volumes,
+            env=ctx.all_env,
+            volumes=ctx.volumes,
             nccl_env=nccl_env,
         )
         head_result = run_remote_script(
-            head_host,
+            ctx.head_host,
             head_script,
             timeout=120,
             dry_run=dry_run,
-            **ssh_kwargs,
+            **ctx.ssh_kwargs,
         )
         if not head_result.success and not dry_run:
             logger.error("Failed to launch Ray head: %s", head_result.stderr)
@@ -264,21 +238,19 @@ class VllmRayRuntime(VllmMixin, RuntimePlugin):
         logger.info("  Ray head launched. HEAD_IP=%s", head_ip)
 
         if not dry_run:
-            from sparkrun.orchestration.primitives import wait_for_port
-
-            logger.info("  Waiting for Ray head port %s:%d...", head_host, ray_port)
+            logger.info("  Waiting for Ray head port %s:%d...", ctx.head_host, ray_port)
             ready = wait_for_port(
-                head_host,
+                ctx.head_host,
                 ray_port,
                 max_retries=30,
                 retry_interval=2,
-                ssh_kwargs=ssh_kwargs,
+                ssh_kwargs=ctx.ssh_kwargs,
                 container_name=head_container,
             )
             if not ready:
                 logger.error(
                     "Ray head failed to become ready. Check logs: ssh %s 'docker logs %s'",
-                    head_host,
+                    ctx.head_host,
                     head_container,
                 )
                 return 1
@@ -286,27 +258,27 @@ class VllmRayRuntime(VllmMixin, RuntimePlugin):
 
         # Step 4: Launch Ray workers (parallel)
         t0 = time.monotonic()
-        if worker_hosts:
+        if ctx.worker_hosts:
             logger.info(
                 "Step 4/5: Launching %d Ray worker(s) on %s...",
-                len(worker_hosts),
-                ", ".join(worker_hosts),
+                len(ctx.worker_hosts),
+                ", ".join(ctx.worker_hosts),
             )
             worker_script = self.executor.generate_ray_worker_script(
                 image=image,
                 container_name=worker_container,
                 head_ip=head_ip,
                 ray_port=ray_port,
-                env=all_env,
-                volumes=volumes,
+                env=ctx.all_env,
+                volumes=ctx.volumes,
                 nccl_env=nccl_env,
             )
             worker_results = run_remote_scripts_parallel(
-                worker_hosts,
+                ctx.worker_hosts,
                 worker_script,
                 timeout=120,
                 dry_run=dry_run,
-                **ssh_kwargs,
+                **ctx.ssh_kwargs,
             )
             failed = [r for r in worker_results if not r.success and not dry_run]
             for r in failed:
@@ -327,34 +299,33 @@ class VllmRayRuntime(VllmMixin, RuntimePlugin):
             logger.info("Step 4/5: No worker hosts, skipping")
 
         # Pre-serve hook (e.g., apply mods to containers, run pre_exec)
-        all_containers = [(head_host, head_container)]
-        for worker in worker_hosts:
+        all_containers = [(ctx.head_host, head_container)]
+        for worker in ctx.worker_hosts:
             all_containers.append((worker, worker_container))
-        config_chain = recipe.build_config_chain(overrides) if recipe else None
-        self._pre_serve(all_containers, ssh_kwargs, dry_run, recipe=recipe, config_chain=config_chain)
+        run_pre_serve_hooks(self, ctx, all_containers, recipe, overrides)
 
         # Step 5: Execute serve command on head
         t0 = time.monotonic()
         logger.info(
             "Step 5/5: Executing serve command on head node %s (container: %s)...",
-            head_host,
+            ctx.head_host,
             head_container,
         )
         exec_script = self.executor.generate_exec_serve_script(
             container_name=head_container,
             serve_command=serve_command,
-            env=all_env,
+            env=ctx.all_env,
             detached=detached,
         )
 
         self._print_connection_info(hosts, cluster_id, head_ip=head_ip, dashboard_port=dashboard_port)
 
         exec_result = run_remote_script(
-            head_host,
+            ctx.head_host,
             exec_script,
             timeout=60,
             dry_run=dry_run,
-            **ssh_kwargs,
+            **ctx.ssh_kwargs,
         )
         logger.info("Step 5/5: Serve command dispatched (%.1fs)", time.monotonic() - t0)
 

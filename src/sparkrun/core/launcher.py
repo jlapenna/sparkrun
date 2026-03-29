@@ -67,6 +67,7 @@ def launch_inference(
     skip_keys: set[str] | frozenset[str] = frozenset(),
     dry_run: bool = False,
     detached: bool = True,
+    follow: bool = True,
     # Runtime-specific kwargs forwarded to runtime.run()
     ray_port: int | None = None,
     dashboard_port: int | None = None,
@@ -112,6 +113,7 @@ def launch_inference(
         skip_keys: Keys to suppress in serve command generation.
         dry_run: Show what would be done without executing.
         detached: Run containers in detached mode.
+        follow: whether to follow logs
         ray_port: Ray GCS port (forwarded to runtime.run).
         dashboard_port: Ray dashboard port (forwarded to runtime.run).
         dashboard: Enable Ray dashboard (forwarded to runtime.run).
@@ -314,7 +316,7 @@ def launch_inference(
 
     # Build runtime.run() kwargs — include runtime-specific options only
     # when they were explicitly provided.
-    run_kwargs: dict[str, Any] = {}
+    run_kwargs: dict[str, Any] = {"follow": follow}
     if ray_port is not None:
         run_kwargs["ray_port"] = ray_port
     if dashboard_port is not None:
