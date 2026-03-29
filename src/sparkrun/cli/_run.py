@@ -312,6 +312,8 @@ def run(
         diag.emit_launch_result(result)
         diag.emit_serve_command(result.serve_command, result.container_image)
 
+    # region USER FACING STDOUT INFORMATION
+
     click.echo("Cluster:   %s" % result.cluster_id)
     click.echo()
     click.echo("Serve command:")
@@ -324,6 +326,8 @@ def run(
         for k, v in sorted(result.runtime_info.items()):
             click.echo("  %-10s %s" % (k + ":", v))
         click.echo()
+
+    # endregion
 
     # Post-serve lifecycle: run post_exec and post_commands if recipe defines them
     has_post_hooks = bool(recipe.post_exec or recipe.post_commands)
