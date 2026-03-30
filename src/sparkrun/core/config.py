@@ -129,6 +129,11 @@ class SparkrunConfig:
                 return default
         return current
 
+    @property
+    def monitor_backend(self) -> str | None:
+        """Monitoring backend preference: ``"bash"`` or ``"nv-monitor"``."""
+        return self._data.get("monitor_backend")
+
     def get_recipe_search_paths(self) -> list[Path]:
         """Return ordered list of paths to search for recipes."""
         paths = []

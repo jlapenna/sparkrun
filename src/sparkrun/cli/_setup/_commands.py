@@ -777,14 +777,29 @@ def setup_ssh(ctx, hosts, hosts_file, cluster_name, extra_hosts, include_self, u
 @dry_run_option
 @click.option("--force", is_flag=True, help="Reconfigure even if existing config is valid")
 @click.option("--mtu", default=9000, show_default=True, type=int, help="MTU for CX7 interfaces")
-@click.option("--subnet1", default=None, help="Override subnet for CX7 partition 1 (e.g. 192.168.11.0/24)")
-@click.option("--subnet2", default=None, help="Override subnet for CX7 partition 2 (e.g. 192.168.12.0/24)")
+@click.option("--subnet1", default=None, help="Override subnet for CX7 partition 1 (e.g. 192.168.11.0/24)", hidden=True)
+@click.option("--subnet2", default=None, help="Override subnet for CX7 partition 2 (e.g. 192.168.12.0/24)", hidden=True)
+@click.option(
+    "--topology",
+    type=click.Choice(["auto", "direct", "switch", "ring"]),
+    default="auto",
+    show_default=True,
+    help="CX7 topology (auto-detected by default)",
+    hidden=True,
+)
 @click.pass_context
-def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, subnet1, subnet2):
+def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, subnet1, subnet2, topology):
     """Configure CX7 network interfaces on cluster hosts.
 
-    Detects ConnectX-7 interfaces, assigns static IPs on two /24 subnets
-    with jumbo frames (MTU 9000), and applies netplan configuration.
+    Detects ConnectX-7 interfaces, assigns static IPs with jumbo frames
+    (MTU 9000), and applies netplan configuration.
+
+    Supports three topologies:
+
+    \b
+      direct  — 2 nodes, 2 subnets (default for 2-node clusters)
+      switch  — N nodes via switch, 2 subnets
+      ring    — 3 nodes in ring, 6 subnets (auto-detected with 3 nodes)
 
     Existing valid configurations are preserved unless --force is used.
     IP addresses are derived from each host's management IP last octet.
@@ -797,6 +812,8 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
 
       sparkrun setup cx7 --cluster mylab --dry-run
 
+      sparkrun setup cx7 --cluster mylab --topology ring
+
       sparkrun setup cx7 --cluster mylab --subnet1 192.168.11.0/24 --subnet2 192.168.12.0/24
 
       sparkrun setup cx7 --cluster mylab --force
@@ -804,11 +821,15 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
     from sparkrun.core.config import SparkrunConfig
     from sparkrun.orchestration.networking import (
         CX7HostDetection,
+        CX7Topology,
         configure_cx7_host,
         detect_cx7_for_hosts,
+        detect_topology,
         distribute_cx7_host_keys,
         select_subnets,
+        select_subnets_for_topology,
         plan_cluster_cx7,
+        plan_ring_cx7,
         apply_cx7_plan,
     )
 
@@ -820,7 +841,7 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
     config = SparkrunConfig()
     host_list, user, ssh_kwargs = _resolve_setup_context(hosts, hosts_file, cluster_name, config, user)
 
-    # Step 1: Detect
+    # Step 1: Detect CX7 interfaces (with MACs)
     detections = detect_cx7_for_hosts(host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
 
     # Check all hosts have CX7
@@ -833,20 +854,65 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
         click.echo("Error: No CX7 interfaces detected on any host.", err=True)
         sys.exit(1)
 
-    # Step 2: Select subnets
+    # Step 2: Topology determination
+    effective_topology = CX7Topology.SWITCH  # default
+    topology_result = None
+
+    if topology == "ring":
+        effective_topology = CX7Topology.RING
+    elif topology == "direct":
+        effective_topology = CX7Topology.DIRECT
+    elif topology == "switch":
+        effective_topology = CX7Topology.SWITCH
+    elif topology == "auto":
+        n_hosts = len(hosts_with_cx7)
+        # Check if hosts have >= 4 interfaces (ring candidate)
+        has_4_ifaces = all(len(d.interfaces) >= 4 for d in hosts_with_cx7.values())
+
+        if n_hosts == 2:
+            effective_topology = CX7Topology.DIRECT
+        elif n_hosts == 3 and has_4_ifaces:
+            # Run topology detection via MAC/ARP
+            click.echo("Detecting topology via neighbor discovery...")
+            topology_result = detect_topology(detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
+            effective_topology = topology_result.topology
+            click.echo("Detected topology: %s" % effective_topology.value)
+        else:
+            effective_topology = CX7Topology.SWITCH
+
+    # For explicit ring topology without detection, create empty result
+    if effective_topology == CX7Topology.RING and topology_result is None:
+        if not dry_run:
+            click.echo("Running topology detection for ring configuration...")
+            topology_result = detect_topology(detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
+        else:
+            from sparkrun.orchestration.networking import CX7TopologyResult
+            topology_result = CX7TopologyResult(topology=CX7Topology.RING)
+
+    click.echo()
+    click.echo("Topology: %s" % effective_topology.value)
+
+    # Step 3: Select subnets
     try:
-        s1, s2 = select_subnets(detections, override1=subnet1, override2=subnet2)
+        if effective_topology == CX7Topology.RING:
+            all_subnets = select_subnets_for_topology(detections, effective_topology)
+            click.echo("Subnets: %s" % ", ".join(str(s) for s in all_subnets))
+        else:
+            s1, s2 = select_subnets(detections, override1=subnet1, override2=subnet2)
+            all_subnets = [s1, s2]
+            click.echo("Subnets: %s, %s" % (s1, s2))
     except RuntimeError as e:
         click.echo("Error: %s" % e, err=True)
         sys.exit(1)
 
-    click.echo()
-    click.echo("Subnets: %s, %s" % (s1, s2))
     click.echo("MTU: %d" % mtu)
     click.echo()
 
-    # Step 3: Plan
-    plan = plan_cluster_cx7(detections, s1, s2, mtu=mtu, force=force)
+    # Step 4: Plan
+    if effective_topology == CX7Topology.RING:
+        plan = plan_ring_cx7(detections, topology_result, all_subnets, mtu=mtu, force=force)
+    else:
+        plan = plan_cluster_cx7(detections, all_subnets[0], all_subnets[1], mtu=mtu, force=force)
 
     # Display plan
     for hp in plan.host_plans:
@@ -864,15 +930,15 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
     for w in plan.warnings:
         click.echo("Warning: %s" % w, err=True)
 
-    # Step 4: Check if all valid
+    # Step 5: Check if all valid
     if plan.all_valid and not force:
         click.echo("All hosts already configured. Use --force to reconfigure.")
         return
 
     # Count
-    needs_config = sum(1 for hp in plan.host_plans if hp.needs_change and len(hp.assignments) == 2)
+    needs_config = sum(1 for hp in plan.host_plans if hp.needs_change and len(hp.assignments) >= 2)
     already_ok = sum(1 for hp in plan.host_plans if not hp.needs_change)
-    has_errors = sum(1 for hp in plan.host_plans if hp.needs_change and len(hp.assignments) != 2)
+    has_errors = sum(1 for hp in plan.host_plans if hp.needs_change and len(hp.assignments) < 2)
 
     if needs_config == 0:
         if has_errors:
@@ -887,11 +953,11 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
         click.echo("[dry-run] Would configure %d host(s), %d already valid." % (needs_config, already_ok))
         return
 
-    # Step 5: Apply — prompt for sudo password if needed
+    # Step 6: Apply — prompt for sudo password if needed
     sudo_hosts_needing_pw = {
         hp.host
         for hp in plan.host_plans
-        if hp.needs_change and len(hp.assignments) == 2 and not detections.get(hp.host, CX7HostDetection(host="")).sudo_ok
+        if hp.needs_change and len(hp.assignments) >= 2 and not detections.get(hp.host, CX7HostDetection(host="")).sudo_ok
     }
     sudo_password = None
     if sudo_hosts_needing_pw:
@@ -954,7 +1020,7 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
         parts.append("%d skipped (errors)" % has_errors)
     click.echo("Results: %s." % ", ".join(parts))
 
-    # Step 6: Distribute CX7 host keys to known_hosts
+    # Step 7: Distribute CX7 host keys to known_hosts
     all_cx7_ips = []
     for hp in plan.host_plans:
         for a in hp.assignments:
@@ -976,10 +1042,21 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
             click.echo("  Warning: keyscan failed on %d host(s)." % ks_fail, err=True)
         click.echo("  Host keys for %d CX7 IPs distributed to %d host(s) + local." % (len(all_cx7_ips), ks_ok))
 
+    # Persist topology to cluster YAML if cluster specified
+    if cluster_name and effective_topology != CX7Topology.UNKNOWN:
+        try:
+            mgr = _get_cluster_manager()
+            if mgr:
+                mgr.update(cluster_name, topology=effective_topology.value)
+                click.echo("Saved topology '%s' to cluster '%s'." % (effective_topology.value, cluster_name))
+        except Exception as e:
+            click.echo("Warning: could not save topology to cluster: %s" % e, err=True)
+
+    subnet_strs = [str(s) for s in all_subnets]
     if configured and not dry_run:
         _record_setup_phase(
             cluster_name, user, host_list, "cx7",
-            subnets=[str(s1), str(s2)], cx7_ips=all_cx7_ips,
+            subnets=subnet_strs, cx7_ips=all_cx7_ips,
             netplan_file="/etc/netplan/40-cx7.yaml",
         )
 

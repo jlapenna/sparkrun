@@ -63,6 +63,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "sparkrun.scripts" = ["*.sh"]
+"sparkrun.bin" = ["nv-monitor-*", "prom2json-*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

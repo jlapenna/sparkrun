@@ -9,6 +9,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 from dataclasses import dataclass, field
+from enum import Enum
 
 from sparkrun.orchestration.infiniband import parse_kv_output
 from sparkrun.scripts import read_script
@@ -27,8 +28,17 @@ DEFAULT_PREFIX_LEN = 24
 
 
 # ---------------------------------------------------------------------------
-# Dataclasses
+# Enums & Dataclasses
 # ---------------------------------------------------------------------------
+
+
+class CX7Topology(str, Enum):
+    """Topology classification for CX7 cluster networking."""
+
+    DIRECT = "direct"  # 2 nodes, all interfaces to same peer
+    SWITCH = "switch"  # switch-connected or undetermined
+    RING = "ring"  # 3 nodes, each connects to 2 others
+    UNKNOWN = "unknown"
 
 
 @dataclass
@@ -42,6 +52,7 @@ class CX7Interface:
     mtu: int
     state: str
     hca: str
+    mac: str = ""
 
 
 @dataclass
@@ -78,11 +89,21 @@ class CX7HostPlan:
 
 
 @dataclass
+class CX7TopologyResult:
+    """Result of topology detection for a CX7 cluster."""
+
+    topology: CX7Topology = CX7Topology.UNKNOWN
+    links: list[tuple[str, str, str, str]] = field(default_factory=list)  # [(hostA, ifaceA, hostB, ifaceB), ...]
+
+
+@dataclass
 class CX7ClusterPlan:
     """Complete CX7 plan for the entire cluster."""
 
     subnet1: ipaddress.IPv4Network | None = None
     subnet2: ipaddress.IPv4Network | None = None
+    topology: CX7Topology = CX7Topology.SWITCH
+    subnets: list[ipaddress.IPv4Network] = field(default_factory=list)
     mtu: int = DEFAULT_MTU
     prefix_len: int = DEFAULT_PREFIX_LEN
     host_plans: list[CX7HostPlan] = field(default_factory=list)
@@ -137,6 +158,7 @@ def build_host_detection(host: str, raw: dict[str, str]) -> CX7HostDetection:
             mtu=int(mtu_str) if mtu_str else 0,
             state=raw.get("CX7_IFACE_%d_STATE" % i, ""),
             hca=raw.get("CX7_IFACE_%d_HCA" % i, ""),
+            mac=raw.get("CX7_IFACE_%d_MAC" % i, ""),
         )
         detection.interfaces.append(iface)
 
@@ -511,6 +533,434 @@ def plan_cluster_cx7(
 
 
 # ---------------------------------------------------------------------------
+# Topology detection
+# ---------------------------------------------------------------------------
+
+
+def _parse_arping_output(output: str) -> list[tuple[str, str]]:
+    """Parse CX7_NEIGHBOR_N_LOCAL_IFACE / CX7_NEIGHBOR_N_REMOTE_MAC from arping output.
+
+    Returns:
+        List of (local_iface, remote_mac) tuples.
+    """
+    raw = parse_kv_output(output)
+    count = int(raw.get("CX7_NEIGHBOR_COUNT", "0"))
+    neighbors: list[tuple[str, str]] = []
+    for i in range(count):
+        local_iface = raw.get("CX7_NEIGHBOR_%d_LOCAL_IFACE" % i, "")
+        remote_mac = raw.get("CX7_NEIGHBOR_%d_REMOTE_MAC" % i, "")
+        if local_iface and remote_mac:
+            neighbors.append((local_iface, remote_mac))
+    return neighbors
+
+
+def classify_topology(
+    links: list[tuple[str, str, str, str]],
+    hosts: list[str],
+) -> CX7Topology:
+    """Classify topology from discovered links.
+
+    Args:
+        links: List of (hostA, ifaceA, hostB, ifaceB) link tuples.
+        hosts: List of host identifiers.
+
+    Returns:
+        CX7Topology enum value.
+    """
+    n_hosts = len(hosts)
+    if n_hosts < 2:
+        return CX7Topology.UNKNOWN
+
+    if n_hosts == 2:
+        return CX7Topology.DIRECT
+
+    if n_hosts == 3:
+        # Check if each host connects to exactly 2 other hosts
+        peer_map: dict[str, set[str]] = {h: set() for h in hosts}
+        for hostA, _ifA, hostB, _ifB in links:
+            if hostA in peer_map and hostB in peer_map:
+                peer_map[hostA].add(hostB)
+                peer_map[hostB].add(hostA)
+
+        if all(len(peers) == 2 for peers in peer_map.values()):
+            return CX7Topology.RING
+
+    return CX7Topology.SWITCH
+
+
+def detect_topology(
+    detections: dict[str, CX7HostDetection],
+    hosts: list[str],
+    ssh_kwargs: dict | None = None,
+    dry_run: bool = False,
+) -> CX7TopologyResult:
+    """Detect CX7 topology via MAC/ARP neighbor discovery.
+
+    Phase 1: Bring up all CX7 interfaces (link-local).
+    Phase 2: Build MAC -> (host, iface) lookup from detection data.
+    Phase 3: Run arping-based neighbor discovery on all hosts.
+    Phase 4: Match neighbor MACs to build link graph.
+    Phase 5: Classify topology.
+
+    Args:
+        detections: Per-host CX7 detection results (must include MAC addresses).
+        hosts: List of host identifiers.
+        ssh_kwargs: SSH connection parameters.
+        dry_run: Log without executing.
+
+    Returns:
+        CX7TopologyResult with topology classification and link list.
+    """
+    kw = ssh_kwargs or {}
+    result = CX7TopologyResult()
+
+    # Phase 1 — Bringup: ensure all CX7 interfaces are link-up
+    all_iface_names: dict[str, list[str]] = {}
+    for host in hosts:
+        det = detections.get(host)
+        if det and det.detected:
+            all_iface_names[host] = [iface.name for iface in det.interfaces]
+
+    if not all_iface_names:
+        return result
+
+    bringup_script = read_script("cx7_bringup.sh")
+    bringup_hosts = list(all_iface_names.keys())
+    bringup_scripts = []
+    for host in bringup_hosts:
+        ifaces_str = " ".join(all_iface_names[host])
+        bringup_scripts.append("export CX7_IFACES='%s'\n%s" % (ifaces_str, bringup_script))
+
+    if not dry_run:
+        logger.info("Bringing up CX7 interfaces on %d host(s)...", len(bringup_hosts))
+        # Run bringup per-host with custom scripts
+        for i, host in enumerate(bringup_hosts):
+            from sparkrun.orchestration.ssh import run_remote_script
+
+            run_remote_script(host, bringup_scripts[i], timeout=30, dry_run=dry_run, **kw)
+
+    # Phase 2 — Build MAC lookup: mac -> (host, iface_name)
+    mac_lookup: dict[str, tuple[str, str]] = {}
+    for host in hosts:
+        det = detections.get(host)
+        if not det or not det.detected:
+            continue
+        for iface in det.interfaces:
+            if iface.mac:
+                mac_lookup[iface.mac.lower()] = (host, iface.name)
+
+    if not mac_lookup:
+        logger.warning("No MAC addresses available for topology detection")
+        return result
+
+    # Phase 3 — Neighbor discovery via arping
+    arping_script = read_script("cx7_arping.sh")
+    arping_hosts = list(all_iface_names.keys())
+    arping_scripts = []
+    for host in arping_hosts:
+        ifaces_str = " ".join(all_iface_names[host])
+        arping_scripts.append("export CX7_IFACES='%s'\n%s" % (ifaces_str, arping_script))
+
+    host_neighbors: dict[str, list[tuple[str, str]]] = {}
+    if not dry_run:
+        logger.info("Running neighbor discovery on %d host(s)...", len(arping_hosts))
+        for i, host in enumerate(arping_hosts):
+            from sparkrun.orchestration.ssh import run_remote_script
+
+            r = run_remote_script(host, arping_scripts[i], timeout=30, dry_run=dry_run, **kw)
+            if r.success:
+                host_neighbors[host] = _parse_arping_output(r.stdout)
+            else:
+                logger.warning("  %s: arping failed: %s", host, r.stderr[:200])
+    else:
+        logger.info("[dry-run] Would run neighbor discovery on %d host(s)", len(arping_hosts))
+
+    # Phase 4 — Build link graph
+    links: list[tuple[str, str, str, str]] = []
+
+    for hostA, neighbors in host_neighbors.items():
+        for local_iface, remote_mac in neighbors:
+            remote_mac_lower = remote_mac.lower()
+            if remote_mac_lower not in mac_lookup:
+                continue
+            hostB, ifaceB = mac_lookup[remote_mac_lower]
+            if hostA == hostB:
+                continue  # Skip self-links
+            links.append((hostA, local_iface, hostB, ifaceB))
+
+    # Phase 5 — Classify
+    result.links = links
+    result.topology = classify_topology(links, hosts)
+    logger.info("Detected topology: %s (%d links)", result.topology.value, len(links))
+    return result
+
+
+def select_subnets_for_topology(
+    detections: dict[str, CX7HostDetection],
+    topology: CX7Topology,
+    count: int = 2,
+    override1: str | None = None,
+    override2: str | None = None,
+) -> list[ipaddress.IPv4Network]:
+    """Select subnets based on topology requirements.
+
+    For RING topology: 6 subnets (2 per link, 3 links).
+    For DIRECT/SWITCH: 2 subnets (backward compatible).
+
+    Args:
+        detections: Per-host detection results.
+        topology: Detected or specified topology.
+        count: Number of subnets needed (auto-determined from topology if not overridden).
+        override1: User-specified subnet 1 (only for 2-subnet topologies).
+        override2: User-specified subnet 2 (only for 2-subnet topologies).
+
+    Returns:
+        List of IPv4Network subnets.
+    """
+    if topology == CX7Topology.RING:
+        count = 6
+    else:
+        count = 2
+
+    # For 2-subnet case, delegate to existing function
+    if count == 2:
+        s1, s2 = select_subnets(detections, override1=override1, override2=override2)
+        return [s1, s2]
+
+    # For ring (6 subnets), select from RFC 1918 avoiding conflicts
+    all_used: set[ipaddress.IPv4Network] = set()
+    for det in detections.values():
+        for s in det.used_subnets:
+            try:
+                all_used.add(ipaddress.IPv4Network(s, strict=False))
+            except ValueError:
+                continue
+
+    candidates = _generate_candidate_subnets(all_used)
+    selected: list[ipaddress.IPv4Network] = []
+    for candidate in candidates:
+        selected.append(candidate)
+        if len(selected) >= count:
+            break
+
+    if len(selected) < count:
+        raise RuntimeError("Could not find %d available /24 subnets for ring CX7 configuration" % count)
+
+    return selected
+
+
+def _group_interfaces_by_port(interfaces: list[CX7Interface]) -> list[list[CX7Interface]]:
+    """Group CX7 interfaces by physical port.
+
+    Interfaces sharing the same PCI device path (inferred from naming)
+    belong to the same port. On DGX Spark, each CX7 has 2 physical ports,
+    each with 2 partitions (total 4 interfaces). Interfaces from the same
+    port share a common PCI domain prefix in their sysfs name.
+
+    Falls back to grouping in sorted pairs if naming pattern isn't clear.
+    """
+    if len(interfaces) <= 2:
+        return [interfaces]
+
+    # Sort by name for determinism
+    sorted_ifaces = sorted(interfaces, key=lambda i: i.name.lower())
+
+    # Group in pairs (first two = port 0, next two = port 1)
+    groups: list[list[CX7Interface]] = []
+    for i in range(0, len(sorted_ifaces), 2):
+        groups.append(sorted_ifaces[i : i + 2])
+    return groups
+
+
+def plan_ring_cx7(
+    detections: dict[str, CX7HostDetection],
+    topology_result: CX7TopologyResult,
+    subnets: list[ipaddress.IPv4Network],
+    mtu: int = DEFAULT_MTU,
+    force: bool = False,
+) -> CX7ClusterPlan:
+    """Build CX7 configuration plan for a 3-node ring topology.
+
+    The ring has 3 links. Each link uses 2 subnets (one per partition on that cable):
+    - Link 0 (NodeA.Port0 <-> NodeB.Port1): subnets[0], subnets[1]
+    - Link 1 (NodeB.Port0 <-> NodeC.Port1): subnets[2], subnets[3]
+    - Link 2 (NodeC.Port0 <-> NodeA.Port1): subnets[4], subnets[5]
+
+    Each interface gets IP .1 or .2 based on which end of the link it is.
+
+    Args:
+        detections: Per-host CX7 detection results.
+        topology_result: Topology detection result with link information.
+        subnets: 6 /24 subnets for ring configuration.
+        mtu: Target MTU.
+        force: Reconfigure even if existing config is valid.
+
+    Returns:
+        CX7ClusterPlan with per-host plans for 4 interfaces each.
+    """
+    plan = CX7ClusterPlan(
+        subnet1=subnets[0] if subnets else None,
+        subnet2=subnets[1] if len(subnets) > 1 else None,
+        topology=CX7Topology.RING,
+        subnets=list(subnets),
+        mtu=mtu,
+        prefix_len=DEFAULT_PREFIX_LEN,
+    )
+
+    if len(subnets) < 6:
+        plan.errors.append("Ring topology requires 6 subnets, got %d" % len(subnets))
+        return plan
+
+    # Build ordered link list from topology result.
+    # We need to identify which port on each host connects to which peer.
+    # From the topology_result.links, build adjacency: host -> [(peer, local_iface, remote_iface)]
+    host_links: dict[str, list[tuple[str, str, str]]] = {}
+    for hostA, ifaceA, hostB, ifaceB in topology_result.links:
+        host_links.setdefault(hostA, []).append((hostB, ifaceA, ifaceB))
+        host_links.setdefault(hostB, []).append((hostA, ifaceB, ifaceA))
+
+    hosts = sorted(detections.keys())
+    hosts_with_cx7 = [h for h in hosts if detections[h].detected]
+
+    if len(hosts_with_cx7) != 3:
+        plan.errors.append("Ring topology requires exactly 3 hosts with CX7, found %d" % len(hosts_with_cx7))
+        return plan
+
+    # Order hosts into a ring: A -> B -> C -> A
+    # Start with first host, find its two peers, order them consistently
+    ring_hosts = [hosts_with_cx7[0]]
+    remaining = set(hosts_with_cx7[1:])
+
+    for _ in range(2):
+        current = ring_hosts[-1]
+        peers = host_links.get(current, [])
+        for peer_host, _, _ in peers:
+            if peer_host in remaining:
+                ring_hosts.append(peer_host)
+                remaining.discard(peer_host)
+                break
+        else:
+            # If no link found, just pick from remaining
+            if remaining:
+                ring_hosts.append(remaining.pop())
+
+    # Now we have ring_hosts = [A, B, C] where A-B, B-C, C-A are the links
+    # Assign subnets to links:
+    # Link 0: A <-> B uses subnets[0], subnets[1]
+    # Link 1: B <-> C uses subnets[2], subnets[3]
+    # Link 2: C <-> A uses subnets[4], subnets[5]
+
+    link_pairs = [
+        (ring_hosts[0], ring_hosts[1]),
+        (ring_hosts[1], ring_hosts[2]),
+        (ring_hosts[2], ring_hosts[0]),
+    ]
+
+    # For each link, determine which interfaces connect
+    # Build assignment map: host -> list of (iface_name, ip, subnet)
+    assignments: dict[str, list[CX7InterfaceAssignment]] = {h: [] for h in ring_hosts}
+
+    for link_idx, (hostA, hostB) in enumerate(link_pairs):
+        subnet_a = subnets[link_idx * 2]
+        subnet_b = subnets[link_idx * 2 + 1]
+
+        # Find which interfaces connect these two hosts
+        ifaceA = None
+        ifaceB = None
+        for peer, local_if, remote_if in host_links.get(hostA, []):
+            if peer == hostB:
+                ifaceA = local_if
+                ifaceB = remote_if
+                break
+
+        if not ifaceA or not ifaceB:
+            # Fallback: use interface ordering
+            detA = detections[hostA]
+            detB = detections[hostB]
+            sorted_a = sorted(detA.interfaces, key=lambda i: i.name.lower())
+            sorted_b = sorted(detB.interfaces, key=lambda i: i.name.lower())
+            # Use port based on link index within this host's connections
+            a_idx = min(link_idx, len(sorted_a) - 1)
+            b_idx = min(link_idx, len(sorted_b) - 1)
+            ifaceA = sorted_a[a_idx].name if sorted_a else "unknown"
+            ifaceB = sorted_b[b_idx].name if sorted_b else "unknown"
+            plan.warnings.append(
+                "Link %d (%s <-> %s): no link data, using interface ordering" % (link_idx, hostA, hostB)
+            )
+
+        # Host A gets .1 on both subnets for this link
+        # Host B gets .2 on both subnets for this link
+        ip_a1 = str(subnet_a.network_address + 1)
+        ip_b1 = str(subnet_a.network_address + 2)
+
+        # The second subnet in the pair is for the second partition on the same cable
+        # Find the partner partition interfaces
+        # For now, assign the primary interfaces to the first subnet
+        assignments[hostA].append(CX7InterfaceAssignment(iface_name=ifaceA, ip=ip_a1, subnet=str(subnet_a)))
+        assignments[hostB].append(CX7InterfaceAssignment(iface_name=ifaceB, ip=ip_b1, subnet=str(subnet_a)))
+
+        # Find partner partition interfaces (second interface on same port)
+        detA = detections[hostA]
+        detB = detections[hostB]
+        port_groups_a = _group_interfaces_by_port(detA.interfaces)
+        port_groups_b = _group_interfaces_by_port(detB.interfaces)
+
+        partnerA = None
+        for group in port_groups_a:
+            names = [i.name for i in group]
+            if ifaceA in names and len(group) > 1:
+                partnerA = [i.name for i in group if i.name != ifaceA][0]
+                break
+
+        partnerB = None
+        for group in port_groups_b:
+            names = [i.name for i in group]
+            if ifaceB in names and len(group) > 1:
+                partnerB = [i.name for i in group if i.name != ifaceB][0]
+                break
+
+        if partnerA and partnerB:
+            ip_a2 = str(subnet_b.network_address + 1)
+            ip_b2 = str(subnet_b.network_address + 2)
+            assignments[hostA].append(CX7InterfaceAssignment(iface_name=partnerA, ip=ip_a2, subnet=str(subnet_b)))
+            assignments[hostB].append(CX7InterfaceAssignment(iface_name=partnerB, ip=ip_b2, subnet=str(subnet_b)))
+        else:
+            plan.warnings.append(
+                "Link %d: could not find partner partitions for %s/%s" % (link_idx, ifaceA, ifaceB)
+            )
+
+    # Build host plans
+    all_valid = True
+    for host in sorted(detections.keys()):
+        det = detections[host]
+        host_plan = CX7HostPlan(host=host)
+
+        if not det.detected:
+            host_plan.needs_change = True
+            host_plan.reason = "no CX7 interfaces detected"
+            plan.errors.append("%s: no CX7 interfaces detected" % host)
+            all_valid = False
+        elif host in assignments and assignments[host]:
+            host_plan.assignments = assignments[host]
+            host_plan.needs_change = True
+            host_plan.reason = "ring topology configuration" if force else "ring topology configuration needed"
+            all_valid = False
+        else:
+            host_plan.needs_change = True
+            host_plan.reason = "no ring assignments computed"
+            plan.errors.append("%s: no ring assignments computed" % host)
+            all_valid = False
+
+        if host_plan.needs_change and not det.sudo_ok:
+            plan.warnings.append("%s: passwordless sudo not available" % host)
+
+        plan.host_plans.append(host_plan)
+
+    plan.all_valid = all_valid
+    return plan
+
+
+# ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
@@ -518,27 +968,85 @@ def plan_cluster_cx7(
 def generate_cx7_configure_script(host_plan: CX7HostPlan, mtu: int, prefix_len: int) -> str:
     """Generate the netplan configuration script for one host.
 
+    Supports both 2-interface (direct/switch) and N-interface (ring) plans.
+
     Args:
-        host_plan: The plan for this host (must have exactly 2 assignments).
+        host_plan: The plan for this host (must have >= 2 assignments).
         mtu: Target MTU.
         prefix_len: Subnet prefix length.
 
     Returns:
         Bash script content ready to pipe via SSH.
     """
-    if len(host_plan.assignments) != 2:
-        raise ValueError("Expected 2 interface assignments for %s, got %d" % (host_plan.host, len(host_plan.assignments)))
+    if len(host_plan.assignments) < 2:
+        raise ValueError("Expected at least 2 interface assignments for %s, got %d" % (host_plan.host, len(host_plan.assignments)))
 
-    template = read_script("cx7_configure.sh")
-    a1, a2 = host_plan.assignments[0], host_plan.assignments[1]
-    return template.format(
-        adapter1=a1.iface_name,
-        adapter2=a2.iface_name,
-        ip1=a1.ip,
-        ip2=a2.ip,
-        mtu=mtu,
-        prefix_len=prefix_len,
-    )
+    if len(host_plan.assignments) == 2:
+        # Use the original template for 2-interface case
+        template = read_script("cx7_configure.sh")
+        a1, a2 = host_plan.assignments[0], host_plan.assignments[1]
+        return template.format(
+            adapter1=a1.iface_name,
+            adapter2=a2.iface_name,
+            ip1=a1.ip,
+            ip2=a2.ip,
+            mtu=mtu,
+            prefix_len=prefix_len,
+        )
+
+    # Dynamic netplan generation for N interfaces (ring topology)
+    return _generate_dynamic_configure_script(host_plan, mtu, prefix_len)
+
+
+def _generate_dynamic_configure_script(host_plan: CX7HostPlan, mtu: int, prefix_len: int) -> str:
+    """Generate a netplan configuration script for N CX7 interfaces.
+
+    Builds netplan YAML in Python and embeds it in a bash script that
+    writes and applies the configuration.
+    """
+    # Build netplan ethernets dict
+    ethernets_lines = []
+    for a in host_plan.assignments:
+        ethernets_lines.append(
+            "    %s:\n"
+            "      dhcp4: no\n"
+            "      dhcp6: no\n"
+            "      link-local: [ ipv4 ]\n"
+            "      mtu: %d\n"
+            "      addresses: [%s/%d]" % (a.iface_name, mtu, a.ip, prefix_len)
+        )
+
+    netplan_content = "network:\n  version: 2\n  ethernets:\n" + "\n".join(ethernets_lines) + "\n"
+
+    # Build summary for logging
+    summary_lines = []
+    for a in host_plan.assignments:
+        summary_lines.append('echo "  %s -> %s/%d (MTU %d)" >&2' % (a.iface_name, a.ip, prefix_len, mtu))
+
+    script = (
+        "#!/bin/bash\n"
+        "set -euo pipefail\n"
+        "\n"
+        'echo "Configuring %d CX7 interfaces:" >&2\n'
+        "%s\n"
+        "\n"
+        "sudo tee /etc/netplan/40-cx7.yaml > /dev/null <<'NETPLAN_EOF'\n"
+        "%s"
+        "NETPLAN_EOF\n"
+        "\n"
+        "sudo chmod 600 /etc/netplan/40-cx7.yaml\n"
+        'echo "Applying netplan configuration..." >&2\n'
+        "sudo netplan apply\n"
+        "\n"
+        'echo "Verifying configuration..." >&2\n'
+    ) % (len(host_plan.assignments), "\n".join(summary_lines), netplan_content)
+
+    # Add verification for each interface
+    for a in host_plan.assignments:
+        script += 'ip -4 addr show "%s" 2>/dev/null | head -3 >&2\n' % a.iface_name
+
+    script += 'echo "CX7_CONFIGURED=1"\n'
+    return script
 
 
 def configure_cx7_host(
@@ -552,7 +1060,7 @@ def configure_cx7_host(
     """Apply CX7 netplan configuration to a single host.
 
     Args:
-        host_plan: Plan for this host (must have exactly 2 assignments).
+        host_plan: Plan for this host (must have at least 2 assignments).
         mtu: Target MTU.
         prefix_len: Subnet prefix length.
         ssh_kwargs: SSH connection parameters.
@@ -607,7 +1115,7 @@ def apply_cx7_plan(
     results = []
     sudo_hosts = sudo_hosts or set()
 
-    hosts_to_configure = [hp for hp in plan.host_plans if hp.needs_change and len(hp.assignments) == 2]
+    hosts_to_configure = [hp for hp in plan.host_plans if hp.needs_change and len(hp.assignments) >= 2]
     if not hosts_to_configure:
         logger.info("No hosts need CX7 configuration changes")
         return results

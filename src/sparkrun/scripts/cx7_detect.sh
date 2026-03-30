@@ -26,6 +26,7 @@ declare -a IFACE_SUBNETS=()
 declare -a IFACE_MTUS=()
 declare -a IFACE_STATES=()
 declare -a IFACE_HCAS=()
+declare -a IFACE_MACS=()
 
 for ib_path in /sys/class/infiniband/*; do
     [ -e "$ib_path" ] || continue
@@ -80,6 +81,11 @@ for ib_path in /sys/class/infiniband/*; do
     IFACE_MTUS+=("$mtu")
     IFACE_STATES+=("$operstate")
     IFACE_HCAS+=("$hca_name")
+
+    # MAC address
+    mac_addr=$(cat "/sys/class/net/$net_if/address" 2>/dev/null || echo "")
+    IFACE_MACS+=("$mac_addr")
+
     IFACE_COUNT=$((IFACE_COUNT + 1))
 done
 
@@ -151,6 +157,7 @@ for i in $(seq 0 $((IFACE_COUNT - 1))); do
     echo "CX7_IFACE_${i}_MTU=${IFACE_MTUS[$i]}"
     echo "CX7_IFACE_${i}_STATE=${IFACE_STATES[$i]}"
     echo "CX7_IFACE_${i}_HCA=${IFACE_HCAS[$i]}"
+    echo "CX7_IFACE_${i}_MAC=${IFACE_MACS[$i]}"
 done
 
 echo "CX7_USED_SUBNETS=$USED_SUBNETS"

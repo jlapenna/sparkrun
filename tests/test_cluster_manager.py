@@ -473,6 +473,98 @@ def test_valid_transfer_interfaces_constant():
 
 
 # ---------------------------------------------------------------------------
+# topology field tests
+# ---------------------------------------------------------------------------
+
+
+def test_create_cluster_with_topology(tmp_path: Path):
+    """Create a cluster with topology and verify persistence."""
+    manager = ClusterManager(tmp_path)
+    manager.create("ring-lab", ["host1", "host2", "host3"], topology="ring")
+
+    cluster = manager.get("ring-lab")
+    assert cluster.topology == "ring"
+    assert cluster.hosts == ["host1", "host2", "host3"]
+
+
+def test_create_cluster_without_topology(tmp_path: Path):
+    """Cluster created without topology defaults to None."""
+    manager = ClusterManager(tmp_path)
+    manager.create("basic", ["host1"])
+
+    cluster = manager.get("basic")
+    assert cluster.topology is None
+
+
+def test_update_cluster_topology(tmp_path: Path):
+    """Update topology without affecting other fields."""
+    manager = ClusterManager(tmp_path)
+    manager.create("test", ["host1", "host2"], description="My cluster", user="admin")
+
+    manager.update("test", topology="direct")
+
+    cluster = manager.get("test")
+    assert cluster.topology == "direct"
+    assert cluster.hosts == ["host1", "host2"]
+    assert cluster.description == "My cluster"
+    assert cluster.user == "admin"
+
+
+def test_update_cluster_clear_topology(tmp_path: Path):
+    """Pass topology=None explicitly to clear it."""
+    manager = ClusterManager(tmp_path)
+    manager.create("test", ["host1", "host2", "host3"], topology="ring")
+
+    manager.update("test", topology=None)
+
+    cluster = manager.get("test")
+    assert cluster.topology is None
+
+
+def test_create_cluster_with_all_fields_including_topology(tmp_path: Path):
+    """Create a cluster with all optional fields including topology."""
+    manager = ClusterManager(tmp_path)
+    manager.create(
+        "full", ["host1", "host2", "host3"],
+        description="Full ring cluster",
+        user="admin",
+        cache_dir="/mnt/models",
+        transfer_mode="delegated",
+        transfer_interface="cx7",
+        topology="ring",
+    )
+
+    cluster = manager.get("full")
+    assert cluster.name == "full"
+    assert cluster.hosts == ["host1", "host2", "host3"]
+    assert cluster.description == "Full ring cluster"
+    assert cluster.user == "admin"
+    assert cluster.cache_dir == "/mnt/models"
+    assert cluster.transfer_mode == "delegated"
+    assert cluster.transfer_interface == "cx7"
+    assert cluster.topology == "ring"
+
+
+def test_existing_yaml_without_topology_loads(tmp_path: Path):
+    """YAML without topology field loads with topology=None (backward compat)."""
+    import yaml
+
+    clusters_dir = tmp_path / "clusters"
+    clusters_dir.mkdir()
+    yaml_file = clusters_dir / "old-cluster.yaml"
+    yaml_file.write_text(yaml.dump({
+        "name": "old-cluster",
+        "hosts": ["host1", "host2"],
+        "description": "Old cluster without topology",
+    }))
+
+    manager = ClusterManager(tmp_path)
+    cluster = manager.get("old-cluster")
+    assert cluster.topology is None
+    assert cluster.hosts == ["host1", "host2"]
+
+
+# ---------------------------------------------------------------------------
 # Monitoring parse tests
 # ---------------------------------------------------------------------------
 
