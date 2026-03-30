@@ -1104,13 +1104,20 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
             click.echo("  Warning: keyscan failed on %d host(s)." % ks_fail, err=True)
         click.echo("  Host keys for %d CX7 IPs distributed to %d host(s) + local." % (len(all_cx7_ips), ks_ok))
 
-    # Persist topology to cluster YAML if cluster specified
-    if cluster_name and effective_topology != CX7Topology.UNKNOWN:
+    # Persist topology to cluster YAML (explicit --cluster or default cluster)
+    effective_cluster = cluster_name
+    if not effective_cluster:
+        try:
+            mgr = _get_cluster_manager()
+            effective_cluster = mgr.get_default() if mgr else None
+        except Exception:
+            pass
+    if effective_cluster and effective_topology != CX7Topology.UNKNOWN:
         try:
             mgr = _get_cluster_manager()
             if mgr:
-                mgr.update(cluster_name, topology=effective_topology.value)
-                click.echo("Saved topology '%s' to cluster '%s'." % (effective_topology.value, cluster_name))
+                mgr.update(effective_cluster, topology=effective_topology.value)
+                click.echo("Saved topology '%s' to cluster '%s'." % (effective_topology.value, effective_cluster))
         except Exception as e:
             click.echo("Warning: could not save topology to cluster: %s" % e, err=True)
 
