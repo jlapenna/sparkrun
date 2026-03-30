@@ -73,6 +73,7 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
     sudo_password = None
     host_list = []
     cx7_detected_any = False
+    cx7_changed_ips = False
 
     try:
         # ── Phase 0: Welcome + Install Check ─────────────────────────
@@ -557,6 +558,8 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                             )
 
                         results["cx7"] = "configured (%s, %s)" % (s1, s2) if ok_count else "failed"
+                        if ok_count:
+                            cx7_changed_ips = True
                         if ok_count and not dry_run and cluster_name:
                             manifest_mgr.record_phase(
                                 cluster_name, user, host_list, "cx7",
@@ -571,6 +574,49 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                         return
             else:
                 results["cx7"] = "skipped"
+            click.echo()
+
+        # ── Phase 3b: Re-run SSH mesh after CX7 changes ─────────────
+        # CX7 configuration may add new IPs that need to be in the SSH
+        # mesh.  Re-run the mesh (discover-ips phase only) so inter-node
+        # SSH works over the newly configured CX7 interfaces.
+        if cx7_changed_ips and host_list and len(host_list) >= 2 and results.get("ssh") == "OK":
+            click.echo("Phase 3b: Re-meshing SSH after CX7 IP changes")
+            click.echo("-" * 30)
+            click.echo("CX7 configuration changed network IPs. Re-running SSH mesh")
+            click.echo("to ensure full connectivity across all interfaces.")
+            click.echo()
+
+            try:
+                mesh_hosts = list(host_list)
+                seen_mesh = set(mesh_hosts)
+                self_ip = local_ip_for(host_list[0]) if host_list else None
+                local_user_remesh = os.environ.get("USER", "root")
+                cross_user_remesh = user != local_user_remesh
+                if self_ip and self_ip not in seen_mesh and not cross_user_remesh:
+                    mesh_hosts.append(self_ip)
+                    seen_mesh.add(self_ip)
+
+                ok = _run_ssh_mesh(
+                    mesh_hosts,
+                    user,
+                    cluster_hosts=host_list,
+                    ssh_key=config.ssh_key,
+                    discover_ips=True,
+                    dry_run=dry_run,
+                    control_is_member=(self_ip is not None and self_ip in seen_mesh),
+                )
+                results["ssh_remesh"] = "OK" if ok else "failed"
+                if ok and not dry_run and cluster_name:
+                    manifest_mgr.record_phase(
+                        cluster_name, user, mesh_hosts, "ssh_mesh_post_cx7",
+                        mesh_hosts=mesh_hosts, cross_user=cross_user_remesh,
+                    )
+            except Exception as e:
+                results["ssh_remesh"] = "failed"
+                click.echo("SSH re-mesh error: %s" % e, err=True)
+                if not yes and not click.confirm("Continue?", default=True):
+                    return
             click.echo()
 
         # ── Phase 4: Docker Group ────────────────────────────────────
@@ -803,6 +849,8 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
         click.echo("  SSH mesh:   %s" % results["ssh"])
     if results.get("cx7"):
         click.echo("  CX7:        %s" % results["cx7"])
+    if results.get("ssh_remesh"):
+        click.echo("  SSH remesh: %s" % results["ssh_remesh"])
     if results.get("docker"):
         click.echo("  Docker:     %s" % results["docker"])
     if results.get("sudoers"):
