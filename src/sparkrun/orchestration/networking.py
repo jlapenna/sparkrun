@@ -172,24 +172,48 @@ def detect_cx7_for_hosts(
 ) -> dict[str, CX7HostDetection]:
     """Run CX7 detection on all hosts in parallel.
 
+    Automatically runs locally (via subprocess) for hosts that resolve
+    to the local machine, avoiding SSH-to-self issues.
+
     Returns:
         Dict mapping host -> CX7HostDetection.
     """
-    from sparkrun.orchestration.ssh import run_remote_scripts_parallel
+    from sparkrun.orchestration.primitives import run_local_script, should_run_locally
+    from sparkrun.orchestration.ssh import RemoteResult, run_remote_scripts_parallel
 
     if not hosts:
         return {}
 
     kw = ssh_kwargs or {}
+    ssh_user = kw.get("ssh_user")
     logger.info("Detecting CX7 interfaces on %d host(s)...", len(hosts))
     script = generate_cx7_detect_script()
-    results = run_remote_scripts_parallel(
-        hosts,
-        script,
-        timeout=30,
-        dry_run=dry_run,
-        **kw,
-    )
+
+    # Split local vs remote hosts
+    local_hosts = [h for h in hosts if should_run_locally(h, ssh_user)]
+    remote_hosts = [h for h in hosts if not should_run_locally(h, ssh_user)]
+
+    results: list[RemoteResult] = []
+
+    # Run locally for local hosts
+    for host in local_hosts:
+        local_result = run_local_script(script, dry_run=dry_run)
+        results.append(RemoteResult(
+            host=host,
+            returncode=local_result.returncode,
+            stdout=local_result.stdout,
+            stderr=local_result.stderr,
+        ))
+
+    # Run via SSH for remote hosts
+    if remote_hosts:
+        results.extend(run_remote_scripts_parallel(
+            remote_hosts,
+            script,
+            timeout=30,
+            dry_run=dry_run,
+            **kw,
+        ))
 
     detections: dict[str, CX7HostDetection] = {}
     for result in results:
@@ -856,7 +880,7 @@ def select_subnets_for_topology(
         s1, s2 = select_subnets(detections, override1=override1, override2=override2)
         return [s1, s2]
 
-    # For ring (6 subnets), select from RFC 1918 avoiding conflicts
+    # For ring (6 subnets): prefer reusing existing CX7 subnets
     all_used: set[ipaddress.IPv4Network] = set()
     for det in detections.values():
         for s in det.used_subnets:
@@ -865,12 +889,30 @@ def select_subnets_for_topology(
             except ValueError:
                 continue
 
-    candidates = _generate_candidate_subnets(all_used)
-    selected: list[ipaddress.IPv4Network] = []
-    for candidate in candidates:
-        selected.append(candidate)
-        if len(selected) >= count:
-            break
+    # Collect existing CX7 /24 subnets across all hosts
+    existing_cx7: set[ipaddress.IPv4Network] = set()
+    for det in detections.values():
+        if not det.detected:
+            continue
+        for iface in det.interfaces:
+            if iface.subnet and iface.ip:
+                try:
+                    net = ipaddress.IPv4Network(iface.subnet, strict=False)
+                    if net.prefixlen == 24:
+                        existing_cx7.add(net)
+                except ValueError:
+                    continue
+
+    # Reuse existing CX7 subnets first, then fill from RFC 1918
+    selected = sorted(existing_cx7, key=lambda n: int(n.network_address))[:count]
+    if len(selected) < count:
+        exclude = all_used | set(selected)
+        candidates = _generate_candidate_subnets(exclude)
+        for candidate in candidates:
+            if candidate not in selected:
+                selected.append(candidate)
+            if len(selected) >= count:
+                break
 
     if len(selected) < count:
         raise RuntimeError("Could not find %d available /24 subnets for ring CX7 configuration" % count)
@@ -916,6 +958,40 @@ def _group_interfaces_by_port(interfaces: list[CX7Interface]) -> list[list[CX7In
     # Fallback: sorted pairs
     sorted_ifaces = sorted(interfaces, key=lambda i: i.name.lower())
     return [sorted_ifaces[i: i + 2] for i in range(0, len(sorted_ifaces), 2)]
+
+
+def _is_ring_host_valid(
+        det: CX7HostDetection,
+        assignments: list[CX7InterfaceAssignment],
+        target_mtu: int,
+) -> tuple[bool, str]:
+    """Check if a host's existing CX7 config matches the planned ring assignments.
+
+    Returns:
+        Tuple of (is_valid, reason_if_invalid).
+    """
+    if not det.detected:
+        return False, "no CX7 interfaces detected"
+
+    # Build lookup: iface_name -> (ip, subnet, mtu) from current state
+    current: dict[str, tuple[str, str, int]] = {}
+    for iface in det.interfaces:
+        if iface.ip and iface.subnet:
+            current[iface.name] = (iface.ip, iface.subnet, iface.mtu)
+
+    for a in assignments:
+        if a.iface_name not in current:
+            return False, "interface %s not configured" % a.iface_name
+        cur_ip, cur_subnet, cur_mtu = current[a.iface_name]
+        if cur_ip != a.ip:
+            return False, "interface %s has IP %s, need %s" % (a.iface_name, cur_ip, a.ip)
+        expected_subnet = str(ipaddress.IPv4Network(a.subnet, strict=False))
+        if cur_subnet != expected_subnet:
+            return False, "interface %s on wrong subnet" % a.iface_name
+        if cur_mtu != target_mtu:
+            return False, "interface %s has MTU %d, need %d" % (a.iface_name, cur_mtu, target_mtu)
+
+    return True, ""
 
 
 def plan_ring_cx7(
@@ -1088,7 +1164,7 @@ def plan_ring_cx7(
                 "Link %d: could not find partner partitions for %s/%s" % (link_idx, ifaceA, ifaceB)
             )
 
-    # Build host plans
+    # Build host plans — check if each host already matches planned state
     all_valid = True
     for host in sorted(detections.keys()):
         det = detections[host]
@@ -1101,9 +1177,19 @@ def plan_ring_cx7(
             all_valid = False
         elif host in assignments and assignments[host]:
             host_plan.assignments = assignments[host]
-            host_plan.needs_change = True
-            host_plan.reason = "ring topology configuration" if force else "ring topology configuration needed"
-            all_valid = False
+            if force:
+                host_plan.needs_change = True
+                host_plan.reason = "ring topology configuration (forced)"
+                all_valid = False
+            else:
+                # Check if already correctly configured
+                valid, reason = _is_ring_host_valid(det, assignments[host], mtu)
+                if valid:
+                    host_plan.needs_change = False
+                else:
+                    host_plan.needs_change = True
+                    host_plan.reason = reason
+                    all_valid = False
         else:
             host_plan.needs_change = True
             host_plan.reason = "no ring assignments computed"
