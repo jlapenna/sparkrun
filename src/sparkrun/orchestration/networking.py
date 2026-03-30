@@ -560,6 +560,15 @@ def classify_topology(
 ) -> CX7Topology:
     """Classify topology from discovered links.
 
+    Detection logic:
+    - 1 host: UNKNOWN
+    - 2 hosts with link data: DIRECT if each local interface maps to
+      exactly 1 remote interface (point-to-point cables); SWITCH if any
+      local interface reaches multiple remote interfaces (fan-out via switch).
+    - 2 hosts without link data: SWITCH (can't confirm direct).
+    - 3 hosts where each host connects to exactly 2 others: RING.
+    - Otherwise: SWITCH.
+
     Args:
         links: List of (hostA, ifaceA, hostB, ifaceB) link tuples.
         hosts: List of host identifiers.
@@ -572,6 +581,23 @@ def classify_topology(
         return CX7Topology.UNKNOWN
 
     if n_hosts == 2:
+        if not links:
+            return CX7Topology.SWITCH  # No link data — can't confirm direct
+
+        # Check fan-out: in a direct connection each local interface
+        # reaches exactly 1 remote interface.  Through a switch a single
+        # interface may see multiple remote interfaces.
+        iface_peers: dict[str, set[str]] = {}  # (host, iface) -> set of remote ifaces
+        for hostA, ifA, hostB, ifB in links:
+            key_a = "%s/%s" % (hostA, ifA)
+            key_b = "%s/%s" % (hostB, ifB)
+            iface_peers.setdefault(key_a, set()).add(key_b)
+            iface_peers.setdefault(key_b, set()).add(key_a)
+
+        # If any interface connects to more than 1 remote interface → switch
+        if any(len(peers) > 1 for peers in iface_peers.values()):
+            return CX7Topology.SWITCH
+
         return CX7Topology.DIRECT
 
     if n_hosts == 3:

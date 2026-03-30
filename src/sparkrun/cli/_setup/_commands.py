@@ -868,15 +868,24 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
         n_hosts = len(hosts_with_cx7)
         # Check if hosts have >= 4 interfaces (ring candidate)
         has_4_ifaces = all(len(d.interfaces) >= 4 for d in hosts_with_cx7.values())
+        # Check if MACs are available for topology detection
+        has_macs = any(iface.mac for d in hosts_with_cx7.values() for iface in d.interfaces)
 
-        if n_hosts == 2:
-            effective_topology = CX7Topology.DIRECT
-        elif n_hosts == 3 and has_4_ifaces:
-            # Run topology detection via MAC/ARP
+        if n_hosts == 3 and has_4_ifaces:
+            # Run topology detection via MAC/ARP — ring candidate
             click.echo("Detecting topology via neighbor discovery...")
             topology_result = detect_topology(detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
             effective_topology = topology_result.topology
             click.echo("Detected topology: %s" % effective_topology.value)
+        elif n_hosts == 2 and has_macs:
+            # Run topology detection to distinguish direct vs switch
+            click.echo("Detecting topology via neighbor discovery...")
+            topology_result = detect_topology(detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
+            effective_topology = topology_result.topology
+            click.echo("Detected topology: %s" % effective_topology.value)
+        elif n_hosts == 2:
+            # No MACs available — default to switch (can't confirm direct)
+            effective_topology = CX7Topology.SWITCH
         else:
             effective_topology = CX7Topology.SWITCH
 

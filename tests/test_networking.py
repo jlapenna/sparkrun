@@ -643,13 +643,25 @@ class TestClassifyTopology:
     def test_single_host_unknown(self):
         assert classify_topology([], ["h1"]) == CX7Topology.UNKNOWN
 
-    def test_two_hosts_direct(self):
-        links = [("h1", "enp1", "h2", "enp2")]
+    def test_two_hosts_direct_point_to_point(self):
+        """2 hosts where each interface maps to exactly 1 remote -> DIRECT."""
+        links = [
+            ("h1", "enp1", "h2", "enp2"),
+            ("h1", "enp3", "h2", "enp4"),
+        ]
         assert classify_topology(links, ["h1", "h2"]) == CX7Topology.DIRECT
 
-    def test_two_hosts_no_links_still_direct(self):
-        """With 2 hosts, topology is DIRECT regardless of links."""
-        assert classify_topology([], ["h1", "h2"]) == CX7Topology.DIRECT
+    def test_two_hosts_switch_fan_out(self):
+        """2 hosts where an interface sees multiple remotes -> SWITCH."""
+        links = [
+            ("h1", "enp1", "h2", "enp2"),
+            ("h1", "enp1", "h2", "enp4"),  # same local, different remote = fan-out
+        ]
+        assert classify_topology(links, ["h1", "h2"]) == CX7Topology.SWITCH
+
+    def test_two_hosts_no_links_switch(self):
+        """With 2 hosts and no link data, can't confirm direct -> SWITCH."""
+        assert classify_topology([], ["h1", "h2"]) == CX7Topology.SWITCH
 
     def test_three_hosts_ring(self):
         """3 hosts each connected to 2 others -> RING."""
