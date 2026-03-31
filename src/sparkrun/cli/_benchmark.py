@@ -348,62 +348,73 @@ def _run_benchmark(
     _display_vram_estimate(recipe, cli_overrides=overrides, auto_detect=True, cache_dir=local_cache_dir)
 
     # ---------------------------------------------------------------
-    # 6. Launch inference (unless --skip-run)
+    # 6–10: Launch, benchmark, stop — wrapped so Ctrl+C always cleans up
     # ---------------------------------------------------------------
     from sparkrun.core.progress import PROGRESS as _PROGRESS_LEVEL
 
     launched = False
     launch_result = None
-    if not skip_run:
-        logger.log(_PROGRESS_LEVEL, "Step 1/3: Launching inference...")
-
-        launch_result = launch_inference(
-            recipe=recipe,
-            runtime=runtime,
-            host_list=host_list,
-            overrides=overrides,
-            sctx=sctx,
-            is_solo=is_solo,
-            cache_dir=remote_cache_dir,
-            local_cache_dir=local_cache_dir,
-            transfer_mode=effective_transfer_mode,
-            transfer_interface=effective_transfer_interface,
-            recipe_ref=recipe_ref,
-            registry_mgr=registry_mgr,
-            auto_port=True,
-            sync_tuning=sync_tuning,
-            skip_keys={"served_model_name"},
-            dry_run=dry_run,
-            detached=True,
-            rootless=not rootful,
-            auto_user=not rootful,
-        )
-
-        if launch_result.rc != 0 and not dry_run:
-            click.echo("Error: inference launch failed (exit code %d)" % launch_result.rc, err=True)
-            sys.exit(launch_result.rc)
-
-        cluster_id = launch_result.cluster_id
-        serve_port = launch_result.serve_port
-
-        logger.info("Serve command:")
-        for line in launch_result.serve_command.strip().splitlines():
-            logger.info("  %s", line)
-        click.echo("")
-
-        launched = True
-        bench_result.launch_result = launch_result
-    else:
-        logger.log(_PROGRESS_LEVEL, "Step 1/3: Skipping inference launch (--skip-run)")
-
-    # ---------------------------------------------------------------
-    # 7. Wait for readiness and build target URL
-    # ---------------------------------------------------------------
     ssh_kwargs = build_ssh_kwargs(config)
     head_host = host_list[0]
 
     result_file = tempfile.mktemp(suffix=".json", prefix="sparkrun_bench_")
+
+    # Pre-compute cluster_id so we can clean up containers even if
+    # launch_inference is interrupted before it returns (e.g. Ctrl+C
+    # during wait_for_port inside the runtime).
+    from sparkrun.orchestration.job_metadata import generate_cluster_id as _gen_cid
+
+    cluster_id = _gen_cid(recipe, host_list, overrides=overrides)
+
     try:
+        # ---------------------------------------------------------------
+        # 6. Launch inference (unless --skip-run)
+        # ---------------------------------------------------------------
+        if not skip_run:
+            logger.log(_PROGRESS_LEVEL, "Step 1/3: Launching inference...")
+
+            launch_result = launch_inference(
+                recipe=recipe,
+                runtime=runtime,
+                host_list=host_list,
+                overrides=overrides,
+                sctx=sctx,
+                is_solo=is_solo,
+                cache_dir=remote_cache_dir,
+                local_cache_dir=local_cache_dir,
+                transfer_mode=effective_transfer_mode,
+                transfer_interface=effective_transfer_interface,
+                recipe_ref=recipe_ref,
+                registry_mgr=registry_mgr,
+                auto_port=True,
+                sync_tuning=sync_tuning,
+                skip_keys={"served_model_name"},
+                dry_run=dry_run,
+                detached=True,
+                rootless=not rootful,
+                auto_user=not rootful,
+            )
+
+            if launch_result.rc != 0 and not dry_run:
+                click.echo("Error: inference launch failed (exit code %d)" % launch_result.rc, err=True)
+                sys.exit(launch_result.rc)
+
+            cluster_id = launch_result.cluster_id
+            serve_port = launch_result.serve_port
+
+            logger.info("Serve command:")
+            for line in launch_result.serve_command.strip().splitlines():
+                logger.info("  %s", line)
+            click.echo("")
+
+            launched = True
+            bench_result.launch_result = launch_result
+        else:
+            logger.log(_PROGRESS_LEVEL, "Step 1/3: Skipping inference launch (--skip-run)")
+
+        # ---------------------------------------------------------------
+        # 7. Wait for readiness and build target URL
+        # ---------------------------------------------------------------
         if is_local_host(head_host):
             target_ip = "127.0.0.1"
         else:
@@ -624,8 +635,8 @@ def _run_benchmark(
     except KeyboardInterrupt:
         click.echo("")
         click.echo("Interrupted.")
-        if launched and not no_stop:
-            click.echo("Stopping inference...")
+        if not no_stop and not skip_run:
+            click.echo("Stopping inference (cleaning up containers)...")
             _stop_inference(runtime, host_list, cluster_id, config, dry_run)
             click.echo("Inference stopped.")
         sys.exit(130)

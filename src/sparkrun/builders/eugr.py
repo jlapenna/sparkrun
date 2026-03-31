@@ -204,15 +204,18 @@ class EugrBuilder(BuilderPlugin):
         if not needs_build and not has_mods:
             return image
 
+        # Resolve optional branch override from builder_config
+        branch = recipe.builder_config.get("branch") if recipe.builder_config else None
+
         # Ensure repo is available (for build script and/or mods)
         if delegated:
-            remote_repo = self._ensure_repo_remote(head, ssh_kwargs, dry_run=dry_run)
+            remote_repo = self._ensure_repo_remote(head, ssh_kwargs, dry_run=dry_run, branch=branch)
             self._repo_dir = Path(remote_repo)
         else:
             registry_cache_root = None
             if config is not None:
                 registry_cache_root = Path(config.cache_dir) / "registries"
-            self._repo_dir = self.ensure_repo(registry_cache_root=registry_cache_root)
+            self._repo_dir = self.ensure_repo(registry_cache_root=registry_cache_root, branch=branch)
 
         # Check build cache — skip rebuild if upstream wheels haven't changed
         if needs_build and not dry_run:
@@ -773,8 +776,15 @@ class EugrBuilder(BuilderPlugin):
             head: str,
             ssh_kwargs: dict | None = None,
             dry_run: bool = False,
+            branch: str | None = None,
     ) -> str:
         """Clone or update the eugr repo on the head node.
+
+        Args:
+            head: Head node hostname.
+            ssh_kwargs: SSH connection kwargs.
+            dry_run: Show what would be done without executing.
+            branch: Optional git branch to checkout (for developer builds).
 
         Returns the remote path where the repo lives.
         """
@@ -782,19 +792,39 @@ class EugrBuilder(BuilderPlugin):
 
         # TODO: hard-coded inline script
         remote_path = "~/.cache/sparkrun/eugr-spark-vllm-docker"
-        script = (
-                     "set -e\n"
-                     "REPO_DIR=%(path)s\n"
-                     'if [ -d "$REPO_DIR/.git" ]; then\n'
-                     '  git -C "$REPO_DIR" pull --ff-only || true\n'
-                     "else\n"
-                     '  mkdir -p "$(dirname "$REPO_DIR")"\n'
-                     '  git clone %(url)s "$REPO_DIR"\n'
-                     "fi\n"
-                     'echo "$REPO_DIR"\n'
-                 ) % {"path": remote_path, "url": EUGR_REPO_URL}
 
-        logger.info("Ensuring eugr repo on head node %s...", head)
+        if branch:
+            # Clone with specific branch or fetch+checkout if already cloned
+            script = (
+                         "set -e\n"
+                         "REPO_DIR=%(path)s\n"
+                         'if [ -d "$REPO_DIR/.git" ]; then\n'
+                         '  git -C "$REPO_DIR" fetch origin\n'
+                         '  git -C "$REPO_DIR" checkout %(branch)s\n'
+                         '  git -C "$REPO_DIR" pull --ff-only || true\n'
+                         "else\n"
+                         '  mkdir -p "$(dirname "$REPO_DIR")"\n'
+                         '  git clone -b %(branch)s %(url)s "$REPO_DIR"\n'
+                         "fi\n"
+                         'echo "$REPO_DIR"\n'
+                     ) % {"path": remote_path, "url": EUGR_REPO_URL, "branch": branch}
+        else:
+            script = (
+                         "set -e\n"
+                         "REPO_DIR=%(path)s\n"
+                         'if [ -d "$REPO_DIR/.git" ]; then\n'
+                         '  git -C "$REPO_DIR" pull --ff-only || true\n'
+                         "else\n"
+                         '  mkdir -p "$(dirname "$REPO_DIR")"\n'
+                         '  git clone %(url)s "$REPO_DIR"\n'
+                         "fi\n"
+                         'echo "$REPO_DIR"\n'
+                     ) % {"path": remote_path, "url": EUGR_REPO_URL}
+
+        if branch:
+            logger.info("Ensuring eugr repo on head node %s (branch: %s)...", head, branch)
+        else:
+            logger.info("Ensuring eugr repo on head node %s...", head)
 
         if dry_run:
             return remote_path
@@ -857,6 +887,7 @@ class EugrBuilder(BuilderPlugin):
             self,
             cache_dir: Path | None = None,
             registry_cache_root: Path | None = None,
+            branch: str | None = None,
     ) -> Path:
         """Clone or update the eugr repo in sparkrun's cache.
 
@@ -864,6 +895,11 @@ class EugrBuilder(BuilderPlugin):
         repo (from recipe syncing), reuses it instead of cloning a second
         copy.  Sparse checkout is disabled on the registry clone so that
         scripts like ``build-and-copy.sh`` are available.
+
+        Args:
+            cache_dir: Override cache directory.
+            registry_cache_root: Registry cache root to check for existing clones.
+            branch: Optional git branch to checkout (for developer builds).
         """
         # Check if registry already has this repo cloned
         if registry_cache_root is not None:
@@ -871,7 +907,7 @@ class EugrBuilder(BuilderPlugin):
             if (registry_repo / ".git").exists():
                 logger.info("Reusing eugr repo from registry cache: %s", registry_repo)
                 self._ensure_full_checkout(registry_repo)
-                self._update_repo(registry_repo)
+                self._update_repo(registry_repo, branch=branch)
                 return registry_repo
 
         if cache_dir is None:
@@ -884,11 +920,18 @@ class EugrBuilder(BuilderPlugin):
         repo_dir = cache_dir / "eugr-spark-vllm-docker"
 
         if repo_dir.exists() and (repo_dir / ".git").exists():
-            self._update_repo(repo_dir)
+            self._update_repo(repo_dir, branch=branch)
         else:
-            logger.info("Cloning eugr/spark-vllm-docker...")
+            if branch:
+                logger.info("Cloning eugr/spark-vllm-docker (branch: %s)...", branch)
+            else:
+                logger.info("Cloning eugr/spark-vllm-docker...")
             repo_dir.parent.mkdir(parents=True, exist_ok=True)
-            result = subprocess.run(["git", "clone", EUGR_REPO_URL, str(repo_dir)], capture_output=True, text=True)
+            cmd = ["git", "clone"]
+            if branch:
+                cmd += ["-b", branch]
+            cmd += [EUGR_REPO_URL, str(repo_dir)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 raise RuntimeError("Failed to clone eugr repo: %s" % result.stderr.strip())
 
@@ -908,9 +951,34 @@ class EugrBuilder(BuilderPlugin):
         )
 
     @staticmethod
-    def _update_repo(repo_dir: Path) -> None:
-        """Pull latest changes for an existing repo clone."""
-        logger.info("Updating eugr/spark-vllm-docker repo...")
+    def _update_repo(repo_dir: Path, branch: str | None = None) -> None:
+        """Pull latest changes for an existing repo clone.
+
+        When *branch* is specified, fetches and checks out that branch
+        before pulling — useful for developer builds from feature branches.
+        """
+        if branch:
+            logger.info("Updating eugr/spark-vllm-docker repo (branch: %s)...", branch)
+            subprocess.run(
+                ["git", "-C", str(repo_dir), "fetch", "origin"],
+                capture_output=True,
+                text=True,
+            )
+            checkout = subprocess.run(
+                ["git", "-C", str(repo_dir), "checkout", branch],
+                capture_output=True,
+                text=True,
+            )
+            if checkout.returncode != 0:
+                logger.warning(
+                    "Failed to checkout branch '%s' (continuing with current): %s",
+                    branch,
+                    checkout.stderr.strip(),
+                )
+                return
+        else:
+            logger.info("Updating eugr/spark-vllm-docker repo...")
+
         result = subprocess.run(
             ["git", "-C", str(repo_dir), "pull", "--ff-only"],
             capture_output=True,

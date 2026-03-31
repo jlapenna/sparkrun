@@ -39,13 +39,18 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
     from sparkrun.core.cluster_manager import ClusterError
     from sparkrun.core.config import SparkrunConfig
     from sparkrun.orchestration.networking import (
+        CX7Topology,
+        _group_interfaces_by_port,
         build_host_detection,
         detect_cx7_for_hosts,
+        detect_topology,
         discover_cx7_peers,
         generate_cx7_detect_script,
         parse_cx7_detect_output,
-        select_subnets,
         plan_cluster_cx7,
+        plan_ring_cx7,
+        select_subnets,
+        select_subnets_for_topology,
         apply_cx7_plan,
         distribute_cx7_host_keys,
     )
@@ -523,50 +528,122 @@ def setup_wizard(ctx, hosts, cluster_name, user, dry_run, yes):
                         ssh_kwargs=ssh_kwargs,
                         dry_run=dry_run,
                     )
-                    s1, s2 = select_subnets(detections)
-                    plan = plan_cluster_cx7(detections, s1, s2)
 
-                    click.echo("  Subnets: %s, %s" % (s1, s2))
-                    needs_config = sum(1 for hp in plan.host_plans if hp.needs_change)
+                    # Determine topology
+                    hosts_with_cx7 = {h: d for h, d in detections.items() if d.detected}
+                    n_hosts = len(hosts_with_cx7)
+                    has_2_ports = all(
+                        len(_group_interfaces_by_port(d.interfaces)) >= 2
+                        for d in hosts_with_cx7.values()
+                    )
+                    ring_eligible = n_hosts == 3 and has_2_ports
 
-                    if plan.all_valid:
-                        click.echo("  All hosts already configured.")
-                        results["cx7"] = "configured (%s, %s)" % (s1, s2)
-                    elif dry_run:
-                        click.echo("  [dry-run] Would configure %d host(s)." % needs_config)
-                        results["cx7"] = "dry-run"
-                    else:
-                        pw = _ensure_sudo_password()
-                        sudo_hosts = {hp.host for hp in plan.host_plans if hp.needs_change}
-                        apply_results = apply_cx7_plan(
-                            plan,
-                            ssh_kwargs=ssh_kwargs,
-                            dry_run=dry_run,
-                            sudo_password=pw,
-                            sudo_hosts=sudo_hosts if pw else set(),
+                    effective_topology = CX7Topology.SWITCH
+                    topology_result = None
+
+                    if ring_eligible and not yes:
+                        topo_choice = click.prompt(
+                            "  Topology (3 hosts with 2 ports detected)",
+                            type=click.Choice(["auto", "switch", "ring"]),
+                            default="auto",
                         )
-                        ok_count = sum(1 for r in apply_results if r.success)
+                        if topo_choice == "ring":
+                            effective_topology = CX7Topology.RING
+                        elif topo_choice == "auto":
+                            click.echo("  Detecting topology via neighbor discovery...")
+                            topology_result = detect_topology(
+                                detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+                            )
+                            effective_topology = topology_result.topology
+                            click.echo("  Detected topology: %s" % effective_topology.value)
+                    elif ring_eligible and yes:
+                        # --yes with ring-eligible: auto-detect
+                        click.echo("  Detecting topology via neighbor discovery...")
+                        topology_result = detect_topology(
+                            detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+                        )
+                        effective_topology = topology_result.topology
+                        click.echo("  Detected topology: %s" % effective_topology.value)
 
-                        # Distribute host keys for CX7 IPs
-                        all_cx7_ips = [a.ip for hp in plan.host_plans for a in hp.assignments if a.ip]
-                        if all_cx7_ips:
-                            distribute_cx7_host_keys(
-                                all_cx7_ips,
-                                host_list,
+                    # For explicit ring without detection data, run detection
+                    if effective_topology == CX7Topology.RING and topology_result is None:
+                        if not dry_run:
+                            click.echo("  Running topology detection for ring...")
+                            topology_result = detect_topology(
+                                detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run,
+                            )
+                        else:
+                            from sparkrun.orchestration.networking import CX7TopologyResult
+                            topology_result = CX7TopologyResult(topology=CX7Topology.RING)
+
+                    click.echo("  Topology: %s" % effective_topology.value)
+
+                    # Select subnets and plan based on topology
+                    if effective_topology == CX7Topology.RING:
+                        all_subnets = select_subnets_for_topology(detections, effective_topology)
+                        click.echo("  Subnets: %s" % ", ".join(str(s) for s in all_subnets))
+                        plan = plan_ring_cx7(detections, topology_result, all_subnets)
+                    else:
+                        s1, s2 = select_subnets(detections)
+                        all_subnets = [s1, s2]
+                        click.echo("  Subnets: %s, %s" % (s1, s2))
+                        plan = plan_cluster_cx7(detections, s1, s2)
+
+                    # Check for plan-level errors (e.g. insufficient ports)
+                    if plan.errors and not plan.host_plans:
+                        for e in plan.errors:
+                            click.echo("  Error: %s" % e, err=True)
+                        results["cx7"] = "failed"
+                    else:
+                        needs_config = sum(1 for hp in plan.host_plans if hp.needs_change)
+
+                        if plan.all_valid:
+                            click.echo("  All hosts already configured.")
+                            results["cx7"] = "configured (%s)" % effective_topology.value
+                        elif dry_run:
+                            click.echo("  [dry-run] Would configure %d host(s)." % needs_config)
+                            results["cx7"] = "dry-run"
+                        else:
+                            pw = _ensure_sudo_password()
+                            sudo_hosts = {hp.host for hp in plan.host_plans if hp.needs_change}
+                            apply_results = apply_cx7_plan(
+                                plan,
                                 ssh_kwargs=ssh_kwargs,
                                 dry_run=dry_run,
+                                sudo_password=pw,
+                                sudo_hosts=sudo_hosts if pw else set(),
                             )
+                            ok_count = sum(1 for r in apply_results if r.success)
 
-                        results["cx7"] = "configured (%s, %s)" % (s1, s2) if ok_count else "failed"
-                        if ok_count:
-                            cx7_changed_ips = True
-                        if ok_count and not dry_run and cluster_name:
-                            manifest_mgr.record_phase(
-                                cluster_name, user, host_list, "cx7",
-                                subnets=[str(s1), str(s2)],
-                                cx7_ips=all_cx7_ips,
-                                netplan_file="/etc/netplan/40-cx7.yaml",
-                            )
+                            # Distribute host keys for CX7 IPs
+                            all_cx7_ips = [a.ip for hp in plan.host_plans for a in hp.assignments if a.ip]
+                            if all_cx7_ips:
+                                distribute_cx7_host_keys(
+                                    all_cx7_ips,
+                                    host_list,
+                                    ssh_kwargs=ssh_kwargs,
+                                    dry_run=dry_run,
+                                )
+
+                            results["cx7"] = "configured (%s)" % effective_topology.value if ok_count else "failed"
+                            if ok_count:
+                                cx7_changed_ips = True
+                            if ok_count and not dry_run and cluster_name:
+                                manifest_mgr.record_phase(
+                                    cluster_name, user, host_list, "cx7",
+                                    subnets=[str(s) for s in all_subnets],
+                                    cx7_ips=all_cx7_ips,
+                                    netplan_file="/etc/netplan/40-cx7.yaml",
+                                    topology=effective_topology.value,
+                                )
+
+                    # Save topology to cluster definition
+                    if cluster_name and effective_topology != CX7Topology.UNKNOWN:
+                        try:
+                            cluster_mgr.update(cluster_name, topology=effective_topology.value)
+                        except Exception:
+                            pass
+
                 except Exception as e:
                     results["cx7"] = "failed"
                     click.echo("CX7 error: %s" % e, err=True)

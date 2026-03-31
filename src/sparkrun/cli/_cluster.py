@@ -134,12 +134,12 @@ def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host, descript
 
     has_host_change = host_list is not None or add_host or remove_host
     if (
-        not has_host_change
-        and description is None
-        and not user_provided
-        and not cache_dir_provided
-        and not transfer_mode_provided
-        and not transfer_interface_provided
+            not has_host_change
+            and description is None
+            and not user_provided
+            and not cache_dir_provided
+            and not transfer_mode_provided
+            and not transfer_interface_provided
     ):
         click.echo(
             "Error: Nothing to update. Provide --hosts, --hosts-file, --add-host, "
@@ -226,7 +226,7 @@ def cluster_list(ctx):
         # Break hosts into lines of 2 addresses each
         host_lines = []
         for i in range(0, len(c.hosts), 2):
-            host_lines.append(", ".join(c.hosts[i : i + 2]))
+            host_lines.append(", ".join(c.hosts[i: i + 2]))
         first_hosts = host_lines[0] if host_lines else ""
         click.echo(f"{marker}{c.name:<20} {first_hosts:<40} {desc:<30}")
         for extra in host_lines[1:]:
@@ -337,8 +337,15 @@ def cluster_default(ctx):
 @click.option("--interval", "-i", default=2, type=int, help="Sampling interval in seconds")
 @click.option("--simple", is_flag=True, default=False, help="Use plain-text output instead of TUI")
 @click.option("--json", "output_json", is_flag=True, default=False, help="Stream updates as newline-delimited JSON objects")
+@click.option(
+    "--backend",
+    type=click.Choice(["bash", "nv-monitor"], case_sensitive=False),
+    default=None,
+    help="Monitoring backend (bash=SSH script, nv-monitor=Prometheus endpoint). Default: from config or bash.",
+    hidden=True,
+)
 @click.pass_context
-def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, simple, output_json):
+def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, simple, output_json, backend):
     """Live-monitor CPU, RAM, and GPU metrics across cluster hosts.
 
     Streams host_monitor.sh on each host via SSH and displays a refreshing
@@ -367,23 +374,29 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
     host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
     ssh_kwargs = build_ssh_kwargs(config)
 
+    # Resolve monitoring backend
+    if backend is None:
+        backend = config.monitor_backend or "bash"
+    backend = backend.lower()
+
     if dry_run:
         click.echo("[dry-run] Would monitor %d host(s) every %ds:" % (len(host_list), interval))
         for h in host_list:
             click.echo("  %s" % h)
         stream_cluster_monitor(host_list, ssh_kwargs, interval=interval, dry_run=True)
+        if backend == "nv-monitor":
+            click.echo("[dry-run] Backend: nv-monitor (Prometheus over SSH port forwarding)")
         return
 
     # ---- JSON streaming mode ----
     if output_json:
         import json as json_mod
+        import time
         from dataclasses import asdict
 
         def _render_json(states):
             """Emit one JSON object per update tick with all host data."""
-            import time as _time
-
-            snapshot = {"timestamp": _time.time(), "hosts": {}}
+            snapshot = {"timestamp": time.time(), "hosts": {}}
             for host in host_list:
                 state = states.get(host)
                 if state is None or state.latest is None:
@@ -397,12 +410,26 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
                 snapshot["hosts"][host] = entry
             click.echo(json_mod.dumps(snapshot))
 
-        stream_cluster_monitor(
-            host_list,
-            ssh_kwargs,
-            interval=interval,
-            on_update=_render_json,
-        )
+        if backend == "nv-monitor":
+            from sparkrun.core.monitoring import NvMonitorClusterMonitor
+
+            monitor = NvMonitorClusterMonitor(host_list, ssh_kwargs, interval)
+            monitor.start()
+            try:
+                while True:
+                    time.sleep(1)
+                    _render_json(monitor.states)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                monitor.stop()
+        else:
+            stream_cluster_monitor(
+                host_list,
+                ssh_kwargs,
+                interval=interval,
+                on_update=_render_json,
+            )
         return
 
     # Try the Textual TUI unless --simple was requested.
@@ -410,7 +437,11 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
         try:
             from sparkrun.cli._monitor_tui import ClusterMonitorApp
 
-            monitor = ClusterMonitor(host_list, ssh_kwargs, interval)
+            if backend == "nv-monitor":
+                from sparkrun.core.monitoring import NvMonitorClusterMonitor
+                monitor = NvMonitorClusterMonitor(host_list, ssh_kwargs, interval)
+            else:
+                monitor = ClusterMonitor(host_list, ssh_kwargs, interval)
             app = ClusterMonitorApp(monitor, cache_dir=str(config.cache_dir))
             app.run()
             return
@@ -418,6 +449,8 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
             click.echo("Textual not installed — falling back to simple mode.\n", err=True)
 
     # ---- simple plain-text fallback ----
+    import time
+
     from sparkrun.utils.cli_formatters import format_monitor_table
 
     click.echo("Monitoring %d host(s) every %ds (Ctrl-C to stop)...\n" % (len(host_list), interval))
@@ -431,14 +464,31 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
         click.echo("\033[%dA\033[J" % table_lines, nl=False)
         click.echo(table)
 
-    click.echo(format_monitor_table({}, host_list))
+    if backend == "nv-monitor":
+        from sparkrun.core.monitoring import NvMonitorClusterMonitor
 
-    stream_cluster_monitor(
-        host_list,
-        ssh_kwargs,
-        interval=interval,
-        on_update=_render,
-    )
+        monitor = NvMonitorClusterMonitor(host_list, ssh_kwargs, interval)
+        monitor.start()
+        click.echo(format_monitor_table({}, host_list))
+        try:
+            while True:
+                time.sleep(1)
+                table = format_monitor_table(monitor.states, host_list)
+                click.echo("\033[%dA\033[J" % table_lines, nl=False)
+                click.echo(table)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            monitor.stop()
+    else:
+        click.echo(format_monitor_table({}, host_list))
+
+        stream_cluster_monitor(
+            host_list,
+            ssh_kwargs,
+            interval=interval,
+            on_update=_render,
+        )
 
     click.echo("\nMonitoring stopped.")
 

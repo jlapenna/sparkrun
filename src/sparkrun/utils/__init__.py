@@ -107,8 +107,30 @@ def merge_env(*env_dicts: dict[str, str] | None) -> dict[str, str]:
 
 
 def is_local_host(host: str) -> bool:
-    """Check if a host string refers to the local machine."""
-    return host in ("localhost", "127.0.0.1", "")
+    """Check if a host string refers to the local machine.
+
+    Checks against localhost, 127.0.0.1, the system hostname, and
+    all IPv4 addresses assigned to local network interfaces.
+    """
+    if host in ("localhost", "127.0.0.1", ""):
+        return True
+
+    import socket
+
+    # Check hostname match
+    try:
+        if host == socket.gethostname() or host == socket.getfqdn():
+            return True
+    except Exception:
+        pass
+
+    # Try to bind to the address — succeeds only for local IPs
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((host, 0))
+            return True
+    except OSError:
+        return False
 
 
 def format_duration(seconds: float) -> str:
