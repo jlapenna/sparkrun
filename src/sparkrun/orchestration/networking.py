@@ -1330,11 +1330,40 @@ def configure_cx7_host(
     kw = ssh_kwargs or {}
 
     if is_local_host(host_plan.host):
+        import os
+        import subprocess
+
         from sparkrun.orchestration.ssh import RemoteResult
 
-        lr = run_local_script(script, dry_run=dry_run)
-        return RemoteResult(host=host_plan.host, returncode=lr.returncode, stdout=lr.stdout, stderr=lr.stderr)
-    elif sudo_password:
+        if dry_run:
+            lr = run_local_script(script, dry_run=True)
+            return RemoteResult(host=host_plan.host, returncode=lr.returncode, stdout=lr.stdout, stderr=lr.stderr)
+
+        # Only use sudo password locally when the ssh_user matches the OS user
+        # (the password was collected for the ssh/sudo user, not necessarily the OS user)
+        ssh_user = kw.get("ssh_user")
+        os_user = os.environ.get("USER", "root")
+        local_sudo_safe = sudo_password and (ssh_user is None or ssh_user == os_user)
+
+        if local_sudo_safe:
+            # Pipe password to sudo -S bash -s for local hosts without NOPASSWD
+            proc = subprocess.run(
+                ["sudo", "-S", "bash", "-s"],
+                input=sudo_password + "\n" + script,
+                capture_output=True,
+                text=True,
+            )
+            return RemoteResult(host=host_plan.host, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
+        elif not sudo_password:
+            proc = subprocess.run(
+                ["bash", "-s"],
+                input=script,
+                capture_output=True,
+                text=True,
+            )
+            return RemoteResult(host=host_plan.host, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
+        # Cross-user with sudo password: fall through to SSH path
+    if sudo_password:
         return run_remote_sudo_script(
             host_plan.host,
             script,
