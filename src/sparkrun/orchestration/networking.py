@@ -983,7 +983,12 @@ def _is_ring_host_valid(
         assignments: list[CX7InterfaceAssignment],
         target_mtu: int,
 ) -> tuple[bool, str]:
-    """Check if a host's existing CX7 config matches the planned ring assignments.
+    """Check if a host's existing CX7 config is valid for the planned ring.
+
+    Validates that each assigned interface has a valid IP on the correct
+    subnet with the correct MTU.  Does NOT require the exact planned IP —
+    any valid host address on the subnet is acceptable (e.g. ``.11`` vs
+    ``.1`` are both fine).
 
     Returns:
         Tuple of (is_valid, reason_if_invalid).
@@ -1001,11 +1006,13 @@ def _is_ring_host_valid(
         if a.iface_name not in current:
             return False, "interface %s not configured" % a.iface_name
         cur_ip, cur_subnet, cur_mtu = current[a.iface_name]
-        if cur_ip != a.ip:
-            return False, "interface %s has IP %s, need %s" % (a.iface_name, cur_ip, a.ip)
-        expected_subnet = str(ipaddress.IPv4Network(a.subnet, strict=False))
-        if cur_subnet != expected_subnet:
-            return False, "interface %s on wrong subnet" % a.iface_name
+        expected_subnet = ipaddress.IPv4Network(a.subnet, strict=False)
+        # Check IP is on the correct subnet (any valid host address)
+        try:
+            if ipaddress.IPv4Address(cur_ip) not in expected_subnet:
+                return False, "interface %s has IP %s, not on subnet %s" % (a.iface_name, cur_ip, expected_subnet)
+        except ValueError:
+            return False, "interface %s has invalid IP %s" % (a.iface_name, cur_ip)
         if cur_mtu != target_mtu:
             return False, "interface %s has MTU %d, need %d" % (a.iface_name, cur_mtu, target_mtu)
 
