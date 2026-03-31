@@ -715,8 +715,10 @@ def classify_topology(
     - 1 host: UNKNOWN
     - 2 hosts: SWITCH (cannot reliably distinguish direct vs switch
       with only 2 hosts — neighbor discovery shows the same pattern).
-    - 3 hosts where each host connects to exactly 2 others: RING.
-    - Otherwise: SWITCH.
+    - 3 hosts: RING if each *interface* sees only 1 peer host (direct
+      point-to-point links), SWITCH if interfaces see multiple peers
+      (shared L2 fabric).
+    - 4+ hosts: SWITCH.
 
     Args:
         links: List of (hostA, ifaceA, hostB, ifaceB) link tuples.
@@ -733,14 +735,24 @@ def classify_topology(
         return CX7Topology.SWITCH
 
     if n_hosts == 3:
-        # Check if each host connects to exactly 2 other hosts
+        # Check per-interface: how many distinct peer HOSTS does each interface see?
+        # Ring: each interface connects to exactly 1 peer host (point-to-point cable)
+        # Switch: each interface sees multiple peer hosts (shared L2)
+        iface_peers: dict[tuple[str, str], set[str]] = {}  # (host, iface) -> set of peer hosts
         peer_map: dict[str, set[str]] = {h: set() for h in hosts}
-        for hostA, _ifA, hostB, _ifB in links:
+        for hostA, ifA, hostB, _ifB in links:
             if hostA in peer_map and hostB in peer_map:
                 peer_map[hostA].add(hostB)
                 peer_map[hostB].add(hostA)
+                iface_peers.setdefault((hostA, ifA), set()).add(hostB)
 
-        if all(len(peers) == 2 for peers in peer_map.values()):
+        # Every host must see exactly 2 peers overall
+        if not all(len(peers) == 2 for peers in peer_map.values()):
+            return CX7Topology.SWITCH
+
+        # Each interface must see exactly 1 peer host (point-to-point)
+        # If any interface sees 2+ peers, it's a switch
+        if iface_peers and all(len(peers) == 1 for peers in iface_peers.values()):
             return CX7Topology.RING
 
     return CX7Topology.SWITCH
@@ -751,7 +763,6 @@ def detect_topology(
         hosts: list[str],
         ssh_kwargs: dict | None = None,
         dry_run: bool = False,
-        sudo_password: str | None = None,
 ) -> CX7TopologyResult:
     """Detect CX7 topology via MAC/ARP neighbor discovery.
 
@@ -761,51 +772,23 @@ def detect_topology(
     Phase 4: Match neighbor MACs to build link graph.
     Phase 5: Classify topology.
 
+    The scripts handle sudo internally — bringup only uses sudo when
+    interfaces are administratively down, and neighbor discovery uses
+    IPv6 multicast (no sudo) with arping as a sudo fallback.
+
     Args:
         detections: Per-host CX7 detection results (must include MAC addresses).
         hosts: List of host identifiers.
         ssh_kwargs: SSH connection parameters.
         dry_run: Log without executing.
-        sudo_password: Password for hosts without NOPASSWD sudo.
 
     Returns:
         CX7TopologyResult with topology classification and link list.
     """
     from sparkrun.orchestration.primitives import run_script_on_host
-    from sparkrun.utils import is_local_host
 
     kw = ssh_kwargs or {}
     result = CX7TopologyResult()
-
-    def _run_on_host(host: str, script: str) -> "RemoteResult":
-        """Dispatch script to a host with sudo support."""
-        if is_local_host(host):
-            import os
-            import subprocess
-
-            from sparkrun.orchestration.ssh import RemoteResult
-
-            ssh_user = kw.get("ssh_user")
-            os_user = os.environ.get("USER", "root")
-            local_sudo_safe = sudo_password and (ssh_user is None or ssh_user == os_user)
-            if local_sudo_safe:
-                proc = subprocess.run(
-                    ["sudo", "-S", "bash", "-s"],
-                    input=sudo_password + "\n" + script,
-                    capture_output=True, text=True, timeout=30,
-                )
-                return RemoteResult(host=host, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
-            else:
-                from sparkrun.orchestration.primitives import run_local_script
-
-                lr = run_local_script(script, dry_run=dry_run)
-                return RemoteResult(host=host, returncode=lr.returncode, stdout=lr.stdout, stderr=lr.stderr)
-        elif sudo_password:
-            from sparkrun.orchestration.ssh import run_remote_sudo_script
-
-            return run_remote_sudo_script(host, script, sudo_password, timeout=30, dry_run=dry_run, **kw)
-        else:
-            return run_script_on_host(host, script, ssh_kwargs=kw or None, timeout=30, dry_run=dry_run)
 
     # Phase 1 — Bringup: ensure all CX7 interfaces are link-up
     all_iface_names: dict[str, list[str]] = {}
@@ -827,7 +810,7 @@ def detect_topology(
     if not dry_run:
         logger.info("Bringing up CX7 interfaces on %d host(s)...", len(bringup_hosts))
         for i, host in enumerate(bringup_hosts):
-            _run_on_host(host, bringup_scripts[i])
+            run_script_on_host(host, bringup_scripts[i], ssh_kwargs=kw or None, timeout=30, dry_run=dry_run)
 
     # Phase 2 — Build MAC lookup: mac -> (host, iface_name)
     mac_lookup: dict[str, tuple[str, str]] = {}
@@ -855,7 +838,7 @@ def detect_topology(
     if not dry_run:
         logger.info("Running neighbor discovery on %d host(s)...", len(arping_hosts))
         for i, host in enumerate(arping_hosts):
-            r = _run_on_host(host, arping_scripts[i])
+            r = run_script_on_host(host, arping_scripts[i], ssh_kwargs=kw or None, timeout=30, dry_run=dry_run)
             if r.success:
                 host_neighbors[host] = _parse_arping_output(r.stdout)
             else:
@@ -995,12 +978,115 @@ def _group_interfaces_by_port(interfaces: list[CX7Interface]) -> list[list[CX7In
     return [sorted_ifaces[i: i + 2] for i in range(0, len(sorted_ifaces), 2)]
 
 
+def _is_existing_ring_valid(
+        detections: dict[str, CX7HostDetection],
+        topology_result: CX7TopologyResult,
+        target_mtu: int,
+) -> bool:
+    """Check if the existing CX7 config is already a valid ring.
+
+    Groups interfaces by physical port (npN suffix), then for each
+    detected link verifies that the connected port groups on both hosts
+    use the same set of subnets — confirming the physical cable has
+    matching subnet pairs on both ends.
+
+    Also verifies all interfaces have IPs with the correct MTU and
+    that each link's subnet pair is unique across the ring.
+    """
+    if not topology_result.links:
+        return False
+
+    hosts_with_cx7 = [h for h in detections if detections[h].detected]
+    if len(hosts_with_cx7) != 3:
+        return False
+
+    # Build iface -> subnet lookup per host, validating MTU
+    iface_subnet: dict[str, dict[str, str]] = {}  # host -> {iface_name: subnet}
+    for host in hosts_with_cx7:
+        det = detections[host]
+        mapping: dict[str, str] = {}
+        for iface in det.interfaces:
+            if not iface.ip or not iface.subnet:
+                return False
+            if iface.mtu != target_mtu:
+                return False
+            try:
+                mapping[iface.name] = str(ipaddress.IPv4Network(iface.subnet, strict=False))
+            except ValueError:
+                return False
+        iface_subnet[host] = mapping
+
+    # Build port group -> set of subnets per host
+    # port_subnets[host] = {iface_name: frozenset of subnets in its port group}
+    host_port_subnets: dict[str, dict[str, frozenset[str]]] = {}
+    for host in hosts_with_cx7:
+        det = detections[host]
+        groups = _group_interfaces_by_port(det.interfaces)
+        iface_to_group_subnets: dict[str, frozenset[str]] = {}
+        for group in groups:
+            group_nets = frozenset(
+                iface_subnet[host][iface.name]
+                for iface in group
+                if iface.name in iface_subnet[host]
+            )
+            for iface in group:
+                iface_to_group_subnets[iface.name] = group_nets
+        host_port_subnets[host] = iface_to_group_subnets
+
+    # Deduplicate links to unique host pairs
+    seen_pairs: set[tuple[str, str]] = set()
+    all_link_subnets: list[frozenset[str]] = []
+
+    for hostA, ifA, hostB, _ifB in topology_result.links:
+        pair = (min(hostA, hostB), max(hostA, hostB))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+
+        # Get port group subnets for the connected interfaces
+        group_a = host_port_subnets.get(hostA, {}).get(ifA)
+        # Find which port group on hostB connects to hostA
+        # (any link from this host pair gives us an interface on hostB)
+        group_b = None
+        for hA, iA, hB, iB in topology_result.links:
+            if hA == hostA and hB == hostB:
+                group_b = host_port_subnets.get(hB, {}).get(iB)
+                break
+            elif hA == hostB and hB == hostA:
+                group_b = host_port_subnets.get(hA, {}).get(iA)
+                break
+
+        if not group_a or not group_b:
+            return False
+
+        # The port groups on both ends of the cable must share the same subnets
+        if group_a != group_b:
+            return False
+
+        all_link_subnets.append(group_a)
+
+    # Each link should use a unique subnet pair (no reuse across cables)
+    if len(all_link_subnets) != len(set(all_link_subnets)):
+        return False
+
+    # Should have exactly 3 links for a ring
+    if len(all_link_subnets) != 3:
+        return False
+
+    return True
+
+
 def _is_ring_host_valid(
         det: CX7HostDetection,
         assignments: list[CX7InterfaceAssignment],
         target_mtu: int,
 ) -> tuple[bool, str]:
-    """Check if a host's existing CX7 config matches the planned ring assignments.
+    """Check if a host's existing CX7 config is valid for the planned ring.
+
+    Validates that each assigned interface has a valid IP on the correct
+    subnet with the correct MTU.  Does NOT require the exact planned IP —
+    any valid host address on the subnet is acceptable (e.g. ``.11`` vs
+    ``.1`` are both fine).
 
     Returns:
         Tuple of (is_valid, reason_if_invalid).
@@ -1018,11 +1104,13 @@ def _is_ring_host_valid(
         if a.iface_name not in current:
             return False, "interface %s not configured" % a.iface_name
         cur_ip, cur_subnet, cur_mtu = current[a.iface_name]
-        if cur_ip != a.ip:
-            return False, "interface %s has IP %s, need %s" % (a.iface_name, cur_ip, a.ip)
-        expected_subnet = str(ipaddress.IPv4Network(a.subnet, strict=False))
-        if cur_subnet != expected_subnet:
-            return False, "interface %s on wrong subnet" % a.iface_name
+        expected_subnet = ipaddress.IPv4Network(a.subnet, strict=False)
+        # Check IP is on the correct subnet (any valid host address)
+        try:
+            if ipaddress.IPv4Address(cur_ip) not in expected_subnet:
+                return False, "interface %s has IP %s, not on subnet %s" % (a.iface_name, cur_ip, expected_subnet)
+        except ValueError:
+            return False, "interface %s has invalid IP %s" % (a.iface_name, cur_ip)
         if cur_mtu != target_mtu:
             return False, "interface %s has MTU %d, need %d" % (a.iface_name, cur_mtu, target_mtu)
 
@@ -1094,6 +1182,23 @@ def plan_ring_cx7(
                 % (host, len(port_groups), len(det.interfaces))
             )
     if plan.errors:
+        return plan
+
+    # Pre-check: is the existing config already a valid ring?
+    if not force and _is_existing_ring_valid(detections, topology_result, mtu):
+        logger.info("Existing ring configuration is valid, no changes needed")
+        for host in sorted(detections.keys()):
+            det = detections[host]
+            existing_assignments = [
+                CX7InterfaceAssignment(iface_name=iface.name, ip=iface.ip, subnet=iface.subnet)
+                for iface in det.interfaces if iface.ip and iface.subnet
+            ]
+            plan.host_plans.append(CX7HostPlan(
+                host=host,
+                needs_change=False,
+                assignments=existing_assignments,
+            ))
+        plan.all_valid = True
         return plan
 
     # Order hosts into a ring: A -> B -> C -> A

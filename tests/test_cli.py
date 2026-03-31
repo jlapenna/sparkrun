@@ -959,6 +959,26 @@ class TestClusterCommands:
         assert result.exit_code == 0
         assert "created" in result.output.lower()
 
+    def test_cluster_create_with_default(self, runner, tmp_path, monkeypatch):
+        """Test creating a cluster with --default sets it as default."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        result = runner.invoke(
+            main,
+            ["cluster", "create", "my-cluster", "--hosts", "host1,host2", "--default"],
+        )
+        assert result.exit_code == 0
+        assert "created" in result.output.lower()
+        assert "default cluster set to" in result.output.lower()
+
+        # Verify it's actually the default
+        result = runner.invoke(main, ["cluster", "default"])
+        assert "my-cluster" in result.output
+
     def test_cluster_create_duplicate(self, runner, cluster_setup):
         """Test that creating a duplicate cluster fails."""
         result = runner.invoke(
@@ -1350,7 +1370,7 @@ class TestClusterCommands:
         assert result.exit_code != 0
 
     def test_cluster_update_nothing_to_update_includes_transfer_interface(self, runner, cluster_setup):
-        """Test that 'nothing to update' error mentions --transfer-interface."""
+        """Test that 'nothing to update' error mentions --transfer-interface and --topology."""
         result = runner.invoke(
             main,
             [
@@ -1361,6 +1381,48 @@ class TestClusterCommands:
         )
         assert result.exit_code != 0
         assert "--transfer-interface" in result.output
+        assert "--topology" in result.output
+
+    def test_cluster_update_topology_ring(self, runner, cluster_setup):
+        """Test updating cluster topology to ring."""
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "ring"])
+        assert result.exit_code == 0
+        assert "updated" in result.output.lower()
+
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Topology:    ring" in result.output
+
+    def test_cluster_update_topology_direct_maps_to_switch(self, runner, cluster_setup):
+        """Test that --topology direct is stored as 'switch'."""
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "direct"])
+        assert result.exit_code == 0
+
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Topology:    switch" in result.output
+
+    def test_cluster_update_topology_switch(self, runner, cluster_setup):
+        """Test that --topology switch is stored as 'switch'."""
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "switch"])
+        assert result.exit_code == 0
+
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Topology:    switch" in result.output
+
+    def test_cluster_update_topology_none_clears(self, runner, cluster_setup):
+        """Test that --topology none removes the topology setting."""
+        # First set topology
+        runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "ring"])
+        # Then clear it
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "none"])
+        assert result.exit_code == 0
+
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Topology:" not in result.output
+
+    def test_cluster_update_topology_invalid(self, runner, cluster_setup):
+        """Test that invalid --topology value is rejected by Click."""
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "mesh"])
+        assert result.exit_code != 0
 
 
 class TestClusterMonitor:

@@ -932,7 +932,7 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
         if n_hosts == 3 and has_4_ifaces:
             # Run topology detection via MAC/ARP — ring candidate
             click.echo("Detecting topology via neighbor discovery...")
-            topology_result = detect_topology(detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run, sudo_password=_ensure_sudo())
+            topology_result = detect_topology(detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
             effective_topology = topology_result.topology
             click.echo("Detected topology: %s" % effective_topology.value)
         else:
@@ -944,7 +944,7 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
     if effective_topology == CX7Topology.RING and topology_result is None:
         if not dry_run:
             click.echo("Running topology detection for ring configuration...")
-            topology_result = detect_topology(detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run, sudo_password=_ensure_sudo())
+            topology_result = detect_topology(detections, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
         else:
             from sparkrun.orchestration.networking import CX7TopologyResult
             topology_result = CX7TopologyResult(topology=CX7Topology.RING)
@@ -1021,6 +1021,11 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
 
     if dry_run:
         click.echo("[dry-run] Would configure %d host(s), %d already valid." % (needs_config, already_ok))
+        return
+
+    # Confirm before applying
+    if not force and not click.confirm("Apply changes to %d host(s)?" % needs_config, default=True):
+        click.echo("Aborted.")
         return
 
     # Step 7: Apply — acquire sudo now if not already prompted
