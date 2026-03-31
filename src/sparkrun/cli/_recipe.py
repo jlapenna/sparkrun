@@ -115,8 +115,7 @@ def recipe_show(ctx, recipe_name, no_vram, tensor_parallel, gpu_mem, output_json
         cli_overrides["gpu_memory_utilization"] = gpu_mem
 
     if output_json:
-        # Use existing export method for high-quality JSON
-        click.echo(recipe.export(json=True, overrides=cli_overrides))
+        print_json(recipe.to_dict(overrides=cli_overrides))
         return
 
     reg_name = registry_mgr.registry_for_path(recipe_path) if registry_mgr else None
