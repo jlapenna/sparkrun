@@ -985,57 +985,92 @@ def _is_existing_ring_valid(
 ) -> bool:
     """Check if the existing CX7 config is already a valid ring.
 
-    A ring is valid when:
-    - All interfaces on all hosts have IPs with the correct MTU.
-    - Each physical link's interface pair shares at least one common subnet.
-    - Each link uses its own unique subnet(s) (no cross-link subnet reuse).
+    Groups interfaces by physical port (npN suffix), then for each
+    detected link verifies that the connected port groups on both hosts
+    use the same set of subnets — confirming the physical cable has
+    matching subnet pairs on both ends.
 
-    This checks the *existing* state against the *detected* topology links,
-    without reference to the planner's subnet assignment.  This avoids
-    false positives from the planner assigning subnets to links in a
-    different order than the existing configuration.
+    Also verifies all interfaces have IPs with the correct MTU and
+    that each link's subnet pair is unique across the ring.
     """
     if not topology_result.links:
         return False
 
-    # Build interface -> (ip, subnet, mtu) lookup per host
-    iface_state: dict[str, dict[str, tuple[str, str, int]]] = {}
-    for host, det in detections.items():
-        if not det.detected:
-            return False
-        state: dict[str, tuple[str, str, int]] = {}
+    hosts_with_cx7 = [h for h in detections if detections[h].detected]
+    if len(hosts_with_cx7) != 3:
+        return False
+
+    # Build iface -> subnet lookup per host, validating MTU
+    iface_subnet: dict[str, dict[str, str]] = {}  # host -> {iface_name: subnet}
+    for host in hosts_with_cx7:
+        det = detections[host]
+        mapping: dict[str, str] = {}
         for iface in det.interfaces:
             if not iface.ip or not iface.subnet:
-                return False  # unconfigured interface
+                return False
             if iface.mtu != target_mtu:
                 return False
-            state[iface.name] = (iface.ip, iface.subnet, iface.mtu)
-        iface_state[host] = state
+            try:
+                mapping[iface.name] = str(ipaddress.IPv4Network(iface.subnet, strict=False))
+            except ValueError:
+                return False
+        iface_subnet[host] = mapping
 
-    # Deduplicate links (A→B and B→A are the same physical link)
-    seen_links: set[tuple[str, str]] = set()
-    unique_links: list[tuple[str, str, str, str]] = []
-    for hostA, ifA, hostB, ifB in topology_result.links:
-        key = (min(hostA, hostB), max(hostA, hostB))
-        if key not in seen_links:
-            seen_links.add(key)
-            unique_links.append((hostA, ifA, hostB, ifB))
+    # Build port group -> set of subnets per host
+    # port_subnets[host] = {iface_name: frozenset of subnets in its port group}
+    host_port_subnets: dict[str, dict[str, frozenset[str]]] = {}
+    for host in hosts_with_cx7:
+        det = detections[host]
+        groups = _group_interfaces_by_port(det.interfaces)
+        iface_to_group_subnets: dict[str, frozenset[str]] = {}
+        for group in groups:
+            group_nets = frozenset(
+                iface_subnet[host][iface.name]
+                for iface in group
+                if iface.name in iface_subnet[host]
+            )
+            for iface in group:
+                iface_to_group_subnets[iface.name] = group_nets
+        host_port_subnets[host] = iface_to_group_subnets
 
-    # Check each link: both interfaces must have IPs on a common subnet
-    link_subnets: list[str] = []
-    for hostA, ifA, hostB, ifB in unique_links:
-        stateA = iface_state.get(hostA, {})
-        stateB = iface_state.get(hostB, {})
-        if ifA not in stateA or ifB not in stateB:
+    # Deduplicate links to unique host pairs
+    seen_pairs: set[tuple[str, str]] = set()
+    all_link_subnets: list[frozenset[str]] = []
+
+    for hostA, ifA, hostB, _ifB in topology_result.links:
+        pair = (min(hostA, hostB), max(hostA, hostB))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+
+        # Get port group subnets for the connected interfaces
+        group_a = host_port_subnets.get(hostA, {}).get(ifA)
+        # Find which port group on hostB connects to hostA
+        # (any link from this host pair gives us an interface on hostB)
+        group_b = None
+        for hA, iA, hB, iB in topology_result.links:
+            if hA == hostA and hB == hostB:
+                group_b = host_port_subnets.get(hB, {}).get(iB)
+                break
+            elif hA == hostB and hB == hostA:
+                group_b = host_port_subnets.get(hA, {}).get(iA)
+                break
+
+        if not group_a or not group_b:
             return False
-        _, subnetA, _ = stateA[ifA]
-        _, subnetB, _ = stateB[ifB]
-        if subnetA != subnetB:
-            return False  # link endpoints on different subnets
-        link_subnets.append(subnetA)
 
-    # All link subnets should be unique (no reuse across links)
-    if len(link_subnets) != len(set(link_subnets)):
+        # The port groups on both ends of the cable must share the same subnets
+        if group_a != group_b:
+            return False
+
+        all_link_subnets.append(group_a)
+
+    # Each link should use a unique subnet pair (no reuse across cables)
+    if len(all_link_subnets) != len(set(all_link_subnets)):
+        return False
+
+    # Should have exactly 3 links for a ring
+    if len(all_link_subnets) != 3:
         return False
 
     return True
