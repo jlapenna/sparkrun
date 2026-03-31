@@ -20,6 +20,19 @@ from sparkrun.core.recipe import (
 
 logger = logging.getLogger(__name__)
 
+json_option = click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output result as JSON",
+)
+
+def print_json(data) -> None:
+    """Print an object as formatted JSON."""
+    import json
+    click.echo(json.dumps(data, indent=2))
+
 
 def _get_context(ctx) -> "SparkrunContext":
     """Lazily create and cache a :class:`SparkrunContext` on the Click context.

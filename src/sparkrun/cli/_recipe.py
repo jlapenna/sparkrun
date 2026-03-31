@@ -15,6 +15,8 @@ from ._common import (
     _get_config_and_registry,
     _get_context,
     _load_recipe,
+    json_option,
+    print_json,
 )
 
 
@@ -29,7 +31,7 @@ def recipe(ctx):
 @click.option("--registry", type=REGISTRY_NAME, default=None, help="Filter by registry name")
 @click.option("--runtime", type=RUNTIME_NAME, default=None, help="Filter by runtime (e.g. vllm, sglang, llama-cpp)")
 @click.option("--all", "-a", "show_all", is_flag=True, help="Include hidden registry recipes")
-@click.option("--json", "output_json", is_flag=True, default=False, help="Output result as JSON")
+@json_option
 @click.argument("query", required=False)
 # @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
@@ -55,8 +57,7 @@ def recipe_list(ctx, registry, runtime, show_all, output_json, query, config_pat
     recipes = filter_recipes(recipes, runtime=runtime, registry=registry)
     
     if output_json:
-        import json as json_mod
-        click.echo(json_mod.dumps(recipes, indent=2))
+        print_json(recipes)
         return
 
     click.echo(format_recipe_table(recipes, show_model=True))
@@ -66,7 +67,7 @@ def recipe_list(ctx, registry, runtime, show_all, output_json, query, config_pat
 @click.option("--registry", type=REGISTRY_NAME, default=None, help="Filter by registry name")
 @click.option("--runtime", type=RUNTIME_NAME, default=None, help="Filter by runtime (e.g. vllm, sglang, llama-cpp)")
 @click.option("--all", "-a", "show_all", is_flag=True, help="Include hidden registry recipes")
-@click.option("--json", "output_json", is_flag=True, default=False, help="Output result as JSON")
+@json_option
 @click.argument("query")
 # @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
@@ -83,8 +84,7 @@ def recipe_search(ctx, registry, runtime, show_all, output_json, query, config_p
     recipes = filter_recipes(recipes, runtime=runtime, registry=registry)
 
     if output_json:
-        import json as json_mod
-        click.echo(json_mod.dumps(recipes, indent=2))
+        print_json(recipes)
         return
 
     if not recipes:
@@ -99,7 +99,7 @@ def recipe_search(ctx, registry, runtime, show_all, output_json, query, config_p
 @click.option("--no-vram", is_flag=True, help="Skip VRAM estimation")
 @click.option("--tp", "--tensor-parallel", "tensor_parallel", type=int, default=None, help="Override tensor parallelism")
 @click.option("--gpu-mem", type=float, default=None, help="Override GPU memory utilization (0.0-1.0)")
-@click.option("--json", "output_json", is_flag=True, default=False, help="Output result as JSON")
+@json_option
 # @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
 def recipe_show(ctx, recipe_name, no_vram, tensor_parallel, gpu_mem, output_json, config_path=None):
@@ -161,7 +161,7 @@ def recipe_validate(ctx, recipe_name, config_path=None):
 @click.option("--max-model-len", type=int, default=None, help="Override max sequence length")
 @click.option("--gpu-mem", type=float, default=None, help="Override gpu_memory_utilization (0.0-1.0)")
 @click.option("--no-auto-detect", is_flag=True, help="Skip HuggingFace model auto-detection")
-@click.option("--json", "output_json", is_flag=True, default=False, help="Output result as JSON")
+@json_option
 # @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
 def recipe_vram(ctx, recipe_name, tensor_parallel, max_model_len, gpu_mem, no_auto_detect, output_json, config_path=None):
@@ -195,13 +195,12 @@ def recipe_vram(ctx, recipe_name, tensor_parallel, max_model_len, gpu_mem, no_au
         cli_overrides["gpu_memory_utilization"] = gpu_mem
 
     if output_json:
-        import json as json_mod
         est = recipe.estimate_vram(cli_overrides=cli_overrides, auto_detect=not no_auto_detect)
         result = est.to_dict()
         result["recipe"] = recipe.qualified_name
         result["model"] = recipe.model
         result["runtime"] = recipe.runtime
-        click.echo(json_mod.dumps(result, indent=2))
+        print_json(result)
     else:
         _display_vram_estimate(recipe, cli_overrides=cli_overrides, auto_detect=not no_auto_detect)
 

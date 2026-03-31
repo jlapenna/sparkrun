@@ -16,6 +16,8 @@ from ._common import (
     build_cluster_id_overrides,
     dry_run_option,
     host_options,
+    json_option,
+    print_json,
 )
 
 
@@ -446,7 +448,7 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
 @cluster.command("status")
 @host_options
 @dry_run_option
-@click.option("--json", "output_json", is_flag=True, default=False, help="Output result as JSON")
+@json_option
 # @click.option("--config", "config_path", default=None, help="Path to config file")
 @click.pass_context
 def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, output_json, config_path=None):
@@ -484,15 +486,13 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, output_json, c
     )
 
     if output_json:
-        import json as json_mod
-
         out = result.to_dict()
         for cid, group_data in out["groups"].items():
             group_data["label"] = format_job_label(group_data["meta"], cid)
         for entry_data in out["solo_entries"]:
             entry_data["label"] = format_job_label(entry_data["meta"], entry_data["cluster_id"])
 
-        click.echo(json_mod.dumps(out, indent=2))
+        print_json(out)
         return
 
     # --- Display rendering ---
@@ -578,7 +578,7 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, output_json, c
 @click.option(
     "--check-http-models", is_flag=True, default=False, help="Also verify the inference server responds to health checks at /v1/models"
 )
-@click.option("--json", "output_json", is_flag=True, default=False, help="Output result as JSON")
+@json_option
 @click.pass_context
 def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override, port, served_model_name, check_http_models, output_json):
     """Check if a sparkrun job is running.
@@ -597,8 +597,6 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
 
       sparkrun cluster check-job my-recipe --cluster mylab --json
     """
-    import json as json_mod
-
     from sparkrun.core.config import SparkrunConfig
     from sparkrun.orchestration.job_metadata import check_job_running
     from sparkrun.orchestration.primitives import build_ssh_kwargs
@@ -672,7 +670,7 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
 
     # --- Output ---
     if output_json:
-        click.echo(json_mod.dumps(status.to_dict()))
+        print_json(status.to_dict())
     else:
         recipe_name = status.metadata.get("recipe", "unknown") if status.metadata else "unknown"
         if status.running:
