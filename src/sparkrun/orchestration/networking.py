@@ -715,8 +715,10 @@ def classify_topology(
     - 1 host: UNKNOWN
     - 2 hosts: SWITCH (cannot reliably distinguish direct vs switch
       with only 2 hosts — neighbor discovery shows the same pattern).
-    - 3 hosts where each host connects to exactly 2 others: RING.
-    - Otherwise: SWITCH.
+    - 3 hosts: RING if each *interface* sees only 1 peer host (direct
+      point-to-point links), SWITCH if interfaces see multiple peers
+      (shared L2 fabric).
+    - 4+ hosts: SWITCH.
 
     Args:
         links: List of (hostA, ifaceA, hostB, ifaceB) link tuples.
@@ -733,14 +735,24 @@ def classify_topology(
         return CX7Topology.SWITCH
 
     if n_hosts == 3:
-        # Check if each host connects to exactly 2 other hosts
+        # Check per-interface: how many distinct peer HOSTS does each interface see?
+        # Ring: each interface connects to exactly 1 peer host (point-to-point cable)
+        # Switch: each interface sees multiple peer hosts (shared L2)
+        iface_peers: dict[tuple[str, str], set[str]] = {}  # (host, iface) -> set of peer hosts
         peer_map: dict[str, set[str]] = {h: set() for h in hosts}
-        for hostA, _ifA, hostB, _ifB in links:
+        for hostA, ifA, hostB, _ifB in links:
             if hostA in peer_map and hostB in peer_map:
                 peer_map[hostA].add(hostB)
                 peer_map[hostB].add(hostA)
+                iface_peers.setdefault((hostA, ifA), set()).add(hostB)
 
-        if all(len(peers) == 2 for peers in peer_map.values()):
+        # Every host must see exactly 2 peers overall
+        if not all(len(peers) == 2 for peers in peer_map.values()):
+            return CX7Topology.SWITCH
+
+        # Each interface must see exactly 1 peer host (point-to-point)
+        # If any interface sees 2+ peers, it's a switch
+        if iface_peers and all(len(peers) == 1 for peers in iface_peers.values()):
             return CX7Topology.RING
 
     return CX7Topology.SWITCH

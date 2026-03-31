@@ -663,6 +663,27 @@ class TestClassifyTopology:
         ]
         assert classify_topology(links, ["h1", "h2", "h3"]) == CX7Topology.RING
 
+    def test_three_hosts_switch_all_see_all(self):
+        """3 hosts on a switch: each interface sees multiple peers -> SWITCH."""
+        links = [
+            # h1 enp1 sees both h2 and h3 (shared L2)
+            ("h1", "enp1", "h2", "enp2"),
+            ("h1", "enp1", "h3", "enp4"),
+            ("h1", "enp3", "h2", "enp2"),
+            ("h1", "enp3", "h3", "enp4"),
+            # h2 enp2 sees both h1 and h3
+            ("h2", "enp2", "h1", "enp1"),
+            ("h2", "enp2", "h3", "enp5"),
+            ("h2", "enp3", "h1", "enp3"),
+            ("h2", "enp3", "h3", "enp5"),
+            # h3 sees both h1 and h2
+            ("h3", "enp4", "h1", "enp1"),
+            ("h3", "enp4", "h2", "enp2"),
+            ("h3", "enp5", "h1", "enp3"),
+            ("h3", "enp5", "h2", "enp3"),
+        ]
+        assert classify_topology(links, ["h1", "h2", "h3"]) == CX7Topology.SWITCH
+
     def test_three_hosts_incomplete_switch(self):
         """3 hosts but not all pairs connected -> SWITCH."""
         links = [

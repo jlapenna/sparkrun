@@ -4,6 +4,9 @@
 # Outputs CX7_NEIGHBOR_N_LOCAL_IFACE and CX7_NEIGHBOR_N_REMOTE_MAC on stdout.
 # Diagnostic messages go to stderr.
 #
+# Collects ALL neighbors per interface (not just first) so callers can
+# distinguish direct connections (1 neighbor/iface) from switch (many).
+#
 # Three-tier discovery (each tier only runs if previous found nothing):
 #   1. IPv6 all-nodes multicast ping (no sudo) — works on any UP interface
 #   2. IPv4 broadcast ping (no sudo) — works when interface has an IP
@@ -18,13 +21,11 @@ fi
 
 echo "Discovering neighbors on CX7 interfaces: $CX7_IFACES" >&2
 
-# Helper: read neighbor table and collect MACs
-# Usage: _collect_neighbors [-6]
-# Sets COUNT and outputs CX7_NEIGHBOR_* vars
+# Helper: read neighbor table and collect ALL MACs per interface
+# Appends to COUNT and outputs CX7_NEIGHBOR_* vars
 _collect_neighbors() {
     local ip_ver="${1:-}"
     for iface in $CX7_IFACES; do
-        local found=0
         while IFS= read -r line; do
             [ -z "$line" ] && continue
             local remote_mac
@@ -37,9 +38,6 @@ _collect_neighbors() {
                 echo "CX7_NEIGHBOR_${COUNT}_LOCAL_IFACE=$iface"
                 echo "CX7_NEIGHBOR_${COUNT}_REMOTE_MAC=$remote_mac"
                 COUNT=$((COUNT + 1))
-                found=1
-                # Take only the first valid neighbor per interface
-                break
             fi
         done < <(ip $ip_ver neigh show dev "$iface" 2>/dev/null)
     done
