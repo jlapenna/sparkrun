@@ -1023,6 +1023,11 @@ def setup_cx7(ctx, hosts, hosts_file, cluster_name, user, dry_run, force, mtu, s
         click.echo("[dry-run] Would configure %d host(s), %d already valid." % (needs_config, already_ok))
         return
 
+    # Confirm before applying
+    if not force and not click.confirm("Apply changes to %d host(s)?" % needs_config, default=True):
+        click.echo("Aborted.")
+        return
+
     # Step 7: Apply — acquire sudo now if not already prompted
     _ensure_sudo()
 
