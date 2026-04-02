@@ -47,8 +47,9 @@ def cluster(ctx):
     type=click.Choice(["auto", "cx7", "mgmt"], case_sensitive=False),
     help="Network interface for transfers (auto=default, cx7=InfiniBand, mgmt=management)",
 )
+@click.option("--default", "set_default", is_flag=True, default=False, help="Set as the default cluster")
 @click.pass_context
-def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode, transfer_interface):
+def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, transfer_mode, transfer_interface, set_default):
     """Create a new named cluster."""
     from sparkrun.core.cluster_manager import ClusterError
     from sparkrun.core.hosts import parse_hosts_file
@@ -71,6 +72,9 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
             name, host_list, description, user=user, cache_dir=cache_dir, transfer_mode=transfer_mode, transfer_interface=transfer_interface
         )
         click.echo(f"Cluster '{name}' created with {len(host_list)} host(s).")
+        if set_default:
+            mgr.set_default(name)
+            click.echo(f"Default cluster set to '{name}'.")
     except ClusterError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -97,8 +101,15 @@ def cluster_create(ctx, name, hosts, hosts_file, description, user, cache_dir, t
     type=click.Choice(["auto", "cx7", "mgmt"], case_sensitive=False),
     help="Network interface for transfers (auto=default, cx7=InfiniBand, mgmt=management)",
 )
+@click.option(
+    "--topology",
+    default=None,
+    type=click.Choice(["none", "direct", "switch", "ring"], case_sensitive=False),
+    help="CX7 topology (none=remove, direct/switch=switched fabric, ring=3-node mesh/ring)",
+)
 @click.pass_context
-def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host, description, user, cache_dir, transfer_mode, transfer_interface):
+def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host,
+                   description, user, cache_dir, transfer_mode, transfer_interface, topology):
     """Update an existing cluster.
 
     \b
@@ -133,20 +144,22 @@ def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host, descript
     cache_dir_provided = ctx.get_parameter_source("cache_dir") == ParameterSource.COMMANDLINE
     transfer_mode_provided = ctx.get_parameter_source("transfer_mode") == ParameterSource.COMMANDLINE
     transfer_interface_provided = ctx.get_parameter_source("transfer_interface") == ParameterSource.COMMANDLINE
+    topology_provided = ctx.get_parameter_source("topology") == ParameterSource.COMMANDLINE
 
     has_host_change = host_list is not None or add_host or remove_host
     if (
-        not has_host_change
-        and description is None
-        and not user_provided
-        and not cache_dir_provided
-        and not transfer_mode_provided
-        and not transfer_interface_provided
+            not has_host_change
+            and description is None
+            and not user_provided
+            and not cache_dir_provided
+            and not transfer_mode_provided
+            and not transfer_interface_provided
+            and not topology_provided
     ):
         click.echo(
             "Error: Nothing to update. Provide --hosts, --hosts-file, --add-host, "
             "--remove-host, -d, --user, --cache-dir, --transfer-mode, "
-            "or --transfer-interface.",
+            "--transfer-interface, or --topology.",
             err=True,
         )
         sys.exit(1)
@@ -196,6 +209,14 @@ def cluster_update(ctx, name, hosts, hosts_file, add_host, remove_host, descript
     if transfer_interface_provided:
         # "auto" means unset (use default behavior)
         update_kwargs["transfer_interface"] = None if transfer_interface == "auto" else transfer_interface
+    if topology_provided:
+        # none=remove, direct/switch both map to "switch", ring=ring
+        if topology == "none":
+            update_kwargs["topology"] = None
+        elif topology in ("direct", "switch"):
+            update_kwargs["topology"] = "switch"
+        else:
+            update_kwargs["topology"] = topology
 
     try:
         mgr.update(name, hosts=host_list, description=description, **update_kwargs)
@@ -228,7 +249,7 @@ def cluster_list(ctx):
         # Break hosts into lines of 2 addresses each
         host_lines = []
         for i in range(0, len(c.hosts), 2):
-            host_lines.append(", ".join(c.hosts[i : i + 2]))
+            host_lines.append(", ".join(c.hosts[i: i + 2]))
         first_hosts = host_lines[0] if host_lines else ""
         click.echo(f"{marker}{c.name:<20} {first_hosts:<40} {desc:<30}")
         for extra in host_lines[1:]:
@@ -263,6 +284,8 @@ def cluster_show(ctx, name):
         click.echo(f"Transfer:    {c.transfer_mode}")
     if c.transfer_interface:
         click.echo(f"Xfer iface:  {c.transfer_interface}")
+    if c.topology:
+        click.echo(f"Topology:    {c.topology}")
     click.echo(f"Default:     {'yes' if c.name == default_name else 'no'}")
     click.echo(f"Hosts ({len(c.hosts)}):")
     for h in c.hosts:
@@ -339,8 +362,15 @@ def cluster_default(ctx):
 @click.option("--interval", "-i", default=2, type=int, help="Sampling interval in seconds")
 @click.option("--simple", is_flag=True, default=False, help="Use plain-text output instead of TUI")
 @click.option("--json", "output_json", is_flag=True, default=False, help="Stream updates as newline-delimited JSON objects")
+@click.option(
+    "--backend",
+    type=click.Choice(["bash", "nv-monitor"], case_sensitive=False),
+    default=None,
+    help="Monitoring backend (bash=SSH script, nv-monitor=Prometheus endpoint). Default: from config or bash.",
+    hidden=True,
+)
 @click.pass_context
-def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, simple, output_json):
+def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, simple, output_json, backend):
     """Live-monitor CPU, RAM, and GPU metrics across cluster hosts.
 
     Streams host_monitor.sh on each host via SSH and displays a refreshing
@@ -361,31 +391,36 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
 
       sparkrun cluster monitor --cluster mylab --json
     """
-    from sparkrun.core.config import SparkrunConfig
     from sparkrun.core.monitoring import ClusterMonitor, stream_cluster_monitor
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
-    config = SparkrunConfig()
+    config = _get_context(ctx).config
     host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
     ssh_kwargs = build_ssh_kwargs(config)
+
+    # Resolve monitoring backend
+    if backend is None:
+        backend = config.monitor_backend or "bash"
+    backend = backend.lower()
 
     if dry_run:
         click.echo("[dry-run] Would monitor %d host(s) every %ds:" % (len(host_list), interval))
         for h in host_list:
             click.echo("  %s" % h)
         stream_cluster_monitor(host_list, ssh_kwargs, interval=interval, dry_run=True)
+        if backend == "nv-monitor":
+            click.echo("[dry-run] Backend: nv-monitor (Prometheus over SSH port forwarding)")
         return
 
     # ---- JSON streaming mode ----
     if output_json:
         import json as json_mod
+        import time
         from dataclasses import asdict
 
         def _render_json(states):
             """Emit one JSON object per update tick with all host data."""
-            import time as _time
-
-            snapshot = {"timestamp": _time.time(), "hosts": {}}
+            snapshot = {"timestamp": time.time(), "hosts": {}}
             for host in host_list:
                 state = states.get(host)
                 if state is None or state.latest is None:
@@ -399,12 +434,26 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
                 snapshot["hosts"][host] = entry
             click.echo(json_mod.dumps(snapshot))
 
-        stream_cluster_monitor(
-            host_list,
-            ssh_kwargs,
-            interval=interval,
-            on_update=_render_json,
-        )
+        if backend == "nv-monitor":
+            from sparkrun.core.monitoring import NvMonitorClusterMonitor
+
+            monitor = NvMonitorClusterMonitor(host_list, ssh_kwargs, interval)
+            monitor.start()
+            try:
+                while True:
+                    time.sleep(1)
+                    _render_json(monitor.states)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                monitor.stop()
+        else:
+            stream_cluster_monitor(
+                host_list,
+                ssh_kwargs,
+                interval=interval,
+                on_update=_render_json,
+            )
         return
 
     # Try the Textual TUI unless --simple was requested.
@@ -412,7 +461,11 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
         try:
             from sparkrun.cli._monitor_tui import ClusterMonitorApp
 
-            monitor = ClusterMonitor(host_list, ssh_kwargs, interval)
+            if backend == "nv-monitor":
+                from sparkrun.core.monitoring import NvMonitorClusterMonitor
+                monitor = NvMonitorClusterMonitor(host_list, ssh_kwargs, interval)
+            else:
+                monitor = ClusterMonitor(host_list, ssh_kwargs, interval)
             app = ClusterMonitorApp(monitor, cache_dir=str(config.cache_dir))
             app.run()
             return
@@ -420,6 +473,8 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
             click.echo("Textual not installed — falling back to simple mode.\n", err=True)
 
     # ---- simple plain-text fallback ----
+    import time
+
     from sparkrun.utils.cli_formatters import format_monitor_table
 
     click.echo("Monitoring %d host(s) every %ds (Ctrl-C to stop)...\n" % (len(host_list), interval))
@@ -433,14 +488,31 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
         click.echo("\033[%dA\033[J" % table_lines, nl=False)
         click.echo(table)
 
-    click.echo(format_monitor_table({}, host_list))
+    if backend == "nv-monitor":
+        from sparkrun.core.monitoring import NvMonitorClusterMonitor
 
-    stream_cluster_monitor(
-        host_list,
-        ssh_kwargs,
-        interval=interval,
-        on_update=_render,
-    )
+        monitor = NvMonitorClusterMonitor(host_list, ssh_kwargs, interval)
+        monitor.start()
+        click.echo(format_monitor_table({}, host_list))
+        try:
+            while True:
+                time.sleep(1)
+                table = format_monitor_table(monitor.states, host_list)
+                click.echo("\033[%dA\033[J" % table_lines, nl=False)
+                click.echo(table)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            monitor.stop()
+    else:
+        click.echo(format_monitor_table({}, host_list))
+
+        stream_cluster_monitor(
+            host_list,
+            ssh_kwargs,
+            interval=interval,
+            on_update=_render,
+        )
 
     click.echo("\nMonitoring stopped.")
 
@@ -463,12 +535,11 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, output_json, c
 
       sparkrun cluster status --cluster mylab
     """
-    from sparkrun.core.config import SparkrunConfig
     from sparkrun.core.cluster_manager import query_cluster_status
     from sparkrun.utils.cli_formatters import format_job_label, format_job_commands, format_host_display
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
-    config = SparkrunConfig(config_path) if config_path else SparkrunConfig()
+    config = _get_context(ctx).config
     host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
 
     ssh_kwargs = build_ssh_kwargs(config)
@@ -597,11 +668,13 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
 
       sparkrun cluster check-job my-recipe --cluster mylab --json
     """
-    from sparkrun.core.config import SparkrunConfig
+    import json as json_mod
+
     from sparkrun.orchestration.job_metadata import check_job_running
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
-    config = SparkrunConfig()
+    sctx = _get_context(ctx)
+    config = sctx.config
     ssh_kwargs = build_ssh_kwargs(config)
 
     if _is_cluster_id(target) is not None:
@@ -632,7 +705,6 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
         from sparkrun.core.bootstrap import get_runtime
         from sparkrun.orchestration.job_metadata import generate_cluster_id
 
-        sctx = _get_context(ctx)
         v = sctx.variables
         recipe, _recipe_path, _registry_mgr = _load_recipe(config, target)
         host_list, _ = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, sctx=sctx)
@@ -688,3 +760,230 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
         sys.exit(1)
     if check_http_models and status.healthy is False:
         sys.exit(1)
+
+
+@cluster.command("inspect", hidden=True)
+@click.argument("name", type=CLUSTER_NAME, required=False, default=None)
+@host_options
+@dry_run_option
+@click.option("--json", "output_json", is_flag=True, default=False, help="Output as JSON")
+@click.pass_context
+def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_json):
+    """Inspect effective cluster configuration and cache directories.
+
+    Shows resolved cluster settings (transfer mode, interface, topology,
+    SSH user, cache dirs) and checks whether cache directories exist on
+    each remote host.  Useful for diagnosing configuration, transfer, or
+    permission issues without running a job.
+
+    NAME is an optional cluster name (equivalent to --cluster NAME).
+
+    \b
+    Examples:
+      sparkrun cluster inspect mylab
+      sparkrun cluster inspect mylab --json
+      sparkrun cluster inspect --hosts 192.168.11.13,192.168.11.14
+    """
+    # Allow positional name as shorthand for --cluster
+    if name and cluster_name:
+        click.echo("Error: Cannot specify both a positional cluster name and --cluster.", err=True)
+        sys.exit(1)
+    if name:
+        cluster_name = name
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from sparkrun.core.cluster_manager import resolve_cluster_config
+    from sparkrun.orchestration.primitives import build_ssh_kwargs
+    from sparkrun.orchestration.ssh import run_remote_command
+
+    config = _get_context(ctx).config
+    host_list, cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
+    ssh_kwargs = build_ssh_kwargs(config)
+
+    # Resolve effective cluster configuration
+    cluster_cfg = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr)
+    local_hf, remote_hf, xfer_mode, xfer_iface = cluster_cfg.resolve_transfer_config(config)
+    local_sparkrun = str(config.cache_dir)
+
+    # Resolve auto transfer mode to a concrete value
+    from sparkrun.orchestration.distribution import resolve_auto_transfer_mode
+
+    xfer_result = resolve_auto_transfer_mode(xfer_mode, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
+    resolved_mode = xfer_result.mode
+
+    # Detect IB / NCCL env — reuse from transfer mode resolution if available,
+    # otherwise run detection explicitly.
+    ib_result = xfer_result.ib_result
+    if ib_result is None and not dry_run:
+        from sparkrun.orchestration.infiniband import detect_ib_for_hosts
+
+        ib_result = detect_ib_for_hosts(host_list, ssh_kwargs=ssh_kwargs, topology=cluster_cfg.topology)
+
+    nccl_env = ib_result.nccl_env if ib_result else {}
+
+    # Resolve effective transfer interface
+    # auto (None) → cx7 if IB is available and validated, else mgmt
+    if xfer_iface == "mgmt":
+        resolved_iface = "mgmt"
+    elif xfer_result.ib_validated:
+        resolved_iface = "cx7"
+    elif ib_result and ib_result.ib_ip_map:
+        resolved_iface = "cx7"
+    elif ib_result:
+        resolved_iface = "mgmt"
+    else:
+        resolved_iface = None
+
+    if dry_run:
+        click.echo("[dry-run] Would inspect cluster config and cache dirs on %d host(s)" % len(host_list))
+        return
+
+    # Build a script that checks existence and disk usage for both dirs.
+    # We derive remote sparkrun cache the same way: ~/.cache/sparkrun on the remote user.
+    if cluster_cfg.user:
+        remote_sparkrun = "/home/%s/.cache/sparkrun" % cluster_cfg.user
+    else:
+        remote_sparkrun = "$HOME/.cache/sparkrun"
+
+    check_cmd = (
+                    'sr_dir="%s"; hf_dir="%s"; '
+                    'sr_exists="no"; hf_exists="no"; sr_du="-"; hf_du="-"; '
+                    'if [ -d "$sr_dir" ]; then sr_exists="yes"; sr_du=$(du -sh "$sr_dir" 2>/dev/null | cut -f1); fi; '
+                    'if [ -d "$hf_dir" ]; then hf_exists="yes"; hf_du=$(du -sh "$hf_dir" 2>/dev/null | cut -f1); fi; '
+                    'echo "sr_exists=$sr_exists|sr_du=$sr_du|hf_exists=$hf_exists|hf_du=$hf_du|sr_dir=$sr_dir|hf_dir=$hf_dir"'
+                ) % (remote_sparkrun, remote_hf)
+
+    # Query all hosts in parallel
+    host_info: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=len(host_list)) as executor:
+        futures = {
+            executor.submit(
+                run_remote_command,
+                host,
+                check_cmd,
+                ssh_user=ssh_kwargs.get("ssh_user"),
+                ssh_key=ssh_kwargs.get("ssh_key"),
+                ssh_options=ssh_kwargs.get("ssh_options"),
+                timeout=15,
+            ): host
+            for host in host_list
+        }
+        for future in as_completed(futures):
+            host = futures[future]
+            result = future.result()
+            if result.success and result.stdout.strip():
+                parts = dict(kv.split("=", 1) for kv in result.stdout.strip().split("|") if "=" in kv)
+                host_info[host] = parts
+            else:
+                host_info[host] = {"error": result.stderr.strip() or "SSH failed"}
+
+    # Check local directories
+    import os
+    import subprocess as _sp
+
+    def _local_dir_info(path: str) -> tuple[str, str]:
+        if not os.path.isdir(path):
+            return "no", "-"
+        du_result = _sp.run(["du", "-sh", path], capture_output=True, text=True)
+        size = du_result.stdout.split()[0] if du_result.returncode == 0 and du_result.stdout.strip() else "-"
+        return "yes", size
+
+    local_sr_exists, local_sr_du = _local_dir_info(local_sparkrun)
+    local_hf_exists, local_hf_du = _local_dir_info(local_hf)
+
+    # Collect effective config summary
+    effective_config = {
+        "cluster": cluster_cfg.name,
+        "ssh_user": config.ssh_user,
+        "transfer_mode": xfer_mode,
+        "transfer_mode_resolved": resolved_mode,
+        "transfer_interface": xfer_iface or "auto",
+        "transfer_interface_resolved": resolved_iface,
+        "topology": cluster_cfg.topology,
+        "hf_cache_local": local_hf,
+        "hf_cache_remote": remote_hf,
+        "sparkrun_cache": local_sparkrun,
+        "nccl_env": nccl_env,
+    }
+
+    if output_json:
+        import json as json_mod
+
+        data = {
+            "config": effective_config,
+            "hosts": list(host_list),
+            "local": {
+                "sparkrun_cache": {"path": local_sparkrun, "exists": local_sr_exists == "yes", "size": local_sr_du},
+                "hf_cache": {"path": local_hf, "exists": local_hf_exists == "yes", "size": local_hf_du},
+            },
+            "remote": {},
+        }
+        for h in host_list:
+            info = host_info.get(h, {})
+            if "error" in info:
+                data["remote"][h] = {"error": info["error"]}
+            else:
+                data["remote"][h] = {
+                    "sparkrun_cache": {"path": info.get("sr_dir", "?"), "exists": info.get("sr_exists") == "yes",
+                                       "size": info.get("sr_du", "-")},
+                    "hf_cache": {"path": info.get("hf_dir", "?"), "exists": info.get("hf_exists") == "yes", "size": info.get("hf_du", "-")},
+                }
+        click.echo(json_mod.dumps(data, indent=2))
+        return
+
+    # --- Text output ---
+
+    # Cluster config section
+    click.echo("Cluster Configuration:")
+    if cluster_cfg.name:
+        click.echo("  cluster:            %s" % cluster_cfg.name)
+    else:
+        click.echo("  cluster:            (none — using explicit hosts)")
+    click.echo("  ssh_user:           %s" % (config.ssh_user or "(default)"))
+
+    def _fmt_resolved(configured: str, resolved: str | None) -> str:
+        if resolved and configured != resolved:
+            return "%s (resolved to: %s)" % (configured, resolved)
+        return configured
+
+    click.echo("  transfer_mode:      %s" % _fmt_resolved(xfer_mode, resolved_mode))
+    cfg_iface = xfer_iface or "auto"
+    click.echo("  transfer_interface: %s" % _fmt_resolved(cfg_iface, resolved_iface))
+    click.echo("  topology:           %s" % (cluster_cfg.topology or "(none)"))
+    click.echo("  hosts:              %s" % ", ".join(host_list))
+    click.echo()
+
+    # NCCL env section
+    if nccl_env:
+        click.echo("NCCL Environment (head: %s):" % host_list[0])
+        for k, v in sorted(nccl_env.items()):
+            click.echo("  %s=%s" % (k, v))
+    else:
+        click.echo("NCCL Environment: (no InfiniBand detected)")
+    click.echo()
+
+    # Cache paths section
+    click.echo("Cache Paths:")
+    click.echo("  sparkrun (local):   %s" % local_sparkrun)
+    click.echo("  HF cache (local):   %s" % local_hf)
+    click.echo("  HF cache (remote):  %s" % remote_hf)
+    if local_hf != remote_hf:
+        click.echo("  ⚠ local and remote HF cache paths differ")
+    click.echo()
+
+    # Directory status table
+    click.echo("Directory Status:")
+    click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % ("Host", "SR exists", "SR size", "HF exists", "HF size", "HF path"))
+    click.echo("  " + "-" * 100)
+    click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % ("(local)", local_sr_exists, local_sr_du, local_hf_exists, local_hf_du, local_hf))
+    for h in host_list:
+        info = host_info.get(h, {})
+        if "error" in info:
+            click.echo("  %-30s %s" % (h, "Error: %s" % info["error"]))
+        else:
+            sr_exists = info.get("sr_exists", "?")
+            sr_du = info.get("sr_du", "-")
+            hf_exists = info.get("hf_exists", "?")
+            hf_du = info.get("hf_du", "-")
+            hf_dir = info.get("hf_dir", "?")
+            click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % (h, sr_exists, sr_du, hf_exists, hf_du, hf_dir))

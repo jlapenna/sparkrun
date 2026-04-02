@@ -43,6 +43,7 @@ class ClusterDefinition:
     cache_dir: str | None = None
     transfer_mode: str | None = None
     transfer_interface: str | None = None
+    topology: str | None = None
 
 
 @dataclass
@@ -157,6 +158,7 @@ class ClusterManager:
         cache_dir: str | None = None,
         transfer_mode: str | None = None,
         transfer_interface: str | None = None,
+        topology: str | None = None,
     ) -> None:
         """Create a new named cluster.
 
@@ -168,6 +170,7 @@ class ClusterManager:
             cache_dir: Optional HuggingFace cache directory for this cluster
             transfer_mode: Optional transfer mode (local, push, delegated)
             transfer_interface: Optional transfer interface (cx7, mgmt)
+            topology: Optional CX7 topology (direct, switch, ring)
 
         Raises:
             ClusterError: If cluster already exists or name is invalid
@@ -194,6 +197,7 @@ class ClusterManager:
             cache_dir=cache_dir,
             transfer_mode=transfer_mode,
             transfer_interface=transfer_interface,
+            topology=topology,
         )
         self._write_cluster(cluster_def)
         logger.info("Created cluster '%s' with %d hosts", name, len(hosts))
@@ -225,6 +229,7 @@ class ClusterManager:
         cache_dir: str | None = _UNSET,
         transfer_mode: str | None = _UNSET,
         transfer_interface: str | None = _UNSET,
+        topology: str | None = _UNSET,
     ) -> None:
         """Update existing cluster definition.
 
@@ -236,6 +241,7 @@ class ClusterManager:
             cache_dir: HuggingFace cache directory (if provided; pass ``None`` explicitly to clear)
             transfer_mode: Transfer mode (if provided; pass ``None`` explicitly to clear)
             transfer_interface: Transfer interface (if provided; pass ``None`` explicitly to clear)
+            topology: CX7 topology (if provided; pass ``None`` explicitly to clear)
 
         Raises:
             ClusterError: If cluster does not exist
@@ -273,6 +279,10 @@ class ClusterManager:
                 )
             cluster_def.transfer_interface = transfer_interface
             logger.debug("Updated transfer_interface for cluster '%s'", name)
+
+        if topology is not _UNSET:
+            cluster_def.topology = topology
+            logger.debug("Updated topology for cluster '%s'", name)
 
         # Write back
         self._write_cluster(cluster_def)
@@ -381,6 +391,8 @@ class ClusterManager:
             data["transfer_mode"] = cluster_def.transfer_mode
         if cluster_def.transfer_interface is not None:
             data["transfer_interface"] = cluster_def.transfer_interface
+        if cluster_def.topology is not None:
+            data["topology"] = cluster_def.topology
 
         with cluster_path.open("w") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
@@ -403,6 +415,7 @@ class ClusterManager:
             cache_dir=data.get("cache_dir"),
             transfer_mode=data.get("transfer_mode"),
             transfer_interface=data.get("transfer_interface"),
+            topology=data.get("topology"),
         )
 
 
@@ -551,6 +564,7 @@ class ResolvedClusterConfig:
     cache_dir: str | None = None
     transfer_mode: str | None = None
     transfer_interface: str | None = None
+    topology: str | None = None
 
     def resolve_transfer_config(self, config, transfer_mode_override: str | None = None):
         """Resolve transfer configuration against defaults.
@@ -569,6 +583,7 @@ class ResolvedClusterConfig:
             Tuple of ``(local_cache_dir, remote_cache_dir, effective_transfer_mode, effective_transfer_interface)``.
         """
         import os
+        import sys
 
         local_cache_dir = str(config.hf_cache_dir)
         if self.cache_dir:
@@ -578,6 +593,12 @@ class ResolvedClusterConfig:
             # Use absolute path (not ~user) because tilde isn't expanded
             # inside quoted strings in bash scripts.
             remote_cache_dir = "/home/%s/.cache/huggingface" % self.user
+        elif sys.platform != "linux":
+            # Control machine is non-Linux (e.g. macOS) but targets are
+            # Linux — derive remote cache from the SSH user if configured,
+            # otherwise fall back to the OS username.
+            _user = self.user or os.environ.get("USER", "user")
+            remote_cache_dir = "/home/%s/.cache/huggingface" % _user
         else:
             remote_cache_dir = local_cache_dir
         effective_transfer_mode = transfer_mode_override or self.transfer_mode or "auto"
@@ -625,5 +646,6 @@ def resolve_cluster_config(
         cfg.transfer_mode = cluster_def.transfer_mode
         cfg.transfer_interface = cluster_def.transfer_interface
         cfg.cache_dir = cluster_def.cache_dir
+        cfg.topology = cluster_def.topology
 
     return cfg

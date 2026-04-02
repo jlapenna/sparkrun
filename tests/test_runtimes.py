@@ -672,18 +672,19 @@ class TestEugrPrepare:
             "container": "my-image",
             "runtime_config": {"build_args": ["--some-flag"]},
         })
-        with mock.patch.object(builder, "ensure_repo", return_value=repo_dir):
-            with mock.patch("subprocess.run") as mock_run:
-                mock_run.return_value = mock.Mock(returncode=0)
-                with mock.patch.object(builder, "_save_build_metadata"):
-                    builder.prepare_image("my-image", recipe, ["10.0.0.1"])
+        with mock.patch("sparkrun.containers.registry.image_exists_locally", return_value=False):
+            with mock.patch.object(builder, "ensure_repo", return_value=repo_dir):
+                with mock.patch("subprocess.run") as mock_run:
+                    mock_run.return_value = mock.Mock(returncode=0)
+                    with mock.patch.object(builder, "_save_build_metadata"):
+                        builder.prepare_image("my-image", recipe, ["10.0.0.1"])
 
-                # Should call build-and-copy.sh with -t and build_args
-                cmd = mock_run.call_args[0][0]
-                assert str(repo_dir / "build-and-copy.sh") in cmd[0]
-                assert "-t" in cmd
-                assert "my-image" in cmd
-                assert "--some-flag" in cmd
+                    # Should call build-and-copy.sh with -t and build_args
+                    cmd = mock_run.call_args[0][0]
+                    assert str(repo_dir / "build-and-copy.sh") in cmd[0]
+                    assert "-t" in cmd
+                    assert "my-image" in cmd
+                    assert "--some-flag" in cmd
 
     def test_prepare_without_build_args_or_mods_image_exists(self, eugr_builder):
         """prepare_image() is a no-op when no build_args/mods and image exists."""
@@ -723,11 +724,12 @@ class TestEugrPrepare:
             "name": "test", "model": "some-model", "runtime": "eugr-vllm",
             "runtime_config": {"build_args": ["--flag"]},
         })
-        with mock.patch.object(builder, "ensure_repo", return_value=repo_dir):
-            with mock.patch("subprocess.run") as mock_run:
-                builder.prepare_image("vllm-node", recipe, ["10.0.0.1"], dry_run=True)
-                # subprocess.run should not be called in dry-run
-                mock_run.assert_not_called()
+        with mock.patch("sparkrun.containers.registry.image_exists_locally", return_value=False):
+            with mock.patch.object(builder, "ensure_repo", return_value=repo_dir):
+                with mock.patch("subprocess.run") as mock_run:
+                    builder.prepare_image("vllm-node", recipe, ["10.0.0.1"], dry_run=True)
+                    # subprocess.run should not be called in dry-run
+                    mock_run.assert_not_called()
 
     def test_prepare_injects_mod_pre_exec(self, eugr_builder):
         """prepare_image() injects mod entries into recipe.pre_exec."""
@@ -1418,6 +1420,26 @@ class TestComputeRequiredNodes:
         runtime = _StubRuntime()
         assert runtime.compute_required_nodes(recipe, {"tensor_parallel": 8}) == 8
 
+    def test_pp_only(self):
+        """PP=3 with no explicit TP → 1*3 = 3 nodes."""
+        recipe = self._make_recipe(defaults={"pipeline_parallel": 3})
+        runtime = _StubRuntime()
+        assert runtime.compute_required_nodes(recipe) == 3
+
+    def test_tp_times_pp(self):
+        """TP=2, PP=2 → 4 nodes."""
+        recipe = self._make_recipe(defaults={
+            "tensor_parallel": 2, "pipeline_parallel": 2,
+        })
+        runtime = _StubRuntime()
+        assert runtime.compute_required_nodes(recipe) == 4
+
+    def test_tp_no_pp(self):
+        """TP=2, no PP → 2 nodes (backward compat)."""
+        recipe = self._make_recipe(defaults={"tensor_parallel": 2})
+        runtime = _StubRuntime()
+        assert runtime.compute_required_nodes(recipe) == 2
+
     def test_returns_none_with_empty_overrides(self):
         """Empty overrides don't change None result."""
         recipe = self._make_recipe()
@@ -1426,7 +1448,7 @@ class TestComputeRequiredNodes:
 
 
 class TestSglangComputeRequiredNodes:
-    """Test SglangRuntime.compute_required_nodes() with PP support."""
+    """Test SglangRuntime inherits base tp*pp (no override needed)."""
 
     def _make_recipe(self, defaults=None):
         data = {
@@ -1483,7 +1505,7 @@ class TestSglangComputeRequiredNodes:
 
 
 class TestTrtllmComputeRequiredNodes:
-    """Test TrtllmRuntime inherits base TP-only behavior."""
+    """Test TrtllmRuntime inherits base tp*pp behavior."""
 
     def _make_recipe(self, defaults=None):
         data = {
@@ -1494,20 +1516,26 @@ class TestTrtllmComputeRequiredNodes:
             data["defaults"] = defaults
         return Recipe.from_dict(data)
 
-    def test_returns_tp_only(self):
-        """TRT-LLM uses base class (TP only) for now."""
+    def test_tp_times_pp(self):
+        """TRT-LLM inherits base class tp*pp."""
         from sparkrun.runtimes.trtllm import TrtllmRuntime
         recipe = self._make_recipe(defaults={
             "tensor_parallel": 2, "pipeline_parallel": 2,
         })
         runtime = TrtllmRuntime()
-        # Base class only reads TP, ignores PP
-        assert runtime.compute_required_nodes(recipe) == 2
+        assert runtime.compute_required_nodes(recipe) == 4
 
-    def test_returns_none_when_no_tp(self):
-        """No TP → None (even if PP is set)."""
+    def test_pp_only(self):
+        """PP=2 with no TP → 2 nodes."""
         from sparkrun.runtimes.trtllm import TrtllmRuntime
         recipe = self._make_recipe(defaults={"pipeline_parallel": 2})
+        runtime = TrtllmRuntime()
+        assert runtime.compute_required_nodes(recipe) == 2
+
+    def test_returns_none_when_neither(self):
+        """No TP or PP → None."""
+        from sparkrun.runtimes.trtllm import TrtllmRuntime
+        recipe = self._make_recipe()
         runtime = TrtllmRuntime()
         assert runtime.compute_required_nodes(recipe) is None
 

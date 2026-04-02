@@ -75,11 +75,27 @@ def parse_ib_detect_output(output: str) -> dict[str, str]:
     return parse_kv_output(output)
 
 
-def generate_nccl_env(ib_info: dict[str, str]) -> dict[str, str]:
+def generate_ring_nccl_overrides(ib_info: dict[str, str]) -> dict[str, str]:
+    """NCCL overrides required for 3-node ring/mesh topology.
+
+    Ring topologies use direct CX7 links without a switch, so the
+    standard IB transport plugin cannot be used.  These variables
+    force socket-based NCCL transport with subnet-aware routing.
+    """
+    return {
+        "NCCL_NET_PLUGIN": "none",
+        "NCCL_IB_SUBNET_AWARE_ROUTING": "1",
+        "NCCL_IB_MERGE_NICS": "0",
+    }
+
+
+def generate_nccl_env(ib_info: dict[str, str], topology: str | None = None) -> dict[str, str]:
     """Generate NCCL environment variables from IB detection results.
 
     Args:
         ib_info: Parsed output from :func:`parse_ib_detect_output`.
+        topology: CX7 topology (e.g. ``"ring"``).  When ``"ring"``,
+            additional overrides are applied for mesh networking.
 
     Returns:
         Dictionary of NCCL/network environment variables.
@@ -95,21 +111,30 @@ def generate_nccl_env(ib_info: dict[str, str]) -> dict[str, str]:
         "NCCL_CROSS_NIC": "1",
     }
 
-    if ib_info.get("DETECTED_GID_INDEX"):
-        env["NCCL_IB_GID_INDEX"] = ib_info["DETECTED_GID_INDEX"]
-    if ib_info.get("DETECTED_HCA_LIST"):
-        env["NCCL_IB_HCA"] = ib_info["DETECTED_HCA_LIST"]
-    if ib_info.get("DETECTED_NET_LIST"):
-        net_list = ib_info["DETECTED_NET_LIST"]
+    def _set_eth_interfaces(target):
+        net_list = ib_info[target]
         # NCCL_SOCKET_IFNAME uses '=' prefix per interface to pin exact devices (refer to NCCL docs for details)
-        nccl_socket = ",".join("=" + if_ for if_ in net_list.split(","))
-        env["NCCL_SOCKET_IFNAME"] = nccl_socket
+        # nccl_socket = ",".join("=" + if_ for if_ in net_list.split(","))
+        env["NCCL_SOCKET_IFNAME"] = net_list  # nccl_socket
         env["MN_IF_NAME"] = net_list
         env["OMPI_MCA_btl_tcp_if_include"] = net_list
         env["GLOO_SOCKET_IFNAME"] = net_list
         env["TP_SOCKET_IFNAME"] = net_list
+        # env["UCX_NET_DEVICES"] = net_list
+
+    if ib_info.get("DETECTED_HCA_LIST"):
+        env["NCCL_IB_HCA"] = ib_info["DETECTED_HCA_LIST"]
+    if ib_info.get('DETECTED_SOCKET_IFNAME'):  # prefer MGMT/default interface for non-IB HCA adapters since it works for mesh or non-mesh
+        _set_eth_interfaces('DETECTED_SOCKET_IFNAME')
+    elif ib_info.get("DETECTED_NET_LIST"):  # fallback to specifying CX7 interfaces
+        _set_eth_interfaces('DETECTED_NET_LIST')
     if ib_info.get("DETECTED_UCX_LIST"):
         env["UCX_NET_DEVICES"] = ib_info["DETECTED_UCX_LIST"]
+
+    if topology == "ring":
+        env.update(generate_ring_nccl_overrides(ib_info))
+    elif ib_info.get("DETECTED_GID_INDEX"):  # only do group ID for non-mesh topologies
+        env["NCCL_IB_GID_INDEX"] = ib_info["DETECTED_GID_INDEX"]
 
     return env
 
@@ -130,9 +155,9 @@ def extract_ib_ips(ib_info: dict[str, str]) -> list[str]:
 
 
 def validate_ib_connectivity(
-    ib_ip_map: dict[str, str],
-    ssh_kwargs: dict | None = None,
-    dry_run: bool = False,
+        ib_ip_map: dict[str, str],
+        ssh_kwargs: dict | None = None,
+        dry_run: bool = False,
 ) -> dict[str, str]:
     """Validate that the control machine can reach detected IB IPs.
 
@@ -184,9 +209,10 @@ def validate_ib_connectivity(
 
 
 def detect_ib_for_hosts(
-    hosts: list[str],
-    ssh_kwargs: dict | None = None,
-    dry_run: bool = False,
+        hosts: list[str],
+        ssh_kwargs: dict | None = None,
+        dry_run: bool = False,
+        topology: str | None = None,
 ) -> IBDetectionResult:
     """Run IB detection on all hosts and return aggregated results.
 
@@ -231,7 +257,7 @@ def detect_ib_for_hosts(
 
         # NCCL env from head host
         if result.host == head_host and not nccl_env:
-            nccl_env = generate_nccl_env(ib_info)
+            nccl_env = generate_nccl_env(ib_info, topology=topology)
             if nccl_env:
                 logger.info("  InfiniBand detected on %s, NCCL configured", head_host)
 

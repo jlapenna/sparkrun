@@ -957,6 +957,8 @@ class TestStopCommand:
         import sparkrun.core.config
 
         monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+        # Prevent real git clones when ensure_initialized sees empty cache
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: mock.Mock(returncode=1, stderr="mocked"))
 
         result = runner.invoke(
             main,
@@ -1050,6 +1052,26 @@ class TestClusterCommands:
 
         assert result.exit_code == 0
         assert "created" in result.output.lower()
+
+    def test_cluster_create_with_default(self, runner, tmp_path, monkeypatch):
+        """Test creating a cluster with --default sets it as default."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+
+        result = runner.invoke(
+            main,
+            ["cluster", "create", "my-cluster", "--hosts", "host1,host2", "--default"],
+        )
+        assert result.exit_code == 0
+        assert "created" in result.output.lower()
+        assert "default cluster set to" in result.output.lower()
+
+        # Verify it's actually the default
+        result = runner.invoke(main, ["cluster", "default"])
+        assert "my-cluster" in result.output
 
     def test_cluster_create_duplicate(self, runner, cluster_setup):
         """Test that creating a duplicate cluster fails."""
@@ -1442,7 +1464,7 @@ class TestClusterCommands:
         assert result.exit_code != 0
 
     def test_cluster_update_nothing_to_update_includes_transfer_interface(self, runner, cluster_setup):
-        """Test that 'nothing to update' error mentions --transfer-interface."""
+        """Test that 'nothing to update' error mentions --transfer-interface and --topology."""
         result = runner.invoke(
             main,
             [
@@ -1453,6 +1475,48 @@ class TestClusterCommands:
         )
         assert result.exit_code != 0
         assert "--transfer-interface" in result.output
+        assert "--topology" in result.output
+
+    def test_cluster_update_topology_ring(self, runner, cluster_setup):
+        """Test updating cluster topology to ring."""
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "ring"])
+        assert result.exit_code == 0
+        assert "updated" in result.output.lower()
+
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Topology:    ring" in result.output
+
+    def test_cluster_update_topology_direct_maps_to_switch(self, runner, cluster_setup):
+        """Test that --topology direct is stored as 'switch'."""
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "direct"])
+        assert result.exit_code == 0
+
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Topology:    switch" in result.output
+
+    def test_cluster_update_topology_switch(self, runner, cluster_setup):
+        """Test that --topology switch is stored as 'switch'."""
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "switch"])
+        assert result.exit_code == 0
+
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Topology:    switch" in result.output
+
+    def test_cluster_update_topology_none_clears(self, runner, cluster_setup):
+        """Test that --topology none removes the topology setting."""
+        # First set topology
+        runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "ring"])
+        # Then clear it
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "none"])
+        assert result.exit_code == 0
+
+        result = runner.invoke(main, ["cluster", "show", "test-cluster"])
+        assert "Topology:" not in result.output
+
+    def test_cluster_update_topology_invalid(self, runner, cluster_setup):
+        """Test that invalid --topology value is rejected by Click."""
+        result = runner.invoke(main, ["cluster", "update", "test-cluster", "--topology", "mesh"])
+        assert result.exit_code != 0
 
 
 class TestClusterMonitor:
@@ -3577,6 +3641,8 @@ class TestLogCommand:
         import sparkrun.core.config
 
         monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+        # Prevent real git clones when ensure_initialized sees empty cache
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: mock.Mock(returncode=1, stderr="mocked"))
 
         result = runner.invoke(
             main,
@@ -4352,6 +4418,8 @@ class TestClusterUserInCLICommands:
             "sparkrun.orchestration.primitives.cleanup_containers",
             mock_cleanup,
         )
+        # Prevent real git clones when ensure_initialized sees empty cache
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: mock.Mock(returncode=1, stderr="mocked"))
 
         result = runner.invoke(
             main,
@@ -4375,6 +4443,8 @@ class TestClusterUserInCLICommands:
             captured_config["ssh_user"] = config.ssh_user if config else None
 
         monkeypatch.setattr(SglangRuntime, "follow_logs", mock_follow_logs)
+        # Prevent real git clones when ensure_initialized sees empty cache
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: mock.Mock(returncode=1, stderr="mocked"))
 
         result = runner.invoke(
             main,
@@ -4422,6 +4492,8 @@ class TestClusterUserInCLICommands:
             "sparkrun.orchestration.primitives.try_clear_page_cache",
             lambda *a, **kw: None,
         )
+        # Prevent real git clones when ensure_initialized sees empty cache
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: mock.Mock(returncode=1, stderr="mocked"))
 
         result = runner.invoke(
             main,
@@ -4712,6 +4784,7 @@ class TestStopLogsClusterIdAndOverrides:
         with (
             mock.patch("sparkrun.orchestration.primitives.cleanup_containers"),
             mock.patch("sparkrun.orchestration.job_metadata.generate_cluster_id", return_value="sparkrun_aabbccdd1122") as mock_gen,
+            mock.patch("subprocess.run", return_value=mock.Mock(returncode=1, stderr="mocked")),
         ):
             result = runner.invoke(
                 main,
@@ -4736,6 +4809,7 @@ class TestStopLogsClusterIdAndOverrides:
         with (
             mock.patch("sparkrun.orchestration.primitives.cleanup_containers"),
             mock.patch("sparkrun.orchestration.job_metadata.generate_cluster_id", return_value="sparkrun_aabbccdd1122") as mock_gen,
+            mock.patch("subprocess.run", return_value=mock.Mock(returncode=1, stderr="mocked")),
         ):
             result = runner.invoke(
                 main,
@@ -4789,6 +4863,7 @@ class TestStopLogsClusterIdAndOverrides:
         with (
             mock.patch("sparkrun.core.bootstrap.get_runtime", return_value=mock_runtime),
             mock.patch("sparkrun.orchestration.job_metadata.generate_cluster_id", return_value="sparkrun_aabbccdd1122") as mock_gen,
+            mock.patch("subprocess.run", return_value=mock.Mock(returncode=1, stderr="mocked")),
         ):
             result = runner.invoke(
                 main,

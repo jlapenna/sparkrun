@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from sparkrun.core.cluster_manager import ClusterManager, ClusterError
+from sparkrun.core.cluster_manager import ClusterManager, ClusterError, ResolvedClusterConfig
 
 
 def test_create_cluster(tmp_path: Path):
@@ -470,6 +471,177 @@ def test_valid_transfer_interfaces_constant():
     """VALID_TRANSFER_INTERFACES contains the expected values."""
     from sparkrun.core.cluster_manager import VALID_TRANSFER_INTERFACES
     assert VALID_TRANSFER_INTERFACES == ("cx7", "mgmt")
+
+
+# ---------------------------------------------------------------------------
+# topology field tests
+# ---------------------------------------------------------------------------
+
+
+def test_create_cluster_with_topology(tmp_path: Path):
+    """Create a cluster with topology and verify persistence."""
+    manager = ClusterManager(tmp_path)
+    manager.create("ring-lab", ["host1", "host2", "host3"], topology="ring")
+
+    cluster = manager.get("ring-lab")
+    assert cluster.topology == "ring"
+    assert cluster.hosts == ["host1", "host2", "host3"]
+
+
+def test_create_cluster_without_topology(tmp_path: Path):
+    """Cluster created without topology defaults to None."""
+    manager = ClusterManager(tmp_path)
+    manager.create("basic", ["host1"])
+
+    cluster = manager.get("basic")
+    assert cluster.topology is None
+
+
+def test_update_cluster_topology(tmp_path: Path):
+    """Update topology without affecting other fields."""
+    manager = ClusterManager(tmp_path)
+    manager.create("test", ["host1", "host2"], description="My cluster", user="admin")
+
+    manager.update("test", topology="direct")
+
+    cluster = manager.get("test")
+    assert cluster.topology == "direct"
+    assert cluster.hosts == ["host1", "host2"]
+    assert cluster.description == "My cluster"
+    assert cluster.user == "admin"
+
+
+def test_update_cluster_clear_topology(tmp_path: Path):
+    """Pass topology=None explicitly to clear it."""
+    manager = ClusterManager(tmp_path)
+    manager.create("test", ["host1", "host2", "host3"], topology="ring")
+
+    manager.update("test", topology=None)
+
+    cluster = manager.get("test")
+    assert cluster.topology is None
+
+
+def test_create_cluster_with_all_fields_including_topology(tmp_path: Path):
+    """Create a cluster with all optional fields including topology."""
+    manager = ClusterManager(tmp_path)
+    manager.create(
+        "full", ["host1", "host2", "host3"],
+        description="Full ring cluster",
+        user="admin",
+        cache_dir="/mnt/models",
+        transfer_mode="delegated",
+        transfer_interface="cx7",
+        topology="ring",
+    )
+
+    cluster = manager.get("full")
+    assert cluster.name == "full"
+    assert cluster.hosts == ["host1", "host2", "host3"]
+    assert cluster.description == "Full ring cluster"
+    assert cluster.user == "admin"
+    assert cluster.cache_dir == "/mnt/models"
+    assert cluster.transfer_mode == "delegated"
+    assert cluster.transfer_interface == "cx7"
+    assert cluster.topology == "ring"
+
+
+def test_existing_yaml_without_topology_loads(tmp_path: Path):
+    """YAML without topology field loads with topology=None (backward compat)."""
+    import yaml
+
+    clusters_dir = tmp_path / "clusters"
+    clusters_dir.mkdir()
+    yaml_file = clusters_dir / "old-cluster.yaml"
+    yaml_file.write_text(yaml.dump({
+        "name": "old-cluster",
+        "hosts": ["host1", "host2"],
+        "description": "Old cluster without topology",
+    }))
+
+    manager = ClusterManager(tmp_path)
+    cluster = manager.get("old-cluster")
+    assert cluster.topology is None
+    assert cluster.hosts == ["host1", "host2"]
+
+
+# ---------------------------------------------------------------------------
+# resolve_transfer_config tests
+# ---------------------------------------------------------------------------
+
+
+class _FakeConfig:
+    """Minimal stand-in for SparkrunConfig with hf_cache_dir."""
+    def __init__(self, hf_cache_dir: str = "/home/testuser/.cache/huggingface"):
+        self.hf_cache_dir = Path(hf_cache_dir)
+
+
+class TestResolveTransferConfig:
+    """Tests for ResolvedClusterConfig.resolve_transfer_config."""
+
+    def test_explicit_cache_dir_always_used(self):
+        """When the cluster defines cache_dir, it's always used as remote_cache_dir."""
+        cfg = ResolvedClusterConfig(cache_dir="/mnt/shared/models")
+        config = _FakeConfig()
+        _, remote, _, _ = cfg.resolve_transfer_config(config)
+        assert remote == "/mnt/shared/models"
+
+    def test_cross_user_derives_remote_from_ssh_user(self):
+        """Different SSH user → remote cache derived from that user's home."""
+        cfg = ResolvedClusterConfig(user="gpuadmin")
+        config = _FakeConfig()
+        with patch.dict("os.environ", {"USER": "localuser"}):
+            _, remote, _, _ = cfg.resolve_transfer_config(config)
+        assert remote == "/home/gpuadmin/.cache/huggingface"
+
+    def test_non_linux_control_uses_linux_path(self):
+        """macOS (or other non-Linux) control machine → remote path is Linux-safe."""
+        cfg = ResolvedClusterConfig()
+        config = _FakeConfig("/Users/drew/.cache/huggingface")
+        with patch("sys.platform", "darwin"), \
+             patch.dict("os.environ", {"USER": "drew"}):
+            _, remote, _, _ = cfg.resolve_transfer_config(config)
+        assert remote == "/home/drew/.cache/huggingface"
+
+    def test_non_linux_control_with_ssh_user(self):
+        """macOS control + cluster SSH user → remote path uses SSH user."""
+        cfg = ResolvedClusterConfig(user="drew")
+        config = _FakeConfig("/Users/drew/.cache/huggingface")
+        # Same username on both sides, so cross-user branch doesn't fire
+        with patch("sys.platform", "darwin"), \
+             patch.dict("os.environ", {"USER": "drew"}):
+            _, remote, _, _ = cfg.resolve_transfer_config(config)
+        assert remote == "/home/drew/.cache/huggingface"
+
+    def test_linux_control_uses_local_path(self):
+        """Linux control machine → remote path matches local (same platform)."""
+        cfg = ResolvedClusterConfig()
+        config = _FakeConfig("/home/drew/.cache/huggingface")
+        with patch("sys.platform", "linux"), \
+             patch.dict("os.environ", {"USER": "drew"}):
+            _, remote, _, _ = cfg.resolve_transfer_config(config)
+        assert remote == "/home/drew/.cache/huggingface"
+
+    def test_transfer_mode_override(self):
+        """CLI transfer_mode_override takes precedence over cluster setting."""
+        cfg = ResolvedClusterConfig(transfer_mode="push")
+        config = _FakeConfig()
+        _, _, mode, _ = cfg.resolve_transfer_config(config, transfer_mode_override="delegated")
+        assert mode == "delegated"
+
+    def test_transfer_mode_from_cluster(self):
+        """Cluster transfer_mode used when no CLI override."""
+        cfg = ResolvedClusterConfig(transfer_mode="push")
+        config = _FakeConfig()
+        _, _, mode, _ = cfg.resolve_transfer_config(config)
+        assert mode == "push"
+
+    def test_transfer_mode_defaults_to_auto(self):
+        """No override and no cluster setting → defaults to 'auto'."""
+        cfg = ResolvedClusterConfig()
+        config = _FakeConfig()
+        _, _, mode, _ = cfg.resolve_transfer_config(config)
+        assert mode == "auto"
 
 
 # ---------------------------------------------------------------------------

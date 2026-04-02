@@ -7,6 +7,7 @@ from sparkrun.orchestration.infiniband import (
     generate_ib_detect_script,
     parse_ib_detect_output,
     generate_nccl_env,
+    generate_ring_nccl_overrides,
     validate_ib_connectivity,
 )
 from sparkrun.orchestration.ssh import RemoteResult
@@ -98,11 +99,11 @@ def test_generate_nccl_env_with_ib():
     # Check detected values
     assert env["NCCL_IB_GID_INDEX"] == "3"
     assert env["NCCL_IB_HCA"] == "mlx5_0,mlx5_1"
-    assert env["NCCL_SOCKET_IFNAME"] == "=ib0,=ib1"
-    assert env["MN_IF_NAME"] == "ib0,ib1"
-    assert env["OMPI_MCA_btl_tcp_if_include"] == "ib0,ib1"
-    assert env["GLOO_SOCKET_IFNAME"] == "ib0,ib1"
-    assert env["TP_SOCKET_IFNAME"] == "ib0,ib1"
+    assert env["NCCL_SOCKET_IFNAME"] == "eth0"
+    assert env["MN_IF_NAME"] == "eth0"
+    assert env["OMPI_MCA_btl_tcp_if_include"] == "eth0"
+    assert env["GLOO_SOCKET_IFNAME"] == "eth0"
+    assert env["TP_SOCKET_IFNAME"] == "eth0"
     assert env["UCX_NET_DEVICES"] == "mlx5_0:1,mlx5_1:1"
 
 
@@ -205,18 +206,68 @@ class TestValidateIbConnectivity:
 
         assert result == {}
 
-    @patch("sparkrun.orchestration.ssh.run_remote_command")
-    def test_ssh_kwargs_passed_through(self, mock_cmd):
-        """SSH kwargs are forwarded to the connectivity check."""
-        mock_cmd.return_value = RemoteResult(
-            host="10.0.0.1", returncode=0, stdout="", stderr="",
-        )
-        ssh_kw = {"ssh_user": "drew", "ssh_key": "/path/to/key", "ssh_options": ["-o", "Foo=bar"]}
-        ib_map = {"spark1": "10.0.0.1"}
-        validate_ib_connectivity(ib_map, ssh_kwargs=ssh_kw)
 
-        mock_cmd.assert_called_once_with(
-            "10.0.0.1", "true",
-            connect_timeout=5, timeout=10,
-            ssh_user="drew", ssh_key="/path/to/key", ssh_options=["-o", "Foo=bar"],
-        )
+# ---------------------------------------------------------------------------
+# generate_ring_nccl_overrides tests
+# ---------------------------------------------------------------------------
+
+def test_ring_nccl_overrides_keys():
+    """Ring overrides contain the expected NCCL variables."""
+    overrides = generate_ring_nccl_overrides({})
+    assert overrides["NCCL_NET_PLUGIN"] == "none"
+    assert overrides["NCCL_IB_SUBNET_AWARE_ROUTING"] == "1"
+    assert overrides["NCCL_IB_MERGE_NICS"] == "0"
+    assert len(overrides) == 3
+
+
+def test_generate_nccl_env_ring_topology():
+    """Ring topology adds ring-specific overrides."""
+    ib_info = {
+        "IB_DETECTED": "1",
+        "DETECTED_GID_INDEX": "3",
+        "DETECTED_HCA_LIST": "mlx5_0,mlx5_1",
+    }
+    env = generate_nccl_env(ib_info, topology="ring")
+    assert env["NCCL_NET_PLUGIN"] == "none"
+    assert env["NCCL_IB_SUBNET_AWARE_ROUTING"] == "1"
+    assert env["NCCL_IB_MERGE_NICS"] == "0"
+    # Standard IB vars still present
+    assert env["NCCL_NET"] == "IB"
+    assert env["NCCL_IB_HCA"] == "mlx5_0,mlx5_1"
+
+
+def test_generate_nccl_env_no_ring_topology():
+    """Non-ring topology does NOT add ring overrides."""
+    ib_info = {
+        "IB_DETECTED": "1",
+        "DETECTED_GID_INDEX": "3",
+        "DETECTED_HCA_LIST": "mlx5_0,mlx5_1",
+    }
+    env = generate_nccl_env(ib_info, topology=None)
+    assert "NCCL_NET_PLUGIN" not in env
+    assert "NCCL_IB_SUBNET_AWARE_ROUTING" not in env
+    assert "NCCL_IB_MERGE_NICS" not in env
+
+    env_switch = generate_nccl_env(ib_info, topology="switch")
+    assert "NCCL_NET_PLUGIN" not in env_switch
+
+
+# ---------------------------------------------------------------------------
+# validate_ib_connectivity — ssh_kwargs forwarding
+# ---------------------------------------------------------------------------
+
+@patch("sparkrun.orchestration.ssh.run_remote_command")
+def test_ssh_kwargs_passed_through(mock_cmd):
+    """SSH kwargs are forwarded to the connectivity check."""
+    mock_cmd.return_value = RemoteResult(
+        host="10.0.0.1", returncode=0, stdout="", stderr="",
+    )
+    ssh_kw = {"ssh_user": "drew", "ssh_key": "/path/to/key", "ssh_options": ["-o", "Foo=bar"]}
+    ib_map = {"spark1": "10.0.0.1"}
+    validate_ib_connectivity(ib_map, ssh_kwargs=ssh_kw)
+
+    mock_cmd.assert_called_once_with(
+        "10.0.0.1", "true",
+        connect_timeout=5, timeout=10,
+        ssh_user="drew", ssh_key="/path/to/key", ssh_options=["-o", "Foo=bar"],
+    )

@@ -134,6 +134,32 @@ def _render_detail(host: str, state: HostMonitorState | None, cache_dir: str | N
         lines.append("  " + "  │  ".join(extras))
         lines.append("")
 
+    # Extended nv-monitor metrics
+    if s.gpu_encoder_pct:
+        extras.append(f"Encoder: {s.gpu_encoder_pct}%")
+    if s.gpu_decoder_pct:
+        extras.append(f"Decoder: {s.gpu_decoder_pct}%")
+    if s.gpu_fan_pct:
+        extras.append(f"Fan: {s.gpu_fan_pct}%")
+
+    # Memory breakdown (when nv-monitor provides bufcache data)
+    # nv-monitor reports used = MemTotal - MemAvailable (excludes bufcache),
+    # so "used" is already application memory — no subtraction needed.
+    if s.mem_bufcache_mb and s.mem_used_mb and s.mem_total_mb:
+        try:
+            total = float(s.mem_total_mb)
+            used = float(s.mem_used_mb)
+            bufcache = float(s.mem_bufcache_mb)
+            if total > 0:
+                used_pct = used / total * 100
+                buf_pct = bufcache / total * 100
+                lines.append("  Memory breakdown:")
+                lines.append(f"    App:    [green]{_bar(used_pct)}[/green] {used:.0f} MB ({used_pct:.1f}%)")
+                lines.append(f"    Cache:  [cyan]{_bar(buf_pct)}[/cyan] {bufcache:.0f} MB ({buf_pct:.1f}%)")
+                lines.append("")
+        except (ValueError, TypeError):
+            pass
+
     # Container list with job metadata
     names = [n for n in s.sparkrun_job_names.split("|") if n] if s.sparkrun_job_names else []
     if names:
@@ -195,15 +221,39 @@ def _cell_gpu_power(s: MonitorSample) -> str:
     return "%s W" % s.gpu_power_w if s.gpu_power_w else "-"
 
 
+def _cell_swap(s: MonitorSample) -> str:
+    if not s.swap_total_mb or not s.swap_used_mb:
+        return "-"
+    try:
+        total = float(s.swap_total_mb)
+        used = float(s.swap_used_mb)
+        if total <= 0:
+            return "0%"
+        return "%.0f%%" % (used / total * 100)
+    except (ValueError, TypeError):
+        return "-"
+
+
+def _cell_gpu_enc(s: MonitorSample) -> str:
+    return s.gpu_encoder_pct or "-"
+
+
+def _cell_gpu_dec(s: MonitorSample) -> str:
+    return s.gpu_decoder_pct or "-"
+
+
 # Ordered column definitions: (key, label, cell_fn)
 _TABLE_COLS: list[tuple[str, str, object]] = [
     ("jobs", "Jobs", _cell_jobs),
     ("cpu", "CPU%", _cell_cpu),
     ("ram", "RAM%", _cell_ram),
+    ("swap", "Swap%", _cell_swap),
     ("gpu", "GPU%", _cell_gpu),
     ("cpu_temp", "CPU Temp", _cell_cpu_temp),
     ("gpu_temp", "GPU Temp", _cell_gpu_temp),
     ("gpu_power", "GPU Power", _cell_gpu_power),
+    ("gpu_enc", "Enc%", _cell_gpu_enc),
+    ("gpu_dec", "Dec%", _cell_gpu_dec),
 ]
 
 
