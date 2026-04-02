@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 @click.option("--no-follow", is_flag=True, help="Don't follow container logs after launch")
 @click.option("--no-sync-tuning", is_flag=True, help="Skip syncing tuning configs from registries")
 @click.option("--no-rm", is_flag=True, help="Don't auto-remove containers on exit (keeps containers after stop)")
-@click.option("--memory", default=None, help="Container memory limit (e.g. 32G)")
+@click.option("--memory-limit", "memory", default=None, help="Container memory limit (e.g. 32G)")
 @click.option("--rootful", is_flag=True, help="Run with --privileged as root inside container (legacy behavior)")
 @click.option(
     "--restart", "restart_policy", default=None, help="Docker restart policy (no, always, unless-stopped, on-failure[:N])", hidden=True
