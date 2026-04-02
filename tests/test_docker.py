@@ -17,8 +17,9 @@ def test_docker_exec_basic():
     assert cmd.startswith("docker exec")
     assert "my-container" in cmd
     assert "bash -c" in cmd
-    assert "'echo hello'" in cmd
-
+    import base64
+    expected = base64.b64encode(b"echo hello").decode("utf-8")
+    assert expected in cmd
 
 def test_docker_exec_detach():
     """With detach flag."""

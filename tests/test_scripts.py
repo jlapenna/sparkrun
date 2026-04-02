@@ -170,7 +170,9 @@ def test_generate_exec_serve_script_detached():
     assert "nohup" in script
     assert "/tmp/sparkrun_serve.log" in script
     assert "tail -f" in script
-    assert "vllm serve model" in script
+    import base64
+    expected = base64.b64encode(b"vllm serve model").decode("utf-8")
+    assert expected in script
 
 
 def test_generate_exec_serve_script_foreground():
@@ -185,7 +187,9 @@ def test_generate_exec_serve_script_foreground():
     assert "docker exec my-container" in script
     assert "nohup" not in script
     assert "tail -f" not in script
-    assert "vllm serve model" in script
+    import base64
+    expected = base64.b64encode(b"vllm serve model").decode("utf-8")
+    assert expected in script
 
 
 def test_generate_exec_serve_script_with_env():
@@ -200,8 +204,9 @@ def test_generate_exec_serve_script_with_env():
     )
 
     # Env vars should be exported in sorted order
-    assert "export CUDA_VISIBLE_DEVICES='0,1'" in script
-    assert "export MODEL_PATH='/models/llama'" in script
+    import base64
+    expected = base64.b64encode(b"export CUDA_VISIBLE_DEVICES='0,1'; export MODEL_PATH='/models/llama'; vllm serve model").decode("utf-8")
+    assert expected in script
 
 
 def test_generate_exec_serve_script_escapes_quotes():
@@ -213,8 +218,9 @@ def test_generate_exec_serve_script_escapes_quotes():
     )
 
     # The command should have escaped quotes
-    assert "echo" in script
-    assert "hello world" in script
+    import base64
+    expected = base64.b64encode(b"echo 'hello world'").decode("utf-8")
+    assert expected in script
 
 
 def test_generate_ray_head_script_custom_ports():

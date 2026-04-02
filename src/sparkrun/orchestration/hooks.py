@@ -315,10 +315,11 @@ def _run_exec_command(
         RuntimeError: If the command exits with non-zero status.
     """
     from sparkrun.orchestration.primitives import run_script_on_host
+    import base64
 
-    # Escape single quotes in command for bash -c
-    escaped = cmd.replace("'", "'\\''")
-    script = "docker exec --user root %s bash -c '%s'" % (container_name, escaped)
+    # Use base64 encoding to safely pass the command through bash -c
+    b64_cmd = base64.b64encode(cmd.encode('utf-8')).decode('utf-8')
+    script = "docker exec --user root %s bash -c 'echo %s | base64 -d | bash'" % (container_name, b64_cmd)
 
     logger.info("  %s on %s/%s: %s", label, host, container_name, cmd)
 

@@ -245,19 +245,24 @@ class Executor(ABC):
         """
         from sparkrun.scripts import read_script
 
+        import base64
+
         env_exports = ""
         if env:
             for key, value in sorted(env.items()):
                 env_exports += "export %s='%s'; " % (key, value)
 
-        escaped_cmd = serve_command.replace("'", "'\\''")
-        full_cmd = "%s%s" % (env_exports, escaped_cmd)
+        full_cmd = "%s%s" % (env_exports, serve_command)
+
+        # Base64 encode the command to avoid all bash string-escaping/quoting bugs
+        # when passing it into `docker exec ... bash -c "..."`
+        b64_cmd = base64.b64encode(full_cmd.encode('utf-8')).decode('utf-8')
 
         script_name = "exec_serve_detached.sh" if detached else "exec_serve_foreground.sh"
         template = read_script(script_name)
         return template.format(
             container_name=container_name,
-            full_cmd=full_cmd,
+            b64_cmd=b64_cmd,
         )
 
     def generate_ray_head_script(

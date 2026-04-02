@@ -214,7 +214,9 @@ class TestRunPreExec:
         script = call_args[0][1]
         assert "docker exec" in script
         assert "sparkrun_abc_solo" in script
-        assert "echo hello" in script
+        import base64
+        expected = base64.b64encode(b"echo hello").decode("utf-8")
+        assert expected in script
 
     @mock.patch("sparkrun.core.hosts.is_local_host", return_value=True)
     @mock.patch("sparkrun.orchestration.primitives.run_script_on_host")
@@ -292,7 +294,9 @@ class TestRunPreExec:
         )
         mock_run.assert_called_once()
         script = mock_run.call_args[0][1]
-        assert "llama-7b" in script
+        import base64
+        expected = base64.b64encode(b"echo llama-7b").decode("utf-8")
+        assert expected in script
 
     @mock.patch("sparkrun.orchestration.primitives.run_script_on_host")
     def test_run_pre_exec_skips_unrecognized_entry(self, mock_run):
@@ -337,7 +341,9 @@ class TestRunPostExec:
         script = call_args[0][1]
         assert "docker exec" in script
         assert "sparkrun_abc_solo" in script
-        assert "curl http://localhost:8000/health" in script
+        import base64
+        expected = base64.b64encode(b"curl http://localhost:8000/health").decode("utf-8")
+        assert expected in script
 
     @mock.patch("sparkrun.orchestration.primitives.run_script_on_host")
     def test_run_post_exec_fail_fast(self, mock_run):
@@ -374,7 +380,9 @@ class TestRunPostExec:
         )
         mock_run.assert_called_once()
         script = mock_run.call_args[0][1]
-        assert "http://10.0.0.1:8000/v1" in script
+        import base64
+        expected = base64.b64encode(b"curl http://10.0.0.1:8000/v1/models").decode("utf-8")
+        assert expected in script
 
     @mock.patch("sparkrun.orchestration.primitives.run_script_on_host")
     def test_run_post_exec_multiple_commands(self, mock_run):

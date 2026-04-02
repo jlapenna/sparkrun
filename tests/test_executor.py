@@ -358,7 +358,18 @@ class TestScriptGenerators:
             serve_command="vllm serve model",
         )
         assert "sparkrun0_solo" in script
-        assert "vllm serve model" in script
+        import base64
+        expected_b64 = base64.b64encode(b"vllm serve model").decode("utf-8")
+        assert expected_b64 in script
+
+    def test_generate_exec_serve_script_escapes_double_quotes(self):
+        script = self.executor.generate_exec_serve_script(
+            container_name="sparkrun0_solo",
+            serve_command="vllm serve --hf-overrides '{\"rope\": \"yarn\"}'",
+        )
+        import base64
+        expected_b64 = base64.b64encode(b"vllm serve --hf-overrides '{\"rope\": \"yarn\"}'").decode("utf-8")
+        assert expected_b64 in script
 
     def test_generate_ray_head_script(self):
         script = self.executor.generate_ray_head_script(

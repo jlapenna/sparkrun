@@ -627,14 +627,15 @@ class TrtllmRuntime(RuntimePlugin):
         for line in mpirun_cmd.strip().splitlines():
             logger.info("  %s", line)
 
+        import base64
         # Exec mpirun on head container (detached)
         detach_flag = "-d" if detached else ""
-        escaped_mpirun = mpirun_cmd.replace("'", "'\\''")
+        b64_mpirun = base64.b64encode(mpirun_cmd.encode('utf-8')).decode('utf-8')
 
-        exec_mpirun = "docker exec %s %s bash -c '%s'" % (
+        exec_mpirun = "docker exec %s %s bash -c 'echo %s | base64 -d | bash'" % (
             detach_flag,
             head_container,
-            escaped_mpirun,
+            b64_mpirun,
         )
         result = run_remote_command(
             head_host,
