@@ -111,6 +111,8 @@ def _filter_hosts_needing_image(
     if dry_run or not local_image_id or not hosts:
         return list(hosts)
 
+    logger.debug("Local image ID for '%s': %s", image, local_image_id)
+
     remote_ids = _check_remote_image_ids(
         image,
         hosts,
