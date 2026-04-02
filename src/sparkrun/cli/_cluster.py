@@ -762,3 +762,297 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
         sys.exit(1)
     if check_http_models and status.healthy is False:
         sys.exit(1)
+
+
+@cluster.command("compare-images", hidden=True)
+@click.argument("image")
+@host_options
+@dry_run_option
+@click.option("--json", "output_json", is_flag=True, default=False, help="Output as JSON")
+@click.pass_context
+def cluster_compare_images(ctx, image, hosts, hosts_file, cluster_name, dry_run, output_json):
+    """Compare a container image ID across local machine and cluster hosts.
+
+    Useful for debugging image distribution mismatches — shows the Docker
+    image ID for IMAGE on the local machine and on every host.
+
+    \b
+    Examples:
+      sparkrun cluster compare-images myimage:latest --cluster mylab
+      sparkrun cluster compare-images sparkrun-eugr-vllm-tf5 --hosts 192.168.11.13
+    """
+    from sparkrun.containers.distribute import _check_remote_image_ids
+    from sparkrun.containers.registry import get_image_id
+    from sparkrun.core.config import SparkrunConfig
+    from sparkrun.orchestration.primitives import build_ssh_kwargs
+
+    config = SparkrunConfig()
+    host_list, _ = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
+    ssh_kwargs = build_ssh_kwargs(config)
+
+    if dry_run:
+        click.echo("[dry-run] Would compare image '%s' across local + %d host(s)" % (image, len(host_list)))
+        return
+
+    # Local image ID
+    local_id = get_image_id(image)
+
+    # Remote image IDs
+    remote_ids = _check_remote_image_ids(
+        image,
+        host_list,
+        ssh_user=ssh_kwargs.get("ssh_user"),
+        ssh_key=ssh_kwargs.get("ssh_key"),
+        ssh_options=ssh_kwargs.get("ssh_options"),
+    )
+
+    if output_json:
+        import json as json_mod
+
+        result = {
+            "image": image,
+            "local": local_id,
+            "hosts": {h: remote_ids.get(h) for h in host_list},
+        }
+        click.echo(json_mod.dumps(result, indent=2))
+        return
+
+    # Table output
+    click.echo("Image: %s\n" % image)
+    click.echo("  %-40s %s" % ("Host", "Image ID"))
+    click.echo("  " + "-" * 110)
+    click.echo("  %-40s %s" % ("(local)", local_id or "(not found)"))
+    for h in host_list:
+        rid = remote_ids.get(h)
+        match = ""
+        if rid and local_id:
+            match = "  ✓ match" if rid == local_id else "  ✗ MISMATCH"
+        click.echo("  %-40s %s%s" % (h, rid or "(not found)", match))
+
+
+@cluster.command("inspect", hidden=True)
+@click.argument("name", type=CLUSTER_NAME, required=False, default=None)
+@host_options
+@dry_run_option
+@click.option("--json", "output_json", is_flag=True, default=False, help="Output as JSON")
+@click.pass_context
+def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_json):
+    """Inspect effective cluster configuration and cache directories.
+
+    Shows resolved cluster settings (transfer mode, interface, topology,
+    SSH user, cache dirs) and checks whether cache directories exist on
+    each remote host.  Useful for diagnosing configuration, transfer, or
+    permission issues without running a job.
+
+    NAME is an optional cluster name (equivalent to --cluster NAME).
+
+    \b
+    Examples:
+      sparkrun cluster inspect mylab
+      sparkrun cluster inspect mylab --json
+      sparkrun cluster inspect --hosts 192.168.11.13,192.168.11.14
+    """
+    # Allow positional name as shorthand for --cluster
+    if name and cluster_name:
+        click.echo("Error: Cannot specify both a positional cluster name and --cluster.", err=True)
+        sys.exit(1)
+    if name:
+        cluster_name = name
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from sparkrun.core.cluster_manager import resolve_cluster_config
+    from sparkrun.core.config import SparkrunConfig
+    from sparkrun.orchestration.primitives import build_ssh_kwargs
+    from sparkrun.orchestration.ssh import run_remote_command
+
+    config = SparkrunConfig()
+    host_list, cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
+    ssh_kwargs = build_ssh_kwargs(config)
+
+    # Resolve effective cluster configuration
+    cluster_cfg = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr)
+    local_hf, remote_hf, xfer_mode, xfer_iface = cluster_cfg.resolve_transfer_config(config)
+    local_sparkrun = str(config.cache_dir)
+
+    # Resolve auto transfer mode to a concrete value
+    from sparkrun.orchestration.distribution import resolve_auto_transfer_mode
+
+    xfer_result = resolve_auto_transfer_mode(xfer_mode, host_list, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
+    resolved_mode = xfer_result.mode
+
+    # Detect IB / NCCL env — reuse from transfer mode resolution if available,
+    # otherwise run detection explicitly.
+    ib_result = xfer_result.ib_result
+    if ib_result is None and not dry_run:
+        from sparkrun.orchestration.infiniband import detect_ib_for_hosts
+
+        ib_result = detect_ib_for_hosts(host_list, ssh_kwargs=ssh_kwargs, topology=cluster_cfg.topology)
+
+    nccl_env = ib_result.nccl_env if ib_result else {}
+
+    # Resolve effective transfer interface
+    # auto (None) → cx7 if IB is available and validated, else mgmt
+    if xfer_iface == "mgmt":
+        resolved_iface = "mgmt"
+    elif xfer_result.ib_validated:
+        resolved_iface = "cx7"
+    elif ib_result and ib_result.ib_ip_map:
+        resolved_iface = "cx7"
+    elif ib_result:
+        resolved_iface = "mgmt"
+    else:
+        resolved_iface = None
+
+    if dry_run:
+        click.echo("[dry-run] Would inspect cluster config and cache dirs on %d host(s)" % len(host_list))
+        return
+
+    # Build a script that checks existence and disk usage for both dirs.
+    # We derive remote sparkrun cache the same way: ~/.cache/sparkrun on the remote user.
+    if cluster_cfg.user:
+        remote_sparkrun = "/home/%s/.cache/sparkrun" % cluster_cfg.user
+    else:
+        remote_sparkrun = "$HOME/.cache/sparkrun"
+
+    check_cmd = (
+                    'sr_dir="%s"; hf_dir="%s"; '
+                    'sr_exists="no"; hf_exists="no"; sr_du="-"; hf_du="-"; '
+                    'if [ -d "$sr_dir" ]; then sr_exists="yes"; sr_du=$(du -sh "$sr_dir" 2>/dev/null | cut -f1); fi; '
+                    'if [ -d "$hf_dir" ]; then hf_exists="yes"; hf_du=$(du -sh "$hf_dir" 2>/dev/null | cut -f1); fi; '
+                    'echo "sr_exists=$sr_exists|sr_du=$sr_du|hf_exists=$hf_exists|hf_du=$hf_du|sr_dir=$sr_dir|hf_dir=$hf_dir"'
+                ) % (remote_sparkrun, remote_hf)
+
+    # Query all hosts in parallel
+    host_info: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=len(host_list)) as executor:
+        futures = {
+            executor.submit(
+                run_remote_command,
+                host,
+                check_cmd,
+                ssh_user=ssh_kwargs.get("ssh_user"),
+                ssh_key=ssh_kwargs.get("ssh_key"),
+                ssh_options=ssh_kwargs.get("ssh_options"),
+                timeout=15,
+            ): host
+            for host in host_list
+        }
+        for future in as_completed(futures):
+            host = futures[future]
+            result = future.result()
+            if result.success and result.stdout.strip():
+                parts = dict(kv.split("=", 1) for kv in result.stdout.strip().split("|") if "=" in kv)
+                host_info[host] = parts
+            else:
+                host_info[host] = {"error": result.stderr.strip() or "SSH failed"}
+
+    # Check local directories
+    import os
+    import subprocess as _sp
+
+    def _local_dir_info(path: str) -> tuple[str, str]:
+        if not os.path.isdir(path):
+            return "no", "-"
+        du_result = _sp.run(["du", "-sh", path], capture_output=True, text=True)
+        size = du_result.stdout.split()[0] if du_result.returncode == 0 and du_result.stdout.strip() else "-"
+        return "yes", size
+
+    local_sr_exists, local_sr_du = _local_dir_info(local_sparkrun)
+    local_hf_exists, local_hf_du = _local_dir_info(local_hf)
+
+    # Collect effective config summary
+    effective_config = {
+        "cluster": cluster_cfg.name,
+        "ssh_user": config.ssh_user,
+        "transfer_mode": xfer_mode,
+        "transfer_mode_resolved": resolved_mode,
+        "transfer_interface": xfer_iface or "auto",
+        "transfer_interface_resolved": resolved_iface,
+        "topology": cluster_cfg.topology,
+        "hf_cache_local": local_hf,
+        "hf_cache_remote": remote_hf,
+        "sparkrun_cache": local_sparkrun,
+        "nccl_env": nccl_env,
+    }
+
+    if output_json:
+        import json as json_mod
+
+        data = {
+            "config": effective_config,
+            "hosts": list(host_list),
+            "local": {
+                "sparkrun_cache": {"path": local_sparkrun, "exists": local_sr_exists == "yes", "size": local_sr_du},
+                "hf_cache": {"path": local_hf, "exists": local_hf_exists == "yes", "size": local_hf_du},
+            },
+            "remote": {},
+        }
+        for h in host_list:
+            info = host_info.get(h, {})
+            if "error" in info:
+                data["remote"][h] = {"error": info["error"]}
+            else:
+                data["remote"][h] = {
+                    "sparkrun_cache": {"path": info.get("sr_dir", "?"), "exists": info.get("sr_exists") == "yes",
+                                       "size": info.get("sr_du", "-")},
+                    "hf_cache": {"path": info.get("hf_dir", "?"), "exists": info.get("hf_exists") == "yes", "size": info.get("hf_du", "-")},
+                }
+        click.echo(json_mod.dumps(data, indent=2))
+        return
+
+    # --- Text output ---
+
+    # Cluster config section
+    click.echo("Cluster Configuration:")
+    if cluster_cfg.name:
+        click.echo("  cluster:            %s" % cluster_cfg.name)
+    else:
+        click.echo("  cluster:            (none — using explicit hosts)")
+    click.echo("  ssh_user:           %s" % (config.ssh_user or "(default)"))
+
+    def _fmt_resolved(configured: str, resolved: str | None) -> str:
+        if resolved and configured != resolved:
+            return "%s (resolved to: %s)" % (configured, resolved)
+        return configured
+
+    click.echo("  transfer_mode:      %s" % _fmt_resolved(xfer_mode, resolved_mode))
+    cfg_iface = xfer_iface or "auto"
+    click.echo("  transfer_interface: %s" % _fmt_resolved(cfg_iface, resolved_iface))
+    click.echo("  topology:           %s" % (cluster_cfg.topology or "(none)"))
+    click.echo("  hosts:              %s" % ", ".join(host_list))
+    click.echo()
+
+    # NCCL env section
+    if nccl_env:
+        click.echo("NCCL Environment (head: %s):" % host_list[0])
+        for k, v in sorted(nccl_env.items()):
+            click.echo("  %s=%s" % (k, v))
+    else:
+        click.echo("NCCL Environment: (no InfiniBand detected)")
+    click.echo()
+
+    # Cache paths section
+    click.echo("Cache Paths:")
+    click.echo("  sparkrun (local):   %s" % local_sparkrun)
+    click.echo("  HF cache (local):   %s" % local_hf)
+    click.echo("  HF cache (remote):  %s" % remote_hf)
+    if local_hf != remote_hf:
+        click.echo("  ⚠ local and remote HF cache paths differ")
+    click.echo()
+
+    # Directory status table
+    click.echo("Directory Status:")
+    click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % ("Host", "SR exists", "SR size", "HF exists", "HF size", "HF path"))
+    click.echo("  " + "-" * 100)
+    click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % ("(local)", local_sr_exists, local_sr_du, local_hf_exists, local_hf_du, local_hf))
+    for h in host_list:
+        info = host_info.get(h, {})
+        if "error" in info:
+            click.echo("  %-30s %s" % (h, "Error: %s" % info["error"]))
+        else:
+            sr_exists = info.get("sr_exists", "?")
+            sr_du = info.get("sr_du", "-")
+            hf_exists = info.get("hf_exists", "?")
+            hf_du = info.get("hf_du", "-")
+            hf_dir = info.get("hf_dir", "?")
+            click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % (h, sr_exists, sr_du, hf_exists, hf_du, hf_dir))
