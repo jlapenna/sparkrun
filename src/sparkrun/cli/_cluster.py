@@ -831,11 +831,12 @@ def cluster_compare_images(ctx, image, hosts, hosts_file, cluster_name, dry_run,
 
 
 @cluster.command("inspect", hidden=True)
+@click.argument("name", type=CLUSTER_NAME, required=False, default=None)
 @host_options
 @dry_run_option
 @click.option("--json", "output_json", is_flag=True, default=False, help="Output as JSON")
 @click.pass_context
-def cluster_inspect(ctx, hosts, hosts_file, cluster_name, dry_run, output_json):
+def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_json):
     """Inspect effective cluster configuration and cache directories.
 
     Shows resolved cluster settings (transfer mode, interface, topology,
@@ -843,12 +844,20 @@ def cluster_inspect(ctx, hosts, hosts_file, cluster_name, dry_run, output_json):
     each remote host.  Useful for diagnosing configuration, transfer, or
     permission issues without running a job.
 
+    NAME is an optional cluster name (equivalent to --cluster NAME).
+
     \b
     Examples:
-      sparkrun cluster inspect --cluster mylab
+      sparkrun cluster inspect mylab
+      sparkrun cluster inspect mylab --json
       sparkrun cluster inspect --hosts 192.168.11.13,192.168.11.14
-      sparkrun cluster inspect --cluster mylab --json
     """
+    # Allow positional name as shorthand for --cluster
+    if name and cluster_name:
+        click.echo("Error: Cannot specify both a positional cluster name and --cluster.", err=True)
+        sys.exit(1)
+    if name:
+        cluster_name = name
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from sparkrun.core.cluster_manager import resolve_cluster_config
