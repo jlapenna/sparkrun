@@ -828,3 +828,137 @@ def cluster_compare_images(ctx, image, hosts, hosts_file, cluster_name, dry_run,
         if rid and local_id:
             match = "  ✓ match" if rid == local_id else "  ✗ MISMATCH"
         click.echo("  %-40s %s%s" % (h, rid or "(not found)", match))
+
+
+@cluster.command("inspect-dirs", hidden=True)
+@host_options
+@dry_run_option
+@click.option("--json", "output_json", is_flag=True, default=False, help="Output as JSON")
+@click.pass_context
+def cluster_inspect_dirs(ctx, hosts, hosts_file, cluster_name, dry_run, output_json):
+    """Show effective sparkrun and HuggingFace cache directories.
+
+    Displays the local and remote cache paths that sparkrun would use,
+    and checks whether each directory exists on the remote hosts.
+    Useful for diagnosing model sync or permission issues.
+
+    \b
+    Examples:
+      sparkrun cluster inspect-dirs --cluster mylab
+      sparkrun cluster inspect-dirs --hosts 192.168.11.13,192.168.11.14
+      sparkrun cluster inspect-dirs --cluster mylab --json
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from sparkrun.core.cluster_manager import resolve_cluster_config
+    from sparkrun.core.config import SparkrunConfig
+    from sparkrun.orchestration.primitives import build_ssh_kwargs
+    from sparkrun.orchestration.ssh import run_remote_command
+
+    config = SparkrunConfig()
+    host_list, cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
+    ssh_kwargs = build_ssh_kwargs(config)
+
+    # Resolve effective directories
+    cluster_cfg = resolve_cluster_config(cluster_name, hosts, hosts_file, cluster_mgr)
+    local_hf, remote_hf, xfer_mode, xfer_iface = cluster_cfg.resolve_transfer_config(config)
+    local_sparkrun = str(config.cache_dir)
+
+    if dry_run:
+        click.echo("[dry-run] Would inspect cache dirs on %d host(s)" % len(host_list))
+        click.echo("  local sparkrun cache: %s" % local_sparkrun)
+        click.echo("  local HF cache:       %s" % local_hf)
+        click.echo("  remote HF cache:      %s" % remote_hf)
+        return
+
+    # Build a script that checks existence and disk usage for both dirs.
+    # Output format: sparkrun_exists:yes/no|sparkrun_du:<size>|hf_exists:yes/no|hf_du:<size>
+    # We derive remote sparkrun cache the same way: ~/.cache/sparkrun on the remote user.
+    # If cluster has a different SSH user, their home differs.
+    if cluster_cfg.user:
+        remote_sparkrun = "/home/%s/.cache/sparkrun" % cluster_cfg.user
+    else:
+        remote_sparkrun = "$HOME/.cache/sparkrun"
+
+    check_cmd = (
+        'sr_dir="%s"; hf_dir="%s"; '
+        'sr_exists="no"; hf_exists="no"; sr_du="-"; hf_du="-"; '
+        'if [ -d "$sr_dir" ]; then sr_exists="yes"; sr_du=$(du -sh "$sr_dir" 2>/dev/null | cut -f1); fi; '
+        'if [ -d "$hf_dir" ]; then hf_exists="yes"; hf_du=$(du -sh "$hf_dir" 2>/dev/null | cut -f1); fi; '
+        'echo "sr_exists=$sr_exists|sr_du=$sr_du|hf_exists=$hf_exists|hf_du=$hf_du|sr_dir=$sr_dir|hf_dir=$hf_dir"'
+    ) % (remote_sparkrun, remote_hf)
+
+    # Query all hosts in parallel
+    host_info: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=len(host_list)) as executor:
+        futures = {
+            executor.submit(
+                run_remote_command,
+                host,
+                check_cmd,
+                ssh_user=ssh_kwargs.get("ssh_user"),
+                ssh_key=ssh_kwargs.get("ssh_key"),
+                ssh_options=ssh_kwargs.get("ssh_options"),
+                timeout=15,
+            ): host
+            for host in host_list
+        }
+        for future in as_completed(futures):
+            host = futures[future]
+            result = future.result()
+            if result.success and result.stdout.strip():
+                parts = dict(kv.split("=", 1) for kv in result.stdout.strip().split("|") if "=" in kv)
+                host_info[host] = parts
+            else:
+                host_info[host] = {"error": result.stderr.strip() or "SSH failed"}
+
+    if output_json:
+        import json as json_mod
+
+        data = {
+            "local": {
+                "sparkrun_cache": local_sparkrun,
+                "hf_cache": local_hf,
+            },
+            "effective_remote": {
+                "hf_cache": remote_hf,
+            },
+            "transfer_mode": xfer_mode,
+            "cluster": cluster_cfg.name,
+            "hosts": {},
+        }
+        for h in host_list:
+            info = host_info.get(h, {})
+            if "error" in info:
+                data["hosts"][h] = {"error": info["error"]}
+            else:
+                data["hosts"][h] = {
+                    "sparkrun_cache": {"path": info.get("sr_dir", "?"), "exists": info.get("sr_exists") == "yes", "size": info.get("sr_du", "-")},
+                    "hf_cache": {"path": info.get("hf_dir", "?"), "exists": info.get("hf_exists") == "yes", "size": info.get("hf_du", "-")},
+                }
+        click.echo(json_mod.dumps(data, indent=2))
+        return
+
+    # Table output
+    click.echo("Local:")
+    click.echo("  sparkrun cache: %s" % local_sparkrun)
+    click.echo("  HF cache:       %s" % local_hf)
+    click.echo()
+    if cluster_cfg.name:
+        click.echo("Cluster: %s  (transfer_mode=%s)" % (cluster_cfg.name, xfer_mode))
+    click.echo("Remote HF cache (effective): %s" % remote_hf)
+    click.echo()
+
+    click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % ("Host", "SR exists", "SR size", "HF exists", "HF size", "HF path"))
+    click.echo("  " + "-" * 100)
+    for h in host_list:
+        info = host_info.get(h, {})
+        if "error" in info:
+            click.echo("  %-30s %s" % (h, "Error: %s" % info["error"]))
+        else:
+            sr_exists = info.get("sr_exists", "?")
+            sr_du = info.get("sr_du", "-")
+            hf_exists = info.get("hf_exists", "?")
+            hf_du = info.get("hf_du", "-")
+            hf_dir = info.get("hf_dir", "?")
+            click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % (h, sr_exists, sr_du, hf_exists, hf_du, hf_dir))
