@@ -389,11 +389,10 @@ def cluster_monitor(ctx, hosts, hosts_file, cluster_name, dry_run, interval, sim
 
       sparkrun cluster monitor --cluster mylab --json
     """
-    from sparkrun.core.config import SparkrunConfig
     from sparkrun.core.monitoring import ClusterMonitor, stream_cluster_monitor
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
-    config = SparkrunConfig()
+    config = _get_context(ctx).config
     host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
     ssh_kwargs = build_ssh_kwargs(config)
 
@@ -533,12 +532,11 @@ def cluster_status(ctx, hosts, hosts_file, cluster_name, dry_run, config_path=No
 
       sparkrun cluster status --cluster mylab
     """
-    from sparkrun.core.config import SparkrunConfig
     from sparkrun.core.cluster_manager import query_cluster_status
     from sparkrun.utils.cli_formatters import format_job_label, format_job_commands, format_host_display
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
-    config = SparkrunConfig(config_path) if config_path else SparkrunConfig()
+    config = _get_context(ctx).config
     host_list, _cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
 
     ssh_kwargs = build_ssh_kwargs(config)
@@ -663,11 +661,11 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
     """
     import json as json_mod
 
-    from sparkrun.core.config import SparkrunConfig
     from sparkrun.orchestration.job_metadata import check_job_running
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
-    config = SparkrunConfig()
+    sctx = _get_context(ctx)
+    config = sctx.config
     ssh_kwargs = build_ssh_kwargs(config)
 
     if _is_cluster_id(target) is not None:
@@ -698,7 +696,6 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
         from sparkrun.core.bootstrap import get_runtime
         from sparkrun.orchestration.job_metadata import generate_cluster_id
 
-        sctx = _get_context(ctx)
         v = sctx.variables
         recipe, _recipe_path, _registry_mgr = _load_recipe(config, target)
         host_list, _ = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config, sctx=sctx)
@@ -764,72 +761,6 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
         sys.exit(1)
 
 
-@cluster.command("compare-images", hidden=True)
-@click.argument("image")
-@host_options
-@dry_run_option
-@click.option("--json", "output_json", is_flag=True, default=False, help="Output as JSON")
-@click.pass_context
-def cluster_compare_images(ctx, image, hosts, hosts_file, cluster_name, dry_run, output_json):
-    """Compare a container image ID across local machine and cluster hosts.
-
-    Useful for debugging image distribution mismatches — shows the Docker
-    image ID for IMAGE on the local machine and on every host.
-
-    \b
-    Examples:
-      sparkrun cluster compare-images myimage:latest --cluster mylab
-      sparkrun cluster compare-images sparkrun-eugr-vllm-tf5 --hosts 192.168.11.13
-    """
-    from sparkrun.containers.distribute import _check_remote_image_ids
-    from sparkrun.containers.registry import get_image_id
-    from sparkrun.core.config import SparkrunConfig
-    from sparkrun.orchestration.primitives import build_ssh_kwargs
-
-    config = SparkrunConfig()
-    host_list, _ = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
-    ssh_kwargs = build_ssh_kwargs(config)
-
-    if dry_run:
-        click.echo("[dry-run] Would compare image '%s' across local + %d host(s)" % (image, len(host_list)))
-        return
-
-    # Local image ID
-    local_id = get_image_id(image)
-
-    # Remote image IDs
-    remote_ids = _check_remote_image_ids(
-        image,
-        host_list,
-        ssh_user=ssh_kwargs.get("ssh_user"),
-        ssh_key=ssh_kwargs.get("ssh_key"),
-        ssh_options=ssh_kwargs.get("ssh_options"),
-    )
-
-    if output_json:
-        import json as json_mod
-
-        result = {
-            "image": image,
-            "local": local_id,
-            "hosts": {h: remote_ids.get(h) for h in host_list},
-        }
-        click.echo(json_mod.dumps(result, indent=2))
-        return
-
-    # Table output
-    click.echo("Image: %s\n" % image)
-    click.echo("  %-40s %s" % ("Host", "Image ID"))
-    click.echo("  " + "-" * 110)
-    click.echo("  %-40s %s" % ("(local)", local_id or "(not found)"))
-    for h in host_list:
-        rid = remote_ids.get(h)
-        match = ""
-        if rid and local_id:
-            match = "  ✓ match" if rid == local_id else "  ✗ MISMATCH"
-        click.echo("  %-40s %s%s" % (h, rid or "(not found)", match))
-
-
 @cluster.command("inspect", hidden=True)
 @click.argument("name", type=CLUSTER_NAME, required=False, default=None)
 @host_options
@@ -861,11 +792,10 @@ def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from sparkrun.core.cluster_manager import resolve_cluster_config
-    from sparkrun.core.config import SparkrunConfig
     from sparkrun.orchestration.primitives import build_ssh_kwargs
     from sparkrun.orchestration.ssh import run_remote_command
 
-    config = SparkrunConfig()
+    config = _get_context(ctx).config
     host_list, cluster_mgr = _resolve_hosts_or_exit(hosts, hosts_file, cluster_name, config)
     ssh_kwargs = build_ssh_kwargs(config)
 
