@@ -743,12 +743,9 @@ def setup_ssh(ctx, hosts, hosts_file, cluster_name, extra_hosts, include_self, u
         click.echo("Error: No hosts specified. Use --hosts, --hosts-file, or --cluster.", err=True)
         sys.exit(1)
 
-    if len(host_list) < 2:
-        click.echo(
-            "Error: SSH mesh requires at least 2 hosts (got %d)." % len(host_list),
-            err=True,
-        )
-        sys.exit(1)
+    if len(host_list) == 1 and not cross_user:
+        click.echo("Single host with same user — no SSH setup needed.")
+        sys.exit(0)
 
     if not dry_run:
         click.echo("Setting up SSH mesh for user '%s' across %d hosts..." % (user, len(host_list)))

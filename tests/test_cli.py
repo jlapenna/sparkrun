@@ -2337,13 +2337,14 @@ class TestSetupSshCommand:
         assert result.exit_code != 0
         assert "No hosts" in result.output
 
-    def test_setup_ssh_requires_two_hosts(self, runner, tmp_path, monkeypatch):
-        """Test that setup ssh with a single host exits with error."""
+    def test_setup_ssh_single_host_same_user_exits_cleanly(self, runner, tmp_path, monkeypatch):
+        """Test that setup ssh with a single host and same user exits with informational message."""
         config_root = tmp_path / "config"
         config_root.mkdir()
         import sparkrun.core.config
 
         monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+        monkeypatch.setenv("USER", "testuser")
 
         result = runner.invoke(
             main,
@@ -2352,11 +2353,13 @@ class TestSetupSshCommand:
                 "ssh",
                 "--hosts",
                 "10.0.0.1",
+                "--user",
+                "testuser",
                 "--no-include-self",
             ],
         )
-        assert result.exit_code != 0
-        assert "at least 2 hosts" in result.output
+        assert result.exit_code == 0
+        assert "no SSH setup needed" in result.output
 
     def test_setup_ssh_dry_run(self, runner, tmp_path, monkeypatch):
         """Test that --dry-run shows the command without executing."""
@@ -2875,6 +2878,78 @@ class TestSetupSshCommand:
         cmd_line = result.output.split("Would run")[-1]
         assert local_ip in cmd_line
         assert "10.0.0.1" in cmd_line
+
+    def test_setup_ssh_single_host_cross_user_dry_run(self, runner, tmp_path, monkeypatch):
+        """Test that single-host cross-user dry-run shows expected output."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+        monkeypatch.setenv("USER", "localuser")
+
+        result = runner.invoke(
+            main,
+            [
+                "setup",
+                "ssh",
+                "--hosts",
+                "192.168.1.6",
+                "--user",
+                "ubuntu",
+                "--no-include-self",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Would run SSH mesh:" in result.output
+        assert "mesh_ssh_keys.sh" in result.output
+        assert "ubuntu" in result.output
+        assert "192.168.1.6" in result.output
+
+    def test_setup_ssh_single_host_cross_user_calls_mesh(self, runner, tmp_path, monkeypatch):
+        """Test that single-host cross-user calls _run_ssh_mesh with 1 host."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        import sparkrun.core.config
+
+        monkeypatch.setattr(sparkrun.core.config, "DEFAULT_CONFIG_DIR", config_root)
+        monkeypatch.setenv("USER", "localuser")
+
+        import subprocess
+        from unittest.mock import MagicMock, patch
+
+        mock_rrs = MagicMock()
+        from sparkrun.orchestration.ssh import RemoteResult
+
+        mock_rrs.return_value = [RemoteResult(host="192.168.1.6", stdout="", stderr="", returncode=0)]
+        mock_dk = MagicMock()
+        mock_dk.return_value = [RemoteResult(host="192.168.1.6", stdout="", stderr="", returncode=0)]
+        mock_tcp = MagicMock(return_value={"192.168.1.6": True})
+
+        with patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as mock_run:
+            with patch("sparkrun.orchestration.ssh.run_remote_scripts_parallel", mock_rrs):
+                with patch("sparkrun.orchestration.networking.distribute_host_keys", mock_dk):
+                    with patch("sparkrun.orchestration.primitives.check_tcp_reachability", mock_tcp):
+                        result = runner.invoke(
+                            main,
+                            [
+                                "setup",
+                                "ssh",
+                                "--hosts",
+                                "192.168.1.6",
+                                "--user",
+                                "ubuntu",
+                                "--no-include-self",
+                            ],
+                        )
+
+        assert result.exit_code == 0, result.output
+        # The bash script should have been called with just 1 host
+        assert mock_run.called
+        call_args = mock_run.call_args[0][0]
+        assert "ubuntu" in call_args
+        assert "192.168.1.6" in call_args
 
 
 class TestSetupFixPermissions:
