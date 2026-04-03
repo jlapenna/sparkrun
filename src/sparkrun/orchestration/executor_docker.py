@@ -88,11 +88,11 @@ class DockerExecutor(Executor):
 
         if env:
             for key, value in sorted(env.items()):
-                parts.extend(["-e", "%s=%s" % (key, value)])
+                parts.extend(["-e", shlex.quote("%s=%s" % (key, value))])
 
         if volumes:
             for host_path, container_path in sorted(volumes.items()):
-                parts.extend(["-v", "%s:%s" % (host_path, container_path)])
+                parts.extend(["-v", shlex.quote("%s:%s" % (host_path, container_path))])
 
         if extra_opts:
             parts.extend(extra_opts)
@@ -125,7 +125,7 @@ class DockerExecutor(Executor):
             parts.append("-d")
         if env:
             for key, value in sorted(env.items()):
-                parts.extend(["-e", "%s=%s" % (key, value)])
+                parts.extend(["-e", shlex.quote("%s=%s" % (key, value))])
             from sparkrun.utils.shell import b64_wrap_bash
         parts.extend([shlex.quote(container_name), "bash", "-c", shlex.quote(b64_wrap_bash(command))])
         return " ".join(parts)
