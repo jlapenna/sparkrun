@@ -7,6 +7,8 @@ works correctly.
 
 from __future__ import annotations
 
+import base64
+
 from sparkrun.orchestration.executor import (
     EXECUTOR_DEFAULTS,
     Executor,
@@ -358,7 +360,6 @@ class TestScriptGenerators:
             serve_command="vllm serve model",
         )
         assert "sparkrun0_solo" in script
-        import base64
         expected_b64 = base64.b64encode(b"vllm serve model").decode("utf-8")
         assert expected_b64 in script
 
@@ -367,7 +368,6 @@ class TestScriptGenerators:
             container_name="sparkrun0_solo",
             serve_command="vllm serve --hf-overrides '{\"rope\": \"yarn\"}'",
         )
-        import base64
         expected_b64 = base64.b64encode(b"vllm serve --hf-overrides '{\"rope\": \"yarn\"}'").decode("utf-8")
         assert expected_b64 in script
 

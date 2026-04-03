@@ -9,6 +9,7 @@ directly, making them container-engine-agnostic.
 
 from __future__ import annotations
 
+import base64
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -245,8 +246,7 @@ class Executor(ABC):
         """
         from sparkrun.scripts import read_script
 
-        import base64
-
+    
         env_exports = ""
         if env:
             for key, value in sorted(env.items()):

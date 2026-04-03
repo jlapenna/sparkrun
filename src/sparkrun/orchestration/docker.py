@@ -8,6 +8,7 @@ They do not execute Docker commands directly.
 from __future__ import annotations
 
 import logging
+import base64
 import shlex
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,6 @@ def docker_exec_cmd(
     if env:
         for key, value in sorted(env.items()):
             parts.extend(["-e", f"{key}={value}"])
-    import base64
     b64_cmd = base64.b64encode(command.encode('utf-8')).decode('utf-8')
     parts.extend([shlex.quote(container_name), "bash", "-c", "'echo %s | base64 -d | bash'" % b64_cmd])
     return " ".join(parts)

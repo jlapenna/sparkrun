@@ -9,6 +9,7 @@ Provides functions for running hook commands defined in recipes:
 from __future__ import annotations
 
 import logging
+import base64
 import subprocess
 from pathlib import Path
 from vpd.legacy.arguments import arg_substitute
@@ -315,7 +316,6 @@ def _run_exec_command(
         RuntimeError: If the command exits with non-zero status.
     """
     from sparkrun.orchestration.primitives import run_script_on_host
-    import base64
 
     # Use base64 encoding to safely pass the command through bash -c
     b64_cmd = base64.b64encode(cmd.encode('utf-8')).decode('utf-8')

@@ -9,6 +9,7 @@ Solo mode (tp=1) uses the standard sleep-infinity + exec pattern.
 
 from __future__ import annotations
 
+import base64
 import logging
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
@@ -627,8 +628,7 @@ class TrtllmRuntime(RuntimePlugin):
         for line in mpirun_cmd.strip().splitlines():
             logger.info("  %s", line)
 
-        import base64
-        # Exec mpirun on head container (detached)
+            # Exec mpirun on head container (detached)
         detach_flag = "-d" if detached else ""
         b64_mpirun = base64.b64encode(mpirun_cmd.encode('utf-8')).decode('utf-8')
 

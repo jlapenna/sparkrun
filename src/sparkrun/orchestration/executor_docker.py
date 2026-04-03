@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import base64
 import shlex
 
 from sparkrun.orchestration.executor import Executor
@@ -126,8 +127,7 @@ class DockerExecutor(Executor):
         if env:
             for key, value in sorted(env.items()):
                 parts.extend(["-e", "%s=%s" % (key, value)])
-        import base64
-        b64_cmd = base64.b64encode(command.encode('utf-8')).decode('utf-8')
+            b64_cmd = base64.b64encode(command.encode('utf-8')).decode('utf-8')
         parts.extend([shlex.quote(container_name), "bash", "-c", "'echo %s | base64 -d | bash'" % b64_cmd])
         return " ".join(parts)
 
