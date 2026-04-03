@@ -9,7 +9,6 @@ directly, making them container-engine-agnostic.
 
 from __future__ import annotations
 
-import base64
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -254,9 +253,11 @@ class Executor(ABC):
 
         full_cmd = "%s%s" % (env_exports, serve_command)
 
+        from sparkrun.utils.shell import b64_encode_cmd
+
         # Base64 encode the command to avoid all bash string-escaping/quoting bugs
         # when passing it into `docker exec ... bash -c "..."`
-        b64_cmd = base64.b64encode(full_cmd.encode('utf-8')).decode('utf-8')
+        b64_cmd = b64_encode_cmd(full_cmd)
 
         script_name = "exec_serve_detached.sh" if detached else "exec_serve_foreground.sh"
         template = read_script(script_name)

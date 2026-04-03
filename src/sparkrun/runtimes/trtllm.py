@@ -9,7 +9,6 @@ Solo mode (tp=1) uses the standard sleep-infinity + exec pattern.
 
 from __future__ import annotations
 
-import base64
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -633,12 +632,12 @@ class TrtllmRuntime(RuntimePlugin):
 
             # Exec mpirun on head container (detached)
         detach_flag = "-d" if detached else ""
-        b64_mpirun = base64.b64encode(mpirun_cmd.encode('utf-8')).decode('utf-8')
+        from sparkrun.utils.shell import b64_wrap_bash
 
-        exec_mpirun = "docker exec %s %s bash -c 'echo %s | base64 -d | bash'" % (
+        exec_mpirun = "docker exec %s %s bash -c '%s'" % (
             detach_flag,
             head_container,
-            b64_mpirun,
+            b64_wrap_bash(mpirun_cmd),
         )
         result = run_remote_command(
             head_host,

@@ -1,6 +1,5 @@
 """Unit tests for sparkrun.orchestration.docker module."""
 
-import base64
 
 from sparkrun.orchestration.docker import (
     docker_exec_cmd,
@@ -19,7 +18,8 @@ def test_docker_exec_basic():
     assert cmd.startswith("docker exec")
     assert "my-container" in cmd
     assert "bash -c" in cmd
-    expected = base64.b64encode(b"echo hello").decode("utf-8")
+    from sparkrun.utils.shell import b64_encode_cmd
+    expected = b64_encode_cmd("echo hello")
     assert expected in cmd
 
 def test_docker_exec_detach():

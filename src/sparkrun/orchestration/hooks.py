@@ -8,7 +8,6 @@ Provides functions for running hook commands defined in recipes:
 
 from __future__ import annotations
 
-import base64
 import logging
 import subprocess
 from pathlib import Path
@@ -317,10 +316,10 @@ def _run_exec_command(
         RuntimeError: If the command exits with non-zero status.
     """
     from sparkrun.orchestration.primitives import run_script_on_host
+    from sparkrun.utils.shell import b64_wrap_bash
 
     # Use base64 encoding to safely pass the command through bash -c
-    b64_cmd = base64.b64encode(cmd.encode('utf-8')).decode('utf-8')
-    script = "docker exec --user root %s bash -c 'echo %s | base64 -d | bash'" % (container_name, b64_cmd)
+    script = "docker exec --user root %s bash -c '%s'" % (container_name, b64_wrap_bash(cmd))
 
     logger.info("  %s on %s/%s: %s", label, host, container_name, cmd)
 
