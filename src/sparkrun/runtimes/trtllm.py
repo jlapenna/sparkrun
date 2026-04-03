@@ -12,7 +12,7 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -347,8 +347,8 @@ class TrtllmRuntime(RuntimePlugin):
         if extra_yaml is None:
             return
 
-        from sparkrun.orchestration.ssh import run_remote_command
         from sparkrun.orchestration.docker import docker_exec_cmd
+        from sparkrun.orchestration.ssh import run_remote_command
 
         write_cmd = ("cat > %s << 'SPARKRUN_EOF'\n%sSPARKRUN_EOF") % (_EXTRA_CONFIG_PATH, extra_yaml)
 
@@ -432,16 +432,19 @@ class TrtllmRuntime(RuntimePlugin):
         7. Exec mpirun on head container.
         """
         import time
-        from sparkrun.runtimes._cluster_ops import (
-            ClusterContext, cleanup_ranked_containers, resolve_ib_env,
-            launch_containers_parallel,
-        )
+
+        from sparkrun.orchestration.docker import docker_exec_cmd
         from sparkrun.orchestration.primitives import (
             detect_host_ip,
             is_container_running,
         )
         from sparkrun.orchestration.ssh import run_remote_command
-        from sparkrun.orchestration.docker import docker_exec_cmd
+        from sparkrun.runtimes._cluster_ops import (
+            ClusterContext,
+            cleanup_ranked_containers,
+            launch_containers_parallel,
+            resolve_ib_env,
+        )
 
         progress = kwargs.pop("progress", None)
 

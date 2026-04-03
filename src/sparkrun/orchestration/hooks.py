@@ -8,10 +8,11 @@ Provides functions for running hook commands defined in recipes:
 
 from __future__ import annotations
 
-import logging
 import base64
+import logging
 import subprocess
 from pathlib import Path
+
 from vpd.legacy.arguments import arg_substitute
 
 logger = logging.getLogger(__name__)

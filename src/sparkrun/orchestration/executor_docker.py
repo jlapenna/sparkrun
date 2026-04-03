@@ -7,8 +7,8 @@
 
 from __future__ import annotations
 
-import logging
 import base64
+import logging
 import shlex
 
 from sparkrun.orchestration.executor import Executor

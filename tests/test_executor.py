@@ -9,23 +9,22 @@ from __future__ import annotations
 
 import base64
 
+from sparkrun.orchestration.docker import (
+    docker_exec_cmd,
+    docker_inspect_exists_cmd,
+    docker_logs_cmd,
+    docker_pull_cmd,
+    docker_stop_cmd,
+    enumerate_cluster_containers,
+    generate_container_name,
+    generate_node_container_name,
+)
 from sparkrun.orchestration.executor import (
     EXECUTOR_DEFAULTS,
     Executor,
     ExecutorConfig,
 )
 from sparkrun.orchestration.executor_docker import DockerExecutor
-from sparkrun.orchestration.docker import (
-    docker_exec_cmd,
-    docker_stop_cmd,
-    docker_inspect_exists_cmd,
-    docker_pull_cmd,
-    docker_logs_cmd,
-    generate_container_name,
-    generate_node_container_name,
-    enumerate_cluster_containers,
-)
-
 
 # ---------------------------------------------------------------------------
 # ExecutorConfig tests
@@ -123,7 +122,7 @@ class TestExecutorConfig:
 
     def test_config_chain_layering(self):
         """Verify config chain resolution: CLI > recipe > defaults."""
-        from scitrera_app_framework.api import Variables, EnvPlacement
+        from scitrera_app_framework.api import EnvPlacement, Variables
 
         cli_opts = {"auto_remove": False}
         recipe_opts = {"restart_policy": "always", "shm_size": "20gb"}
@@ -137,7 +136,7 @@ class TestExecutorConfig:
 
     def test_config_chain_privileged_false(self):
         """Verify privileged=False survives config chain (falsy value preserved)."""
-        from scitrera_app_framework.api import Variables, EnvPlacement
+        from scitrera_app_framework.api import EnvPlacement, Variables
 
         cli_opts = {
             "privileged": False, "user": "$SHELL_USER",

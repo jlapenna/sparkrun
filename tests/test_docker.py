@@ -1,12 +1,13 @@
 """Unit tests for sparkrun.orchestration.docker module."""
 
 import base64
+
 from sparkrun.orchestration.docker import (
     docker_exec_cmd,
-    docker_stop_cmd,
     docker_inspect_exists_cmd,
-    docker_pull_cmd,
     docker_logs_cmd,
+    docker_pull_cmd,
+    docker_stop_cmd,
     generate_container_name,
 )
 

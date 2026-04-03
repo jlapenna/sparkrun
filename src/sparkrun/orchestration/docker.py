@@ -7,8 +7,8 @@ They do not execute Docker commands directly.
 
 from __future__ import annotations
 
-import logging
 import base64
+import logging
 import shlex
 
 logger = logging.getLogger(__name__)
