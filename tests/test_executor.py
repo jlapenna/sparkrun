@@ -319,6 +319,24 @@ class TestDockerExecutorConfig:
         assert "-e HOME=/workspace" in cmd
         assert cmd.index("-e HOME=/tmp") < cmd.index("-e HOME=/workspace")
 
+    def test_run_cmd_env_and_volumes_spaces(self):
+        executor = DockerExecutor()
+        env = {"MY_VAR": "hello world", "PATH": "/usr/bin:/bin"}
+        volumes = {"/host dir": "/container dir", "/tmp": "/tmp"}
+        cmd = executor.run_cmd("img:latest", container_name="my_container", env=env, volumes=volumes)
+        assert "-e 'MY_VAR=hello world'" in cmd
+        assert "-e PATH=/usr/bin:/bin" in cmd
+        assert "-v '/host dir:/container dir'" in cmd
+        assert "-v /tmp:/tmp" in cmd
+
+    def test_exec_cmd_env_spaces(self):
+        executor = DockerExecutor()
+        env = {"MY_VAR": "hello world", "PATH": "/usr/bin:/bin"}
+        cmd = executor.exec_cmd("my_container", "echo hello", env=env)
+        assert "-e 'MY_VAR=hello world'" in cmd
+        assert "-e PATH=/usr/bin:/bin" in cmd
+
+
 
 # ---------------------------------------------------------------------------
 # High-level script generator tests

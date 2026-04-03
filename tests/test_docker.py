@@ -38,6 +38,17 @@ def test_docker_exec_with_env():
     assert "-e PATH=/usr/local/bin" in cmd
 
 
+def test_docker_exec_with_env_spaces():
+    """With environment variables containing spaces."""
+    env = {"MY_VAR": "hello world", "PATH": "/usr/local/bin"}
+    cmd = docker_exec_cmd("my-container", "echo hello", env=env)
+
+    # Should be sorted and properly quoted
+    assert "-e 'MY_VAR=hello world'" in cmd
+    assert "-e PATH=/usr/local/bin" in cmd
+
+
+
 def test_docker_stop_force():
     """Verify docker rm -f."""
     cmd = docker_stop_cmd("my-container", force=True)
