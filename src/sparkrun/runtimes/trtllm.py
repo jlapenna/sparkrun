@@ -632,12 +632,13 @@ class TrtllmRuntime(RuntimePlugin):
 
             # Exec mpirun on head container (detached)
         detach_flag = "-d" if detached else ""
-        from sparkrun.utils.shell import b64_wrap_bash
+        import shlex
 
-        exec_mpirun = "docker exec %s %s bash -c '%s'" % (
+        from sparkrun.utils.shell import b64_wrap_bash
+        exec_mpirun = "docker exec %s %s bash -c %s" % (
             detach_flag,
-            head_container,
-            b64_wrap_bash(mpirun_cmd),
+            shlex.quote(head_container),
+            shlex.quote(b64_wrap_bash(mpirun_cmd)),
         )
         result = run_remote_command(
             head_host,

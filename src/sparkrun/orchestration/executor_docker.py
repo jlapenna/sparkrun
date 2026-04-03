@@ -127,7 +127,7 @@ class DockerExecutor(Executor):
             for key, value in sorted(env.items()):
                 parts.extend(["-e", "%s=%s" % (key, value)])
             from sparkrun.utils.shell import b64_wrap_bash
-        parts.extend([shlex.quote(container_name), "bash", "-c", "'%s'" % b64_wrap_bash(command)])
+        parts.extend([shlex.quote(container_name), "bash", "-c", shlex.quote(b64_wrap_bash(command))])
         return " ".join(parts)
 
     def stop_cmd(self, container_name: str, force: bool = True) -> str:
