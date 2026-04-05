@@ -10,6 +10,7 @@ import re
 import shlex
 
 
+<<<<<<< Updated upstream
 def b64_encode_cmd(cmd: str) -> str:
     """Base64 encode a command string to avoid shell escaping issues.
 
@@ -28,6 +29,27 @@ def b64_wrap_bash(cmd: str) -> str:
     return f"echo {b64_cmd} | base64 -d | bash"
 
 
+||||||| Stash base
+=======
+def b64_encode_cmd(cmd: str) -> str:
+    """Base64 encode a command string."""
+    return base64.b64encode(cmd.encode("utf-8")).decode("utf-8")
+
+
+def b64_wrap_bash(cmd: str) -> str:
+    """Wrap a command in a base64-encoded bash execution string.
+
+    Resulting string is of the form::
+
+        echo <b64> | base64 -d | bash
+
+    This prevents most shell escaping issues when embedding commands into
+    other scripts.
+    """
+    return f"echo {b64_encode_cmd(cmd)} | base64 -d | bash"
+
+
+>>>>>>> Stashed changes
 def quote(value: str) -> str:
     """Return a shell-safe quoted version of *value*.
 

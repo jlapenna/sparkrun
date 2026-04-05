@@ -78,7 +78,9 @@ class ExecutorConfig:
         # still means "not set" and should fall back.
         def _get(key):
             v = chain.get(key)
-            return v if v is not None else EXECUTOR_DEFAULTS.get(key)
+            val = v if v is not None else EXECUTOR_DEFAULTS.get(key)
+            logger.debug("ExecutorConfig resolve: %s=%r (from chain: %r)", key, val, v)
+            return val
 
         return cls(
             auto_remove=ext_parse_bool(_get("auto_remove")),

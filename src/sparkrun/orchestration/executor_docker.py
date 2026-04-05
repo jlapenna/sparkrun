@@ -32,6 +32,7 @@ class DockerExecutor(Executor):
         if cfg.shm_size:
             opts.append("--shm-size=%s" % cfg.shm_size)
         if cfg.network:
+            logger.debug("DockerExecutor using network: %s", cfg.network)
             opts.append("--network %s" % cfg.network)
         if cfg.user:
             if cfg.user == "$SHELL_USER":
@@ -100,7 +101,8 @@ class DockerExecutor(Executor):
         parts.append(shlex.quote(image))
 
         if command:
-            parts.append(command)
+            from sparkrun.utils.shell import b64_wrap_bash
+            parts.extend(["bash", "-c", shlex.quote(b64_wrap_bash(command))])
 
         result = " ".join(parts)
 
