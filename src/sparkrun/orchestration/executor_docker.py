@@ -11,6 +11,7 @@ import logging
 import shlex
 
 from sparkrun.orchestration.executor import Executor
+from sparkrun.utils.shell import b64_wrap_bash
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +29,12 @@ class DockerExecutor(Executor):
         if cfg.gpus:
             opts.extend(["--gpus", cfg.gpus])
         if cfg.ipc:
-            opts.append("--ipc=%s" % cfg.ipc)
+            opts.append("--ipc=%s" % shlex.quote(cfg.ipc))
         if cfg.shm_size:
-            opts.append("--shm-size=%s" % cfg.shm_size)
+            opts.append("--shm-size=%s" % shlex.quote(cfg.shm_size))
         if cfg.network:
             logger.debug("DockerExecutor using network: %s", cfg.network)
-            opts.append("--network %s" % cfg.network)
+            opts.append("--network=%s" % shlex.quote(cfg.network))
         if cfg.user:
             if cfg.user == "$SHELL_USER":
                 opts.extend(["--user", "$(id -u):$(id -g)"])
@@ -41,21 +42,21 @@ class DockerExecutor(Executor):
                 opts.extend(["-v", "/etc/group:/etc/group:ro"])
                 opts.extend(["-e", "HOME=/tmp"])
             else:
-                opts.extend(["--user", cfg.user])
+                opts.extend(["--user", shlex.quote(cfg.user)])
         if cfg.security_opt:
             for opt in cfg.security_opt:
-                opts.extend(["--security-opt", opt])
+                opts.extend(["--security-opt", shlex.quote(opt)])
         if cfg.cap_add:
             for cap in cfg.cap_add:
-                opts.extend(["--cap-add", cap])
+                opts.extend(["--cap-add", shlex.quote(cap)])
         if cfg.ulimit:
             for ul in cfg.ulimit:
-                opts.extend(["--ulimit", ul])
+                opts.extend(["--ulimit", shlex.quote(ul)])
         if cfg.devices:
             for dev in cfg.devices:
-                opts.extend(["--device", dev])
+                opts.extend(["--device", shlex.quote(dev)])
         if cfg.memory_limit:
-            opts.append("--memory=%s" % cfg.memory_limit)
+            opts.append("--memory=%s" % shlex.quote(cfg.memory_limit))
 
         return opts
 
@@ -85,7 +86,7 @@ class DockerExecutor(Executor):
             parts.extend(["--restart", cfg.restart_policy])
 
         if container_name:
-            parts.extend(["--name", container_name])
+            parts.extend(["--name", shlex.quote(container_name)])
 
         if env:
             for key, value in sorted(env.items()):
@@ -101,7 +102,6 @@ class DockerExecutor(Executor):
         parts.append(shlex.quote(image))
 
         if command:
-            from sparkrun.utils.shell import b64_wrap_bash
             parts.extend(["bash", "-c", shlex.quote(b64_wrap_bash(command))])
 
         result = " ".join(parts)
@@ -128,7 +128,6 @@ class DockerExecutor(Executor):
         if env:
             for key, value in sorted(env.items()):
                 parts.extend(["-e", shlex.quote("%s=%s" % (key, value))])
-            from sparkrun.utils.shell import b64_wrap_bash
         parts.extend([shlex.quote(container_name), "bash", "-c", shlex.quote(b64_wrap_bash(command))])
         return " ".join(parts)
 
@@ -151,7 +150,7 @@ class DockerExecutor(Executor):
             parts.append("-f")
         if tail is not None:
             parts.extend(["--tail", str(tail)])
-        parts.append(container_name)
+        parts.append(shlex.quote(container_name))
         return " ".join(parts)
 
     def inspect_exists_cmd(self, image: str) -> str:

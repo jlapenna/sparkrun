@@ -10,7 +10,6 @@ import re
 import shlex
 
 
-<<<<<<< Updated upstream
 def b64_encode_cmd(cmd: str) -> str:
     """Base64 encode a command string to avoid shell escaping issues.
 
@@ -23,33 +22,15 @@ def b64_encode_cmd(cmd: str) -> str:
 def b64_wrap_bash(cmd: str) -> str:
     """Wrap a command in a base64 pipeline that decodes and executes via bash.
 
-    Produces a string like: ``echo <b64> | base64 -d | bash``
+    Produces a string like: ``printf '%s' <b64> | base64 -d -- | bash``
     """
     b64_cmd = b64_encode_cmd(cmd)
-    return f"echo {b64_cmd} | base64 -d | bash"
+    # Using printf instead of echo is safer against strings starting with dashes.
+    # Adding -- to base64 -d prevents interpretation of the b64 string as flags.
+    # Using --noprofile --norc with bash ensures a clean execution environment.
+    return f"printf '%s' '{b64_cmd}' | base64 -d -- | bash --noprofile --norc"
 
 
-||||||| Stash base
-=======
-def b64_encode_cmd(cmd: str) -> str:
-    """Base64 encode a command string."""
-    return base64.b64encode(cmd.encode("utf-8")).decode("utf-8")
-
-
-def b64_wrap_bash(cmd: str) -> str:
-    """Wrap a command in a base64-encoded bash execution string.
-
-    Resulting string is of the form::
-
-        echo <b64> | base64 -d | bash
-
-    This prevents most shell escaping issues when embedding commands into
-    other scripts.
-    """
-    return f"echo {b64_encode_cmd(cmd)} | base64 -d | bash"
-
-
->>>>>>> Stashed changes
 def quote(value: str) -> str:
     """Return a shell-safe quoted version of *value*.
 

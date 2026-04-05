@@ -320,6 +320,7 @@ def _run_exec_command(
 
     from sparkrun.orchestration.primitives import run_script_on_host
     from sparkrun.utils.shell import b64_wrap_bash
+
     script = "docker exec --user root %s bash -c %s" % (shlex.quote(container_name), shlex.quote(b64_wrap_bash(cmd)))
 
     logger.info("  %s on %s/%s: %s", label, host, container_name, cmd)

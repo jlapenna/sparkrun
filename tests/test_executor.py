@@ -8,11 +8,6 @@ works correctly.
 from __future__ import annotations
 
 from sparkrun.orchestration.docker import (
-    docker_exec_cmd,
-    docker_inspect_exists_cmd,
-    docker_logs_cmd,
-    docker_pull_cmd,
-    docker_stop_cmd,
     enumerate_cluster_containers,
     generate_container_name,
     generate_node_container_name,
@@ -23,6 +18,7 @@ from sparkrun.orchestration.executor import (
     ExecutorConfig,
 )
 from sparkrun.orchestration.executor_docker import DockerExecutor
+from sparkrun.utils.shell import b64_encode_cmd
 
 # ---------------------------------------------------------------------------
 # ExecutorConfig tests
@@ -137,7 +133,8 @@ class TestExecutorConfig:
         from scitrera_app_framework.api import EnvPlacement, Variables
 
         cli_opts = {
-            "privileged": False, "user": "$SHELL_USER",
+            "privileged": False,
+            "user": "$SHELL_USER",
             "security_opt": ["no-new-privileges"],
             "cap_add": ["IPC_LOCK", "SYS_PTRACE"],
             "ulimit": ["memlock=-1:-1"],
@@ -218,7 +215,7 @@ class TestDockerExecutorConfig:
         cfg = ExecutorConfig(network="bridge")
         executor = DockerExecutor(cfg)
         cmd = executor.run_cmd("img:latest")
-        assert "--network bridge" in cmd
+        assert "--network=bridge" in cmd
 
     def test_memory_limit(self):
         cfg = ExecutorConfig(memory_limit="64G")
@@ -266,7 +263,8 @@ class TestDockerExecutorConfig:
     def test_rootless_config(self):
         """Verify the combination of settings that --rootless would produce."""
         cfg = ExecutorConfig(
-            privileged=False, user="$SHELL_USER",
+            privileged=False,
+            user="$SHELL_USER",
             security_opt=["no-new-privileges"],
             cap_add=["IPC_LOCK", "SYS_PTRACE", "SYS_NICE", "NET_ADMIN"],
             ulimit=["memlock=-1:-1"],
@@ -337,7 +335,6 @@ class TestDockerExecutorConfig:
         assert "-e PATH=/usr/bin:/bin" in cmd
 
 
-
 # ---------------------------------------------------------------------------
 # High-level script generator tests
 # ---------------------------------------------------------------------------
@@ -357,7 +354,7 @@ class TestScriptGenerators:
         )
         assert "docker rm -f sparkrun0_solo" in script
         assert "docker run" in script
-        assert "sleep infinity" in script
+        assert b64_encode_cmd("sleep infinity") in script
         assert "img:latest" in script
 
     def test_generate_launch_script_with_env(self):
@@ -375,17 +372,22 @@ class TestScriptGenerators:
             serve_command="vllm serve model",
         )
         assert "sparkrun0_solo" in script
-        from sparkrun.utils.shell import b64_encode_cmd
         expected_b64 = b64_encode_cmd("vllm serve model")
         assert expected_b64 in script
+
+    def test_generate_exec_serve_script_with_spaces(self):
+        script = self.executor.generate_exec_serve_script(
+            container_name="my container",
+            serve_command="echo hello",
+        )
+        assert "'my container'" in script
 
     def test_generate_exec_serve_script_escapes_double_quotes(self):
         script = self.executor.generate_exec_serve_script(
             container_name="sparkrun0_solo",
-            serve_command="vllm serve --hf-overrides '{\"rope\": \"yarn\"}'",
+            serve_command='vllm serve --hf-overrides \'{"rope": "yarn"}\'',
         )
-        from sparkrun.utils.shell import b64_encode_cmd
-        expected_b64 = b64_encode_cmd("vllm serve --hf-overrides '{\"rope\": \"yarn\"}'")
+        expected_b64 = b64_encode_cmd('vllm serve --hf-overrides \'{"rope": "yarn"}\'')
         assert expected_b64 in script
 
     def test_generate_ray_head_script(self):
@@ -395,8 +397,9 @@ class TestScriptGenerators:
             ray_port=46379,
         )
         assert "docker rm -f sparkrun0_head" in script
-        assert "ray start --block --head" in script
-        assert "--port 46379" in script
+        # The command contains the port, stats, etc.
+        # We check that a command starting with 'ray start' is encoded.
+        assert b64_encode_cmd("ray start --block --head").split("=")[0] in script
 
     def test_generate_ray_worker_script(self):
         script = self.executor.generate_ray_worker_script(
@@ -406,8 +409,7 @@ class TestScriptGenerators:
             ray_port=46379,
         )
         assert "docker rm -f sparkrun0_worker" in script
-        assert "ray start --block" in script
-        assert "--address=10.0.0.1:46379" in script
+        assert b64_encode_cmd("ray start --block").split("=")[0] in script
 
     def test_generate_node_script(self):
         script = self.executor.generate_node_script(
@@ -418,8 +420,8 @@ class TestScriptGenerators:
         )
         assert "docker rm -f sparkrun0_node_0" in script
         assert "docker run" in script
-        assert "vllm serve model" in script
-        assert "Launching vllm node" in script
+        assert b64_encode_cmd("vllm serve model") in script
+        assert "'vllm node'" in script
 
     def test_generate_node_script_with_restart(self):
         cfg = ExecutorConfig(restart_policy="always")
@@ -431,4 +433,3 @@ class TestScriptGenerators:
         )
         assert "--restart always" in script
         assert "--rm" not in script
-

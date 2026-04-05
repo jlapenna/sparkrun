@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 def docker_exec_cmd(
-        container_name: str,
-        command: str,
-        detach: bool = False,
-        env: dict[str, str] | None = None,
+    container_name: str,
+    command: str,
+    detach: bool = False,
+    env: dict[str, str] | None = None,
 ) -> str:
     """Generate a ``docker exec`` command string.
 
@@ -37,6 +37,7 @@ def docker_exec_cmd(
         for key, value in sorted(env.items()):
             parts.extend(["-e", shlex.quote(f"{key}={value}")])
     from sparkrun.utils.shell import b64_wrap_bash
+
     parts.extend([shlex.quote(container_name), "bash", "-c", shlex.quote(b64_wrap_bash(command))])
     return " ".join(parts)
 
@@ -82,9 +83,9 @@ def docker_pull_cmd(image: str) -> str:
 
 
 def docker_logs_cmd(
-        container_name: str,
-        follow: bool = False,
-        tail: int | None = None,
+    container_name: str,
+    follow: bool = False,
+    tail: int | None = None,
 ) -> str:
     """Generate a ``docker logs`` command.
 

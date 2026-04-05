@@ -1,9 +1,9 @@
 #!/bin/bash
 set -uo pipefail
 
-echo "Executing serve command in container {container_name}..."
+printf "Executing serve command in container '%s'...\n" "{container_name}"
 echo "--- Command ---"
-echo '{b64_cmd}' | base64 -d
+printf '%s' '{b64_cmd}' | base64 -d --
 echo -e "\n---------------"
 
-docker exec {container_name} bash -c "echo '{b64_cmd}' | base64 -d > /tmp/sparkrun_serve.sh && bash /tmp/sparkrun_serve.sh"
+docker exec {container_name} bash -c "printf '%s' '{b64_cmd}' | base64 -d -- > /tmp/sparkrun_serve.sh && bash --noprofile --norc /tmp/sparkrun_serve.sh"

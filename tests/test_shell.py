@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+
 import base64
+import re
 
 import pytest
 
@@ -19,7 +21,7 @@ def test_b64_encode_cmd():
     """Test that commands are correctly base64 encoded as utf-8."""
     cmd = "echo 'hello world'"
     encoded = b64_encode_cmd(cmd)
-    
+
     # Verify we can decode it back to the original command
     decoded = base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
     assert decoded == cmd
@@ -29,23 +31,24 @@ def test_b64_encode_cmd_with_unicode():
     """Test that commands with unicode/emojis are correctly base64 encoded."""
     cmd = 'echo "hello 🌍🚀"'
     encoded = b64_encode_cmd(cmd)
-    
+
     decoded = base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
     assert decoded == cmd
 
 
 def test_b64_wrap_bash():
     """Test the bash wrapping pipeline."""
-    cmd = "vllm serve --hf-overrides '{\"rope\": \"yarn\"}'"
+    cmd = 'vllm serve --hf-overrides \'{"rope": "yarn"}\''
     wrapped = b64_wrap_bash(cmd)
-    
-    assert wrapped.startswith("echo ")
-    assert wrapped.endswith(" | base64 -d | bash")
-    
+
+    assert wrapped.startswith("printf '%s' '")
+    assert wrapped.endswith("' | base64 -d -- | bash --noprofile --norc")
+
     # Extract the encoded part and verify
-    parts = wrapped.split(" ")
-    encoded = parts[1]
-    
+    match = re.search(r"printf '%s' '([^']+)'", wrapped)
+    assert match
+    encoded = match.group(1)
+
     decoded = base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
     assert decoded == cmd
 
@@ -66,7 +69,7 @@ def test_quote_dict():
         "nested": {"key": "val"},
     }
     quoted = quote_dict(d)
-    
+
     assert quoted["simple"] == "simple"
     assert quoted["spaces"] == "'has spaces'"
     assert quoted["number"] == 42
@@ -83,12 +86,12 @@ def test_validate_unix_username_valid():
 def test_validate_unix_username_invalid():
     """Test invalid unix usernames."""
     invalid_names = [
-        "User",       # capital letter
-        "1user",      # starts with number
-        "-user",      # starts with dash
+        "User",  # capital letter
+        "1user",  # starts with number
+        "-user",  # starts with dash
         "user name",  # spaces
         "user@host",  # invalid chars
-        "user$$",     # multiple trailing $
+        "user$$",  # multiple trailing $
     ]
     for name in invalid_names:
         with pytest.raises(ValueError, match="Invalid username"):

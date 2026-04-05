@@ -1,6 +1,5 @@
 """Unit tests for sparkrun.orchestration.docker module."""
 
-
 from sparkrun.orchestration.docker import (
     docker_exec_cmd,
     docker_inspect_exists_cmd,
@@ -19,8 +18,10 @@ def test_docker_exec_basic():
     assert "my-container" in cmd
     assert "bash -c" in cmd
     from sparkrun.utils.shell import b64_encode_cmd
+
     expected = b64_encode_cmd("echo hello")
     assert expected in cmd
+
 
 def test_docker_exec_detach():
     """With detach flag."""
@@ -46,7 +47,6 @@ def test_docker_exec_with_env_spaces():
     # Should be sorted and properly quoted
     assert "-e 'MY_VAR=hello world'" in cmd
     assert "-e PATH=/usr/local/bin" in cmd
-
 
 
 def test_docker_stop_force():
