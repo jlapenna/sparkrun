@@ -115,7 +115,9 @@ def generate_nccl_env(ib_info: dict[str, str], topology: str | None = None) -> d
         net_list = ib_info[target]
         # NCCL_SOCKET_IFNAME uses '=' prefix per interface to pin exact devices (refer to NCCL docs for details)
         # nccl_socket = ",".join("=" + if_ for if_ in net_list.split(","))
-        env["NCCL_SOCKET_IFNAME"] = net_list  # nccl_socket
+        # NOTE: default will be any interface not loopback or docker
+        # env["NCCL_SOCKET_IFNAME"] = net_list  # nccl_socket
+        # NOTE: default will be any interface not loopback or docker
         env["MN_IF_NAME"] = net_list
         env["OMPI_MCA_btl_tcp_if_include"] = net_list
         env["GLOO_SOCKET_IFNAME"] = net_list
