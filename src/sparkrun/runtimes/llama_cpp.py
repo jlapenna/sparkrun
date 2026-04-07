@@ -387,6 +387,7 @@ class LlamaCppRuntime(RuntimePlugin):
         ib_ip_map: dict[str, str] | None = None,
         rpc_port: int = _DEFAULT_RPC_PORT,
         skip_keys: set[str] | frozenset[str] = frozenset(),
+        extra_docker_opts: list[str] | None = None,
         **kwargs,
     ) -> int:
         """Orchestrate a multi-node llama.cpp cluster using RPC.
@@ -477,7 +478,8 @@ class LlamaCppRuntime(RuntimePlugin):
         for host in ctx.worker_hosts:
             all_containers.append((host, worker_container_name))
 
-        rc = launch_containers_parallel(ctx, all_containers, self.executor, nccl_env)
+        combined_docker_opts = (self.get_extra_docker_opts() or []) + (extra_docker_opts or [])
+        rc = launch_containers_parallel(ctx, all_containers, self.executor, nccl_env, extra_docker_opts=combined_docker_opts or None)
         if rc != 0:
             return rc
         logger.info("Step 3/6: All containers launched (%.1fs)", time.monotonic() - t0)
