@@ -98,7 +98,7 @@ def test_generate_nccl_env_with_ib():
     # Check detected values
     assert env["NCCL_IB_GID_INDEX"] == "3"
     assert env["NCCL_IB_HCA"] == "mlx5_0,mlx5_1"
-    assert env["NCCL_SOCKET_IFNAME"] == "eth0"
+    assert "NCCL_SOCKET_IFNAME" not in env  # assert env[] == "eth0"
     assert env["MN_IF_NAME"] == "eth0"
     assert env["OMPI_MCA_btl_tcp_if_include"] == "eth0"
     assert env["GLOO_SOCKET_IFNAME"] == "eth0"
