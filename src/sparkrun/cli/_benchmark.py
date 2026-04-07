@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     help="Benchmark timeout in seconds (default: %d, or from profile)" % DEFAULT_BENCHMARK_TIMEOUT,
 )
 @dry_run_option
+@click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def benchmark(
     ctx,
@@ -91,6 +92,7 @@ def benchmark(
     rootful,
     bench_timeout,
     dry_run,
+    extra_args,
 ):
     """Benchmark an inference recipe.
 
@@ -138,6 +140,7 @@ def benchmark(
         rootful,
         bench_timeout,
         dry_run,
+        extra_args,
     )
 
 
@@ -166,6 +169,7 @@ def _run_benchmark(
     rootful,
     bench_timeout,
     dry_run,
+    extra_args,
     export_results_files=True,
 ):
     """Execute the full benchmark flow: launch inference -> benchmark -> stop.
@@ -401,6 +405,7 @@ def _run_benchmark(
                 detached=True,
                 rootless=not rootful,
                 auto_user=not rootful,
+                extra_docker_opts=list(extra_args) if extra_args else None,
             )
 
             if launch_result.rc != 0 and not dry_run:
