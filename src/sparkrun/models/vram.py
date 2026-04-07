@@ -23,7 +23,7 @@ _DTYPE_BYTES: dict[str, float] = {
     "int4": 0.5,
     "nvfp4": 0.5,
     "awq4": 0.5,
-    'w4a16_awq': 0.5,
+    "w4a16_awq": 0.5,
     "awq8": 1.0,
     "gptq": 0.5,
     "mxfp4": 0.5,
@@ -119,6 +119,7 @@ class VRAMEstimate:
     def to_dict(self) -> dict[str, Any]:
         """Convert the estimate to a JSON-serializable dictionary."""
         from dataclasses import asdict
+
         result = asdict(self)
         result["fits_dgx_spark"] = self.fits_dgx_spark
         return result
@@ -176,9 +177,9 @@ def parse_param_count(value: int | float | str) -> int | None:
 
 
 def fetch_model_config(
-        model_id: str,
-        revision: str | None = None,
-        cache_dir: str | None = None,
+    model_id: str,
+    revision: str | None = None,
+    cache_dir: str | None = None,
 ) -> dict[str, Any] | None:
     """Fetch model config.json from HuggingFace Hub without downloading weights.
 
@@ -214,9 +215,9 @@ def fetch_model_config(
 
 
 def fetch_safetensors_size(
-        model_id: str,
-        revision: str | None = None,
-        cache_dir: str | None = None,
+    model_id: str,
+    revision: str | None = None,
+    cache_dir: str | None = None,
 ) -> int | None:
     """Fetch total parameter storage size from safetensors index metadata.
 
@@ -245,43 +246,88 @@ def fetch_safetensors_size(
         if cache_dir:
             hub_kwargs["cache_dir"] = _hub_cache(cache_dir)
 
-        # Try 0: lightweight API call — no file download needed
-        try:
-            from huggingface_hub import model_info as _model_info
+        _SAFETENSORS_DTYPE_BYTES: dict[str, int] = {
+            "F64": 8,
+            "F32": 4,
+            "F16": 2,
+            "BF16": 2,
+            "F8_E4M3": 1,
+            "F8_E5M2": 1,
+            "I64": 8,
+            "I32": 4,
+            "I16": 2,
+            "I8": 1,
+            "U8": 1,
+            "BOOL": 1,
+        }
 
-            mi_kwargs: dict[str, Any] = {"repo_id": model_id}
-            if revision:
-                mi_kwargs["revision"] = revision
-            mi = _model_info(**mi_kwargs)
-            if mi.safetensors is not None:
-                _api_dtype_bytes = {
-                    "F64": 8, "F32": 4, "F16": 2, "BF16": 2,
-                    "F8_E4M3": 1, "F8_E5M2": 1,
-                    "I64": 8, "I32": 4, "I16": 2, "I8": 1, "U8": 1, "BOOL": 1,
-                }
-                total_bytes = 0
-                for dtype_name, count in mi.safetensors.parameters.items():
-                    elem_size = _api_dtype_bytes.get(dtype_name, 2)
-                    total_bytes += count * elem_size
-                if total_bytes > 0:
-                    logger.debug("Got %d bytes from model_info API for %s", total_bytes, model_id)
-                    return total_bytes
-        except Exception as e:
-            logger.debug("model_info API failed for %s: %s", model_id, e)
+        def _compute_api_bytes() -> int | None:
+            """Compute total bytes from HF model_info per-dtype param counts."""
+            try:
+                from huggingface_hub import model_info as _model_info
 
-        # Try 1: sharded model with index file
+                mi_kwargs: dict[str, Any] = {"repo_id": model_id}
+                if revision:
+                    mi_kwargs["revision"] = revision
+                mi = _model_info(**mi_kwargs)
+                if mi.safetensors is not None:
+                    total = 0
+                    for dtype_name, count in mi.safetensors.parameters.items():
+                        elem_size = _SAFETENSORS_DTYPE_BYTES.get(dtype_name, 2)
+                        total += count * elem_size
+                    if total > 0:
+                        return total
+            except Exception as e:
+                logger.debug("model_info API failed for %s: %s", model_id, e)
+            return None
+
+        # Try 1: sharded model with index file.
+        # Use the index weight_map to identify model files, then sum
+        # actual file sizes from list_repo_tree (LFS metadata).  This
+        # handles both stale total_size (e.g. copied from pre-quantized)
+        # and repos with extra safetensors (e.g. original/ copies).
+        # Falls back to index total_size if list_repo_tree is unavailable.
         try:
             disable_progress_bars()
             try:
-                index_path = hf_hub_download(
-                    **hub_kwargs, filename="model.safetensors.index.json"
-                )
+                index_path = hf_hub_download(**hub_kwargs, filename="model.safetensors.index.json")
             finally:
                 enable_progress_bars()
             with open(index_path) as f:
                 index = json.load(f)
+
+            # Try to compute actual file sizes from repo tree
+            model_files = set(index.get("weight_map", {}).values())
+            if model_files:
+                try:
+                    from huggingface_hub import list_repo_tree
+
+                    tree_kwargs: dict[str, Any] = {"repo_id": model_id}
+                    if revision:
+                        tree_kwargs["revision"] = revision
+                    file_total = 0
+                    matched = 0
+                    for entry in list_repo_tree(**tree_kwargs):
+                        if hasattr(entry, "rfilename") and entry.rfilename in model_files:
+                            if entry.size and entry.size > 0:
+                                file_total += entry.size
+                                matched += 1
+                    if matched > 0 and file_total > 0:
+                        logger.debug(
+                            "Got %d bytes from file sizes (%d/%d files) for %s",
+                            file_total,
+                            matched,
+                            len(model_files),
+                            model_id,
+                        )
+                        return file_total
+                except Exception as e:
+                    logger.debug("list_repo_tree failed for %s: %s", model_id, e)
+
+            # Fall back to index total_size
             total_size = index.get("metadata", {}).get("total_size")
             if total_size is not None:
+                logger.debug("Using index total_size %d for %s", total_size, model_id)
                 return int(total_size)
         except Exception as e:
             logger.debug("safetensors index failed for %s: %s", model_id, e)
@@ -292,9 +338,7 @@ def fetch_safetensors_size(
 
             disable_progress_bars()
             try:
-                sf_path = hf_hub_download(
-                    **hub_kwargs, filename="model.safetensors"
-                )
+                sf_path = hf_hub_download(**hub_kwargs, filename="model.safetensors")
             finally:
                 enable_progress_bars()
             # safetensors header: first 8 bytes = header size (u64 LE),
@@ -306,16 +350,12 @@ def fetch_safetensors_size(
                 header = json.loads(f.read(header_size))
 
             total_bytes = 0
-            dtype_sizes = {
-                "F32": 4, "F16": 2, "BF16": 2, "F8_E4M3": 1, "F8_E5M2": 1,
-                "I64": 8, "I32": 4, "I16": 2, "I8": 1, "U8": 1, "BOOL": 1,
-            }
             for key, info in header.items():
                 if key == "__metadata__":
                     continue
                 shape = info.get("shape", [])
                 dtype = info.get("dtype", "")
-                elem_size = dtype_sizes.get(dtype, 2)  # default to 2 bytes
+                elem_size = _SAFETENSORS_DTYPE_BYTES.get(dtype, 2)
                 num_elements = 1
                 for dim in shape:
                     num_elements *= dim
@@ -325,15 +365,19 @@ def fetch_safetensors_size(
         except Exception as e:
             logger.debug("safetensors header parse failed for %s: %s", model_id, e)
 
-        # Try 3: fall back to file size as rough approximation
+        # Try 3: API per-dtype for models without index or header
+        api_bytes = _compute_api_bytes()
+        if api_bytes is not None:
+            logger.debug("Got %d bytes from model_info API for %s", api_bytes, model_id)
+            return api_bytes
+
+        # Try 4: fall back to file size as rough approximation
         try:
             import os
 
             disable_progress_bars()
             try:
-                sf_path = hf_hub_download(
-                    **hub_kwargs, filename="model.safetensors"
-                )
+                sf_path = hf_hub_download(**hub_kwargs, filename="model.safetensors")
             finally:
                 enable_progress_bars()
             size = os.path.getsize(sf_path)
@@ -349,8 +393,8 @@ def fetch_safetensors_size(
 
 
 def fetch_safetensors_params(
-        model_id: str,
-        revision: str | None = None,
+    model_id: str,
+    revision: str | None = None,
 ) -> int | None:
     """Fetch total parameter count from HuggingFace model safetensors metadata.
 
@@ -375,9 +419,7 @@ def fetch_safetensors_params(
         if info.safetensors is not None:
             total = info.safetensors.total
             if total and total > 0:
-                logger.debug(
-                    "Got %d params from safetensors metadata for %s", total, model_id
-                )
+                logger.debug("Got %d params from safetensors metadata for %s", total, model_id)
                 return int(total)
     except Exception as e:
         logger.debug("Could not fetch safetensors params for %s: %s", model_id, e)
@@ -488,19 +530,19 @@ def extract_model_info(hf_config: dict[str, Any]) -> dict[str, Any]:
 
 
 def estimate_vram(
-        *,
-        model_params: int | None = None,
-        model_dtype: str | None = None,
-        kv_dtype: str | None = None,
-        num_layers: int | None = None,
-        num_kv_heads: int | None = None,
-        head_dim: int | None = None,
-        max_model_len: int | None = None,
-        tensor_parallel: int = 1,
-        pipeline_parallel: int = 1,
-        model_vram: float | None = None,
-        kv_vram_per_token: float | None = None,
-        gpu_memory_utilization: float | None = None,
+    *,
+    model_params: int | None = None,
+    model_dtype: str | None = None,
+    kv_dtype: str | None = None,
+    num_layers: int | None = None,
+    num_kv_heads: int | None = None,
+    head_dim: int | None = None,
+    max_model_len: int | None = None,
+    tensor_parallel: int = 1,
+    pipeline_parallel: int = 1,
+    model_vram: float | None = None,
+    kv_vram_per_token: float | None = None,
+    gpu_memory_utilization: float | None = None,
 ) -> VRAMEstimate:
     """Estimate VRAM usage for an inference workload.
 
@@ -535,7 +577,7 @@ def estimate_vram(
     elif model_params and model_dtype:
         bpe = bytes_per_element(model_dtype)
         if bpe is not None:
-            model_weights_gb = model_params * bpe / (1024 ** 3)
+            model_weights_gb = model_params * bpe / (1024**3)
         else:
             warnings.append("Unknown dtype %r; cannot estimate model weight VRAM" % model_dtype)
     elif not model_params:
@@ -549,7 +591,7 @@ def estimate_vram(
 
     if kv_vram_per_token is not None:
         # Direct override: user provides GB per token
-        kv_cache_per_token_bytes = kv_vram_per_token * (1024 ** 3)  # convert to bytes for display
+        kv_cache_per_token_bytes = kv_vram_per_token * (1024**3)  # convert to bytes for display
         if max_model_len:
             kv_cache_total_gb = kv_vram_per_token * max_model_len
     elif num_layers and num_kv_heads and head_dim:
@@ -558,7 +600,7 @@ def estimate_vram(
             # Per token: 2 (K+V) * num_layers * num_kv_heads * head_dim * bytes
             kv_cache_per_token_bytes = 2.0 * num_layers * num_kv_heads * head_dim * kv_bpe
             if max_model_len:
-                kv_cache_total_gb = kv_cache_per_token_bytes * max_model_len / (1024 ** 3)
+                kv_cache_total_gb = kv_cache_per_token_bytes * max_model_len / (1024**3)
         else:
             warnings.append("Unknown KV cache dtype %r" % kv_dtype)
     else:
@@ -601,7 +643,7 @@ def estimate_vram(
 
         # Estimate max context tokens that fit in available KV space
         if kv_cache_per_token_bytes and kv_cache_per_token_bytes > 0:
-            per_gpu_kv_per_token_gb = (kv_cache_per_token_bytes / shard_factor) / (1024 ** 3)
+            per_gpu_kv_per_token_gb = (kv_cache_per_token_bytes / shard_factor) / (1024**3)
             if per_gpu_kv_per_token_gb > 0:
                 max_context_tokens = int(available_kv_gb / per_gpu_kv_per_token_gb)
 

@@ -223,9 +223,9 @@ def resolve_builder(data: dict[str, Any]) -> str:
     runtime_config = data.get("runtime_config") or {}
     runtime = data.get("runtime", "")
     if runtime in ("vllm", "") and (
-            data.get("build_args")
-            or data.get("mods")
-            or (isinstance(runtime_config, dict) and (runtime_config.get("build_args") or runtime_config.get("mods")))
+        data.get("build_args")
+        or data.get("mods")
+        or (isinstance(runtime_config, dict) and (runtime_config.get("build_args") or runtime_config.get("mods")))
     ):
         return "eugr"
     return ""
@@ -274,7 +274,7 @@ def expand_recipe_shortcut(name: str) -> str:
         @spark-arena/UUID  ->  https://spark-arena.com/api/recipes/UUID/raw
     """
     if name.startswith(SPARK_ARENA_PREFIX):
-        recipe_id = name[len(SPARK_ARENA_PREFIX):]
+        recipe_id = name[len(SPARK_ARENA_PREFIX) :]
         return SPARK_ARENA_API_URL % recipe_id
     return name
 
@@ -636,10 +636,10 @@ class Recipe:
         return recipe
 
     def estimate_vram(
-            self,
-            cli_overrides: dict[str, Any] | None = None,
-            auto_detect: bool = True,
-            cache_dir: str | None = None,
+        self,
+        cli_overrides: dict[str, Any] | None = None,
+        auto_detect: bool = True,
+        cache_dir: str | None = None,
     ) -> VRAMEstimate:
         """Estimate VRAM usage for this recipe.
 
@@ -685,11 +685,13 @@ class Recipe:
         model_vram = self.metadata.get("model_vram")
         kv_vram_per_token = self.metadata.get("kv_vram_per_token")
         quant_info: QuantizationInfo | None = None
+        _storage_dtype: str | None = None  # raw torch_dtype before quant override
+        effective_recipe_quant: str | None = None  # recipe-level quantization override
 
         # Auto-detect from HF if fields are missing and model is specified
         if auto_detect and self.model:
             needs_detection = (model_vram is None and (not model_dtype or model_params_raw is None)) or (
-                    kv_vram_per_token is None and (not num_layers or not num_kv_heads or not head_dim)
+                kv_vram_per_token is None and (not num_layers or not num_kv_heads or not head_dim)
             )
             if needs_detection:
                 hf_config = fetch_model_config(self.model, revision=self.model_revision, cache_dir=cache_dir)
@@ -709,12 +711,17 @@ class Recipe:
                 if hf_config:
                     hf_info = extract_model_info(hf_config)
 
+                    # Capture the raw storage dtype (torch_dtype) before
+                    # quantization override — needed later when deriving
+                    # model_params from on-disk total_size.
+                    _storage_dtype = hf_info.get("model_dtype")
+
                     # Fill in missing fields (metadata takes precedence)
                     if not model_dtype:
                         if quant_info:
                             model_dtype = quant_info.weight_dtype
                         else:
-                            model_dtype = hf_info.get("model_dtype")
+                            model_dtype = _storage_dtype
                     if not num_layers:
                         num_layers = hf_info.get("num_layers")
                     if not num_kv_heads:
@@ -733,18 +740,46 @@ class Recipe:
         # Parse model_params
         model_params = parse_param_count(model_params_raw) if model_params_raw is not None else None
 
-        # Fallback: derive model_params from HF API or safetensors index when
-        # metadata doesn't provide it.  Prefer the lightweight API call
-        # (fetch_safetensors_params) which returns param count directly and
-        # handles mixed-dtype quantized models correctly.
+        # Fallback: derive model weight info from safetensors when metadata
+        # doesn't provide it.
+        #
+        # fetch_safetensors_size() returns total bytes computed from
+        # per-dtype tensor metadata (via API or index).  How we use it
+        # depends on whether quantization is pre-baked or applied at runtime:
+        #
+        # - Pre-quantized (quant from HF config): the returned bytes
+        #   already reflect the quantized weights.  Use directly as
+        #   model_vram since the per-dtype byte calculation IS the VRAM.
+        #
+        # - Runtime-quantized (quant from recipe): the returned bytes
+        #   reflect the on-disk format (e.g. bf16).  Derive model_params
+        #   from total_size / storage_bpe so the VRAM estimator can apply
+        #   the target dtype (e.g. fp8).
+        _is_runtime_quant = bool(
+            effective_recipe_quant
+            and effective_recipe_quant not in ("none", "auto", "")
+            and _storage_dtype
+            and _storage_dtype != model_dtype
+        )
+
         if model_params is None and model_vram is None and auto_detect and self.model:
-            model_params = fetch_safetensors_params(self.model, revision=self.model_revision)
-            if model_params is None and model_dtype:
-                bpe = bytes_per_element(str(model_dtype))
-                if bpe is not None and bpe > 0:
-                    total_size = fetch_safetensors_size(self.model, revision=self.model_revision, cache_dir=cache_dir)
-                    if total_size is not None:
-                        model_params = int(total_size / bpe)
+            total_size = fetch_safetensors_size(self.model, revision=self.model_revision, cache_dir=cache_dir)
+            if total_size is not None:
+                if _is_runtime_quant:
+                    # Runtime quantization: derive params from storage dtype
+                    _derive_bpe = bytes_per_element(str(_storage_dtype))
+                    if _derive_bpe is not None and _derive_bpe > 0:
+                        model_params = int(total_size / _derive_bpe)
+                    else:
+                        model_vram = total_size / (1024**3)
+                else:
+                    # Pre-quantized or unquantized: bytes = actual VRAM
+                    model_vram = total_size / (1024**3)
+            else:
+                # Last resort: param count from HF API
+                api_params = fetch_safetensors_params(self.model, revision=self.model_revision)
+                if api_params is not None:
+                    model_params = api_params
 
         # Get effective max_model_len and tensor_parallel from config chain
         max_model_len = config.get("max_model_len")
@@ -928,7 +963,7 @@ class Recipe:
         "cluster_only",
         "metadata",
         "build_args",
-        'mods',
+        "mods",
         "defaults",
         "env",
         "pre_exec",
@@ -1029,9 +1064,9 @@ class Recipe:
         return d
 
     def to_dict(
-            self,
-            overrides: Optional[dict] = None,
-            container_image: Optional[str] = None,
+        self,
+        overrides: Optional[dict] = None,
+        container_image: Optional[str] = None,
     ) -> dict[str, Any]:
         """Convert the recipe to a canonical dictionary.
 
@@ -1067,11 +1102,11 @@ class Recipe:
         return _sort_dict_by_patterns(export_dict, self.EXPORT_KEY_ORDER)
 
     def export(
-            self,
-            path: Optional[str | Path] = None,
-            json: bool = False,
-            overrides: Optional[dict] = None,
-            container_image: Optional[str] = None,
+        self,
+        path: Optional[str | Path] = None,
+        json: bool = False,
+        overrides: Optional[dict] = None,
+        container_image: Optional[str] = None,
     ) -> Optional[str | Path]:
         """Export the recipe as canonical YAML.
 
@@ -1105,10 +1140,10 @@ class Recipe:
 
 
 def find_recipe(
-        name: str,
-        search_paths: list[Path] | None = None,
-        registry_manager: RegistryManager | None = None,
-        local_files: list[Path] | None = None,
+    name: str,
+    search_paths: list[Path] | None = None,
+    registry_manager: RegistryManager | None = None,
+    local_files: list[Path] | None = None,
 ) -> Path:
     """Find a recipe by name across search paths.
 
@@ -1251,10 +1286,10 @@ def recipe_summary(path: Path, registry_name: str | None = None) -> dict[str, An
 
 
 def list_recipes(
-        search_paths: list[Path] | None = None,
-        registry_manager: RegistryManager | None = None,
-        include_hidden: bool = False,
-        local_files: list[Path] | None = None,
+    search_paths: list[Path] | None = None,
+    registry_manager: RegistryManager | None = None,
+    include_hidden: bool = False,
+    local_files: list[Path] | None = None,
 ) -> list[dict[str, Any]]:
     """List all available recipes with name and path."""
     recipes: list[dict[str, Any]] = []
@@ -1300,10 +1335,10 @@ def list_recipes(
 
 
 def filter_recipes(
-        recipes: list[dict[str, Any]],
-        *,
-        runtime: str | None = None,
-        registry: str | None = None,
+    recipes: list[dict[str, Any]],
+    *,
+    runtime: str | None = None,
+    registry: str | None = None,
 ) -> list[dict[str, Any]]:
     """Filter a recipe list by runtime and/or registry.
 
