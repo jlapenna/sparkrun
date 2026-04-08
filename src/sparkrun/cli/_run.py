@@ -267,7 +267,6 @@ def run(
     for key in list(overrides.keys()):
         if key in executor_keys:
             cli_executor_opts[key] = overrides.pop(key)
-
     # --- Diagnostics setup ---
     diag = None
     if diagnostics_path:
