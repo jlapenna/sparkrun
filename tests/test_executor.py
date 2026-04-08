@@ -326,8 +326,9 @@ class TestDockerExecutorConfig:
         )
         assert "-p 8001:8001" in cmd
         assert "--gpus all" in cmd
-        assert "'--env=\"FOO=BAR\"'" in cmd  # Should be safely quoted
+        assert "--env=FOO=BAR" in cmd  # Quotes correctly consumed by shlex.split
         assert "img:latest" in cmd
+
 
 # ---------------------------------------------------------------------------
 # High-level script generator tests

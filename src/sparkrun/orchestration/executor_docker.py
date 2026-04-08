@@ -98,7 +98,8 @@ class DockerExecutor(Executor):
                 parts.extend(["-v", "%s:%s" % (host_path, container_path)])
 
         if extra_opts:
-            parts.extend(shlex.quote(opt) for opt in extra_opts)
+            for opt in extra_opts:
+                parts.extend(shlex.quote(token) for token in shlex.split(opt))
 
         parts.append(shlex.quote(image))
 
