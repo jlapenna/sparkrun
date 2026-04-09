@@ -327,6 +327,7 @@ def run_native_cluster(
     detached: bool = True,
     follow: bool = True,
     progress=None,
+    extra_docker_opts: list[str] | None = None,
 ) -> int:
     """Orchestrate a multi-node native cluster.
 
@@ -426,12 +427,13 @@ def run_native_cluster(
         all_nodes.append((host, rank, executor.node_container_name(ctx.cluster_id, rank)))
 
     containers = [(host, cname) for host, _rank, cname in all_nodes]
+    combined_docker_opts = (runtime.get_extra_docker_opts() or []) + (extra_docker_opts or [])
     rc = launch_containers_parallel(
         ctx,
         containers,
         executor,
         nccl_env,
-        extra_docker_opts=runtime.get_extra_docker_opts() or None,
+        extra_docker_opts=combined_docker_opts or None,
     )
     if rc != 0:
         return rc

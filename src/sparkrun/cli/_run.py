@@ -66,6 +66,8 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--trust", is_flag=True, default=False, hidden=True, help="Trust post_commands from third-party registries without confirmation"
 )
+@click.option("--label", "labels_override", multiple=True, help="Set meta data on a container (e.g., --label com.example.key=value)")
+@click.option("--executor-args", multiple=True, hidden=True, help="Arguments passed directly to the container executor (e.g. docker run)")
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def run(
@@ -99,7 +101,9 @@ def run(
     transfer_mode,
     diagnostics_path,
     trust,
+    labels_override,
     options,
+    executor_args,
     extra_args,
     config_path=None,
 ):
@@ -251,6 +255,8 @@ def run(
         cli_executor_opts["memory_limit"] = memory
     if restart_policy:
         cli_executor_opts["restart_policy"] = restart_policy
+    if labels_override:
+        cli_executor_opts["labels"] = list(labels_override)
 
     # Also extract executor-specific keys from -o/--option overrides
     executor_keys = {
@@ -326,6 +332,7 @@ def run(
             topology=cluster_cfg.topology,
             cluster_id_override=cluster_id_override,
             executor_config=cli_executor_opts,
+            extra_docker_opts=list(executor_args) if executor_args else None,
             rootless=not rootful,
             auto_user=not rootful,
         )
@@ -378,13 +385,33 @@ def run(
             sctx.progress.phase_skip(6)
 
     # Follow container logs after a successful detached launch
-    if result.rc == 0 and not foreground and not dry_run and not no_follow:
-        runtime.follow_logs(
-            hosts=host_list,
-            cluster_id=result.cluster_id,
-            config=config,
-            dry_run=dry_run,
-        )
+    if result.rc == 0 and not foreground and not dry_run:
+        if not no_follow:
+            runtime.follow_logs(
+                hosts=host_list,
+                cluster_id=result.cluster_id,
+                config=config,
+                dry_run=dry_run,
+            )
+        else:
+            # Perform a 5s boot liveness check for detached containers to catch crashes
+            import time
+
+            from sparkrun.orchestration.job_metadata import check_job_running
+            from sparkrun.orchestration.primitives import build_ssh_kwargs
+
+            time.sleep(5.0)
+            ssh_kwargs = build_ssh_kwargs(config)
+
+            status = check_job_running(
+                cluster_id=result.cluster_id,
+                hosts=host_list,
+                ssh_kwargs=ssh_kwargs,
+                cache_dir=remote_cache_dir,
+            )
+            if not status.running:
+                click.secho("\n[sparkrun] CRITICAL: Container died unexpectedly after detached launch.", fg="red", err=True, bold=True)
+                result.rc = 1
 
     # --- Diagnostics finalize ---
     if diag:

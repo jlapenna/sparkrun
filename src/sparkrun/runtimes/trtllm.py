@@ -416,6 +416,7 @@ class TrtllmRuntime(RuntimePlugin):
         detached: bool = True,
         nccl_env: dict[str, str] | None = None,
         skip_keys: set[str] | frozenset[str] = frozenset(),
+        extra_docker_opts: list[str] | None = None,
         **kwargs,
     ) -> int:
         """Orchestrate a multi-node TRT-LLM cluster using MPI.
@@ -505,12 +506,13 @@ class TrtllmRuntime(RuntimePlugin):
         else:
             logger.info("Step 4/7: Launching %d container(s) with sleep infinity...", ctx.num_nodes)
         containers = [(host, self.executor.node_container_name(cluster_id, rank)) for rank, host in enumerate(hosts)]
+        combined_docker_opts = (self.get_extra_docker_opts() or []) + (extra_docker_opts or [])
         rc = launch_containers_parallel(
             ctx,
             containers,
             self.executor,
             nccl_env,
-            extra_docker_opts=extra_docker_opts or None,
+            extra_docker_opts=combined_docker_opts or None,
         )
         if rc != 0:
             return rc

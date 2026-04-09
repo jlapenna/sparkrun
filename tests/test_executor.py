@@ -333,6 +333,17 @@ class TestDockerExecutorConfig:
         cmd = executor.exec_cmd("my_container", "echo hello", env=env)
         assert "-e 'MY_VAR=hello world'" in cmd
         assert "-e PATH=/usr/bin:/bin" in cmd
+    def test_run_cmd_extra_opts(self):
+        executor = DockerExecutor()
+        cmd = executor.run_cmd(
+            "img:latest",
+            container_name="my_container",
+            extra_opts=["-p", "8001:8001", "--gpus", "all", '--env="FOO=BAR"'],
+        )
+        assert "-p 8001:8001" in cmd
+        assert "--gpus all" in cmd
+        assert "--env=FOO=BAR" in cmd  # Quotes correctly consumed by shlex.split
+        assert "img:latest" in cmd
 
 
 # ---------------------------------------------------------------------------

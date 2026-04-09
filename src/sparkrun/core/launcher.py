@@ -78,6 +78,7 @@ def launch_inference(
     cluster_id_override: str | None = None,
     # Executor config (dict for config chain layering)
     executor_config: dict | None = None,
+    extra_docker_opts: list[str] | None = None,
     # note: transition to rootless by default
     rootless: bool = True,
     auto_user: bool = True,
@@ -432,6 +433,7 @@ def launch_inference(
         skip_keys=skip_keys,
         executor=executor,
         progress=progress,
+        extra_docker_opts=extra_docker_opts,
         **run_kwargs,
     )
 

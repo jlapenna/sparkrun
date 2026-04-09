@@ -54,7 +54,10 @@ class DockerExecutor(Executor):
             for dev in cfg.devices:
                 opts.extend(["--device", quote(dev)])
         if cfg.memory_limit:
-            opts.append("--memory=%s" % quote(cfg.memory_limit))
+            opts.append("--memory=%s" % cfg.memory_limit)
+        if cfg.labels:
+            for lbl in cfg.labels:
+                opts.extend(["--label", shlex.quote(lbl)])
 
         return opts
 
@@ -95,7 +98,8 @@ class DockerExecutor(Executor):
                 parts.extend(["-v", quote("%s:%s" % (host_path, container_path))])
 
         if extra_opts:
-            parts.extend(extra_opts)
+            for opt in extra_opts:
+                parts.extend(shlex.quote(token) for token in shlex.split(opt))
 
         parts.append(quote(image))
 

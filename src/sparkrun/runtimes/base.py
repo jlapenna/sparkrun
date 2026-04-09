@@ -589,6 +589,7 @@ class RuntimePlugin(Plugin):
         ib_ip_map: dict[str, str] | None = None,
         skip_keys: set[str] | frozenset[str] = frozenset(),
         executor: Executor | None = None,
+        extra_docker_opts: list[str] | None = None,
         **kwargs,
     ) -> int:
         """Launch a workload -- delegates to solo or cluster implementation.
@@ -618,6 +619,7 @@ class RuntimePlugin(Plugin):
                 that call ``generate_node_command()`` instead of using
                 the pre-built *serve_command*).
             executor: Container executor (defaults to DockerExecutor).
+            extra_docker_opts: Additional docker run arguments (e.g., ports).
             **kwargs: Runtime-specific keyword arguments (e.g. ray_port,
                 dashboard_port, init_port, rpc_port).
 
@@ -645,6 +647,7 @@ class RuntimePlugin(Plugin):
                 recipe=recipe,
                 overrides=overrides,
                 progress=progress,
+                extra_docker_opts=extra_docker_opts,
             )
         return self._run_cluster(
             hosts=hosts,
@@ -662,6 +665,7 @@ class RuntimePlugin(Plugin):
             ib_ip_map=ib_ip_map,
             skip_keys=skip_keys,
             progress=progress,
+            extra_docker_opts=extra_docker_opts,
             **kwargs,
         )
 
@@ -744,6 +748,7 @@ class RuntimePlugin(Plugin):
         recipe: Recipe | None = None,
         overrides: dict[str, Any] | None = None,
         progress=None,
+        extra_docker_opts: list[str] | None = None,
     ) -> int:
         """Launch a single-node inference workload.
 
@@ -773,6 +778,8 @@ class RuntimePlugin(Plugin):
             env,  # recipe
             self.get_extra_env(),  # tuning/other overrides
         )
+
+        combined_docker_opts = (self.get_extra_docker_opts() or []) + (extra_docker_opts or [])
 
         # Step 1: InfiniBand detection (skip if pre-detected nccl_env provided)
         if progress:
@@ -816,7 +823,7 @@ class RuntimePlugin(Plugin):
             env=all_env,
             volumes=volumes,
             nccl_env=nccl_env,
-            extra_docker_opts=self.get_extra_docker_opts() or None,
+            extra_docker_opts=combined_docker_opts or None,
         )
         result = run_script_on_host(
             host,
@@ -1028,6 +1035,7 @@ class RuntimePlugin(Plugin):
         port_label: str = "Init Port",
         node_label: str = "node",
         progress=None,
+        extra_docker_opts: list[str] | None = None,
         **kwargs,
     ) -> int:
         """Orchestrate a multi-node native cluster (shared by SGLang, vLLM distributed).
@@ -1064,6 +1072,7 @@ class RuntimePlugin(Plugin):
             port_label: Label for the port in the banner (e.g. "Init Port").
             node_label: Label for nodes in log messages (e.g. "sglang node").
             progress: Optional LaunchProgress for structured output.
+            extra_docker_opts: Additional docker run arguments.
         """
         from sparkrun.runtimes._cluster_ops import ClusterContext, run_native_cluster
 
@@ -1093,6 +1102,7 @@ class RuntimePlugin(Plugin):
             detached=detached,
             follow=kwargs.get("follow", True),
             progress=progress,
+            extra_docker_opts=extra_docker_opts,
         )
 
     def _print_connection_info(self, hosts, cluster_id, *, per_node_logs=False):
