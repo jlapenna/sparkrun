@@ -45,6 +45,24 @@ def b64_wrap_bash(cmd: str, quoted: bool = True) -> str:
     return result
 
 
+def b64_wrap_python(script: str, quoted: bool = True) -> str:
+    """Wrap a Python script in a base64 pipeline that decodes and executes via python3.
+
+    Produces a string like: `printf '%s' <b64> | base64 -d -- | python3`
+
+    Avoids all shell-escaping issues when delivering Python scripts across SSH
+    boundaries (same motivation as :func:`b64_wrap_bash`).
+
+    If quoted is True, the result is shell-quoted for safe embedding in
+    further shell commands.
+    """
+    b64_script = b64_encode_cmd(script)
+    result = f"printf '%s' '{b64_script}' | base64 -d -- | python3"
+    if quoted:
+        return quote(result)
+    return result
+
+
 def args_list_to_shell_str(args: list[str]) -> str:
     """Prepare a list of arguments for passing to a shell command."""
     # NOTE: no isinstance guard here, bubble up failures
