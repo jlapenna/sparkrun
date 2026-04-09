@@ -65,6 +65,8 @@ if TYPE_CHECKING:
     help="Benchmark timeout in seconds (default: %d, or from profile)" % DEFAULT_BENCHMARK_TIMEOUT,
 )
 @dry_run_option
+@click.option("--executor-args", multiple=True, hidden=True, help="Arguments passed directly to the container executor (e.g. docker run)")
+@click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def benchmark(
     ctx,
@@ -91,6 +93,8 @@ def benchmark(
     rootful,
     bench_timeout,
     dry_run,
+    executor_args,
+    extra_args,
 ):
     """Benchmark an inference recipe.
 
@@ -138,6 +142,8 @@ def benchmark(
         rootful,
         bench_timeout,
         dry_run,
+        executor_args,
+        extra_args,
     )
 
 
@@ -156,7 +162,7 @@ def _run_benchmark(
     solo,
     port,
     profile,
-    framework_name,
+    framework,
     output_file,
     bench_options,
     exit_on_first_fail,
@@ -166,6 +172,8 @@ def _run_benchmark(
     rootful,
     bench_timeout,
     dry_run,
+    executor_args,
+    extra_args,
     export_results_files=True,
 ):
     """Execute the full benchmark flow: launch inference -> benchmark -> stop.
@@ -215,20 +223,21 @@ def _run_benchmark(
             sys.exit(1)
         bench_spec = BenchmarkSpec.load(profile_path)
         bench_args = dict(bench_spec.args)
-        if not framework_name and bench_spec.framework:
-            framework_name = bench_spec.framework
+        if not framework and bench_spec.framework:
+            framework = bench_spec.framework
     else:
         bench_spec = BenchmarkSpec.from_recipe(recipe)
         if bench_spec:
             bench_args = dict(bench_spec.args)
-            if not framework_name and bench_spec.framework:
-                framework_name = bench_spec.framework
+            if not framework and bench_spec.framework:
+                framework = bench_spec.framework
 
-    if not framework_name:
-        framework_name = "llama-benchy"
+    if not framework:
+        framework = "llama-benchy"
 
     try:
-        fw = get_benchmarking_framework(framework_name, v)
+        fw = get_benchmarking_framework(framework)
+
     except ValueError as e:
         click.echo("Error: %s" % e, err=True)
         sys.exit(1)
@@ -401,6 +410,7 @@ def _run_benchmark(
                 detached=True,
                 rootless=not rootful,
                 auto_user=not rootful,
+                extra_docker_opts=list(executor_args) if executor_args else None,
             )
 
             if launch_result.rc != 0 and not dry_run:

@@ -56,6 +56,7 @@ class ExecutorConfig:
     ulimit: list[str] | None = None
     devices: list[str] | None = None
     memory_limit: str | None = None
+    labels: list[str] | None = None
 
     @classmethod
     def from_chain(cls, chain) -> ExecutorConfig:
@@ -72,6 +73,9 @@ class ExecutorConfig:
         raw_devices = chain.get("devices")
         if isinstance(raw_devices, str):
             raw_devices = [raw_devices]
+        raw_labels = chain.get("labels")
+        if isinstance(raw_labels, str):
+            raw_labels = [raw_labels]
 
         # Fallback to EXECUTOR_DEFAULTS for None values. With Variables,
         # falsy values like False/0 are preserved correctly, but None
@@ -94,6 +98,7 @@ class ExecutorConfig:
             ulimit=raw_ulimit or None,
             devices=raw_devices or None,
             memory_limit=chain.get("memory_limit") or None,
+            labels=raw_labels or None,
         )
 
     def __post_init__(self):
@@ -270,6 +275,7 @@ class Executor(ABC):
         env: dict[str, str] | None = None,
         volumes: dict[str, str] | None = None,
         nccl_env: dict[str, str] | None = None,
+        extra_docker_opts: list[str] | None = None,
     ) -> str:
         """Generate a script that starts a Ray head node in a container.
 
@@ -292,6 +298,7 @@ class Executor(ABC):
             detach=True,
             env=all_env,
             volumes=volumes,
+            extra_opts=extra_docker_opts,
         )
 
         template = read_script("ray_head.sh")
@@ -309,6 +316,7 @@ class Executor(ABC):
         env: dict[str, str] | None = None,
         volumes: dict[str, str] | None = None,
         nccl_env: dict[str, str] | None = None,
+        extra_docker_opts: list[str] | None = None,
     ) -> str:
         """Generate a script that starts a Ray worker node.
 
@@ -327,6 +335,7 @@ class Executor(ABC):
             detach=True,
             env=all_env,
             volumes=volumes,
+            extra_opts=extra_docker_opts,
         )
 
         template = read_script("ray_worker.sh")
