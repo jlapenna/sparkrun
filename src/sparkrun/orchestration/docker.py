@@ -8,7 +8,6 @@ They do not execute Docker commands directly.
 from __future__ import annotations
 
 import logging
-import shlex
 
 from sparkrun.utils.shell import b64_wrap_bash, quote
 
@@ -37,7 +36,7 @@ def docker_exec_cmd(
         parts.append("-d")
     if env:
         for key, value in sorted(env.items()):
-            parts.extend(["-e", shlex.quote(f"{key}={value}")])
+            parts.extend(["-e", quote(f"{key}={value}")])
 
     parts.extend([quote(container_name), "bash", "-c", b64_wrap_bash(command)])
     return " ".join(parts)
@@ -68,7 +67,7 @@ def docker_inspect_exists_cmd(image: str) -> str:
     Returns:
         Command string that exits 0 if the image exists locally.
     """
-    return "docker image inspect %s >/dev/null 2>&1" % shlex.quote(image)
+    return "docker image inspect %s >/dev/null 2>&1" % quote(image)
 
 
 def docker_pull_cmd(image: str) -> str:
@@ -80,7 +79,7 @@ def docker_pull_cmd(image: str) -> str:
     Returns:
         Command string.
     """
-    return "docker pull %s" % shlex.quote(image)
+    return "docker pull %s" % quote(image)
 
 
 def docker_logs_cmd(
@@ -103,7 +102,7 @@ def docker_logs_cmd(
         parts.append("-f")
     if tail is not None:
         parts.extend(["--tail", str(tail)])
-    parts.append(shlex.quote(container_name))
+    parts.append(quote(container_name))
     return " ".join(parts)
 
 

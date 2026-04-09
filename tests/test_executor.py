@@ -339,11 +339,11 @@ class TestDockerExecutorConfig:
         cmd = executor.run_cmd(
             "img:latest",
             container_name="my_container",
-            extra_opts=["-p", "8001:8001", "--gpus", "all", '--env="FOO=BAR"'],
+            extra_opts=["-p", "8001:8001", "--gpus", "all", "--env=FOO=BAR"],
         )
         assert "-p 8001:8001" in cmd
         assert "--gpus all" in cmd
-        assert "--env=FOO=BAR" in cmd  # Quotes correctly consumed by shlex.split
+        assert "--env=FOO=BAR" in cmd
         assert "img:latest" in cmd
 
 

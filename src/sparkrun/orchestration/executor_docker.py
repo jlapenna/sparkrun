@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from sparkrun.orchestration.executor import Executor
-from sparkrun.utils.shell import b64_wrap_bash, quote, args_list_to_shell_str, quote_list
+from sparkrun.utils.shell import b64_wrap_bash, quote, args_list_to_shell_str
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +99,10 @@ class DockerExecutor(Executor):
                 parts.extend(["-v", quote("%s:%s" % (host_path, container_path))])
 
         if extra_opts:
-            # NOTE: each extra opt must be a single option, not many
-            # ALTERNATIVE: use shlex.split if we want to support batch input?
-            parts.extend(quote_list(extra_opts))
+            from shlex import split as shlex_split
+
+            for opt in extra_opts:
+                parts.extend(quote(token) for token in shlex_split(opt))
 
         parts.append(quote(image))
 

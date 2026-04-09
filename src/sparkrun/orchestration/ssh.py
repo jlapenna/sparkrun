@@ -8,10 +8,11 @@ No files are ever copied to remote hosts.
 from __future__ import annotations
 
 import logging
-import shlex
 import subprocess
 import time
 from dataclasses import dataclass
+
+from sparkrun.utils.shell import quote
 
 logger = logging.getLogger(__name__)
 
@@ -730,7 +731,7 @@ def run_pipeline_to_remote(
         connect_timeout=connect_timeout,
     )
     target = f"{ssh_user}@{host}" if ssh_user else host
-    pipeline = f"{local_cmd} | ssh {ssh_opts} {target} {shlex.quote(remote_cmd)}"
+    pipeline = f"{local_cmd} | ssh {ssh_opts} {quote(target)} {quote(remote_cmd)}"
 
     if dry_run:
         logger.info("[dry-run] Would run pipeline to %s: %s", host, pipeline)

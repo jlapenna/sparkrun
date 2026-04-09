@@ -10,7 +10,6 @@ directly, making them container-engine-agnostic.
 from __future__ import annotations
 
 import logging
-import shlex
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -18,7 +17,7 @@ from scitrera_app_framework.util import ext_parse_bool
 
 from sparkrun.scripts import read_script
 from sparkrun.utils import merge_env
-from sparkrun.utils.shell import b64_encode_cmd
+from sparkrun.utils.shell import b64_encode_cmd, quote
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +256,7 @@ class Executor(ABC):
         env_exports = ""
         if env:
             for key, value in sorted(env.items()):
-                env_exports += "export %s=%s; " % (key, shlex.quote(str(value)))
+                env_exports += "export %s=%s; " % (key, quote(str(value)))
 
         full_cmd = "%s%s" % (env_exports, serve_command)
 
@@ -268,7 +267,7 @@ class Executor(ABC):
         script_name = "exec_serve_detached.sh" if detached else "exec_serve_foreground.sh"
         template = read_script(script_name)
         return template.format(
-            container_name=shlex.quote(container_name),
+            container_name=quote(container_name),
             b64_cmd=b64_cmd,
         )
 
@@ -401,8 +400,8 @@ class Executor(ABC):
             "    exit 1\n"
             "fi\n"
         ) % {
-            "name": shlex.quote(container_name),
+            "name": quote(container_name),
             "cleanup": cleanup,
             "run_cmd": run,
-            "label": shlex.quote(label),
+            "label": quote(label),
         }
