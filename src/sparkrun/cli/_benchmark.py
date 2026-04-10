@@ -27,6 +27,7 @@ from ._common import (
     recipe_override_options,
     resolve_cluster_config,
     validate_and_prepare_hosts,
+    HIDE_ADVANCED_OPTIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,12 @@ if TYPE_CHECKING:
     help="Benchmark timeout in seconds (default: %d, or from profile)" % DEFAULT_BENCHMARK_TIMEOUT,
 )
 @dry_run_option
-@click.option("--executor-args", multiple=True, hidden=True, help="Arguments passed directly to the container executor (e.g. docker run)")
+@click.option(
+    "--executor-args",
+    multiple=True,
+    hidden=HIDE_ADVANCED_OPTIONS,
+    help="Arguments passed directly to the container executor (e.g. docker run)",
+)
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def benchmark(

@@ -25,6 +25,7 @@ from ._common import (
     recipe_override_options,
     resolve_cluster_config,
     validate_and_prepare_hosts,
+    HIDE_ADVANCED_OPTIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,10 +38,10 @@ logger = logging.getLogger(__name__)
 @click.option("--solo", is_flag=True, help="Force single-node mode", hidden=True)
 @click.option("--port", type=int, default=None, help="Override serve port")
 @click.option("--served-model-name", default=None, help="Override served model name")
-@click.option("--ray-port", type=int, default=46379, help="Ray GCS port (vllm-ray)", hidden=True)
-@click.option("--init-port", type=int, default=25000, help="vllm/SGLang distributed init port", hidden=True)
-@click.option("--dashboard", is_flag=True, help="Enable Ray dashboard on head node", hidden=True)
-@click.option("--dashboard-port", type=int, default=8265, help="Ray dashboard port", hidden=True)
+@click.option("--ray-port", type=int, default=46379, help="Ray GCS port (vllm-ray)", hidden=HIDE_ADVANCED_OPTIONS)
+@click.option("--init-port", type=int, default=25000, help="vllm/SGLang distributed init port", hidden=HIDE_ADVANCED_OPTIONS)
+@click.option("--dashboard", is_flag=True, help="Enable Ray dashboard on head node", hidden=HIDE_ADVANCED_OPTIONS)
+@click.option("--dashboard-port", type=int, default=8265, help="Ray dashboard port", hidden=HIDE_ADVANCED_OPTIONS)
 @dry_run_option
 @click.option("--foreground", is_flag=True, help="Run in foreground (don't detach)")
 @click.option("--ensure", is_flag=True, default=False, help="Only launch if not already running; exit 0 if already up")
@@ -50,7 +51,11 @@ logger = logging.getLogger(__name__)
 @click.option("--memory-limit", "memory", default=None, help="Container memory limit (e.g. 32G)")
 @click.option("--rootful", is_flag=True, help="Run with --privileged as root inside container (legacy behavior)")
 @click.option(
-    "--restart", "restart_policy", default=None, help="Docker restart policy (no, always, unless-stopped, on-failure[:N])", hidden=True
+    "--restart",
+    "restart_policy",
+    default=None,
+    help="Docker restart policy (no, always, unless-stopped, on-failure[:N])",
+    hidden=HIDE_ADVANCED_OPTIONS,
 )
 @click.option(
     "--transfer-mode",
@@ -60,13 +65,23 @@ logger = logging.getLogger(__name__)
     hidden=True,
 )
 @click.option(
-    "--collect-diagnostics", "diagnostics_path", default=None, type=click.Path(), hidden=True, help="Collect diagnostics to NDJSON file"
+    "--collect-diagnostics",
+    "diagnostics_path",
+    default=None,
+    type=click.Path(),
+    hidden=HIDE_ADVANCED_OPTIONS,
+    help="Collect diagnostics to NDJSON file",
 )
 @click.option(
     "--trust", is_flag=True, default=False, hidden=True, help="Trust post_commands from third-party registries without confirmation"
 )
 @click.option("--label", "labels_override", multiple=True, help="Set meta data on a container (e.g., --label com.example.key=value)")
-@click.option("--executor-args", multiple=True, hidden=True, help="Arguments passed directly to the container executor (e.g. docker run)")
+@click.option(
+    "--executor-args",
+    multiple=True,
+    hidden=HIDE_ADVANCED_OPTIONS,
+    help="Arguments passed directly to the container executor (e.g. docker run)",
+)
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def run(

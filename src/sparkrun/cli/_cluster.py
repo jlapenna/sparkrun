@@ -20,6 +20,7 @@ from ._common import (
     host_options,
     json_option,
     print_json,
+    HIDE_ADVANCED_OPTIONS,
 )
 
 
@@ -787,7 +788,7 @@ def cluster_check_job(ctx, target, hosts, hosts_file, cluster_name, tp_override,
         sys.exit(1)
 
 
-@cluster.command("inspect", hidden=True)
+@cluster.command("inspect", hidden=HIDE_ADVANCED_OPTIONS)
 @click.argument("name", type=CLUSTER_NAME, required=False, default=None)
 @host_options
 @dry_run_option
