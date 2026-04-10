@@ -36,7 +36,11 @@ logger = logging.getLogger(__name__)
 @host_options
 @recipe_override_options
 @click.option(
-    "--container-name", "cluster_id_override", default=None, hidden=True, help="Override deterministic cluster ID (static container name)"
+    "--container-name",
+    "cluster_id_override",
+    default=None,
+    hidden=HIDE_ADVANCED_OPTIONS,
+    help="Override deterministic cluster ID (static container name)",
 )
 @click.option("--solo", is_flag=True, help="Force single-node mode", hidden=True)
 @click.option("--port", type=int, default=None, help="Override serve port")
