@@ -369,7 +369,7 @@ def _run_copy_command(
     from sparkrun.orchestration.primitives import run_script_on_host, should_run_locally
 
     source = cmd["copy"]
-    source_path = Path(source)
+    source_path = Path(source).expanduser()
     basename = source_path.name
     dest = cmd.get("dest", "/workspace/mods/%s" % basename)
     source_host = cmd.get("source_host")
@@ -385,7 +385,7 @@ def _run_copy_command(
         result = _run_delegated_copy(
             host,
             container_name,
-            source,
+            str(source_path),
             dest,
             source_host,
             ssh_kwargs=ssh_kwargs,
@@ -395,7 +395,7 @@ def _run_copy_command(
         # Local: docker cp directly
         script = ("set -e\ndocker exec --user root %(c)s mkdir -p %(dest)s\ndocker cp %(src)s/. %(c)s:%(dest)s/\n") % {
             "c": container_name,
-            "src": source,
+            "src": source_path,
             "dest": dest,
         }
         result = run_script_on_host(host, script, ssh_kwargs=ssh_kwargs, timeout=120)
