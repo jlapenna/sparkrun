@@ -4,7 +4,7 @@ AI-assisted inference on NVIDIA DGX Spark -- run, manage, and stop LLM workloads
 
 ## What It Does
 
-This plugin teaches OpenClaw how to use [sparkrun](https://github.com/scitrera/sparkrun) to manage LLM inference
+This plugin teaches OpenClaw how to use [sparkrun](https://github.com/spark-arena/sparkrun) to manage LLM inference
 workloads on NVIDIA DGX Spark systems. It provides:
 
 - **Skills** -- Detailed reference that OpenClaw uses automatically when working with sparkrun
