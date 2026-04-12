@@ -11,12 +11,26 @@ import shlex
 from typing import Any
 
 
-def quote(value: str) -> str:
+class Quoted(str):
+    """A string that has already been shell-quoted.
+
+    Used as a sentinel to prevent double-quoting when a value passes through
+    multiple layers that each call :func:`quote`.  Long-term the goal is to
+    quote only at the shell-assembly boundary, making this unnecessary.
+    """
+
+
+def quote(value: str) -> Quoted:
     """Return a shell-safe quoted version of *value*.
+
+    If *value* is already a :class:`Quoted` instance it is returned unchanged,
+    making this function idempotent.
 
     Wraps :func:`shlex.quote` for convenience.
     """
-    return shlex.quote(value)
+    if isinstance(value, Quoted):
+        return value
+    return Quoted(shlex.quote(value))
 
 
 def b64_encode_cmd(cmd: str) -> str:
@@ -31,15 +45,18 @@ def b64_encode_cmd(cmd: str) -> str:
 def b64_wrap_bash(cmd: str, quoted: bool = True) -> str:
     """Wrap a command in a base64 pipeline that decodes and executes via bash.
 
-    Produces a string like: `printf '%s' <b64> | base64 -d -- | bash`
+    Produces a string like: `printf %s <b64> | base64 -d -- | bash`
 
     If quoted is True, then the result is properly shell quoted as well.
+    The b64 payload is inherently shell-safe ([A-Za-z0-9+/=]) so quoting
+    around the printf args is unnecessary and avoids ugly escaped output.
     """
     b64_cmd = b64_encode_cmd(cmd)
     # Using printf instead of echo is safer against strings starting with dashes.
     # Adding -- to base64 -d prevents interpretation of the b64 string as flags.
     # Using --noprofile --norc with bash ensures a clean execution environment.
-    result = f"printf '%s' '{b64_cmd}' | base64 -d -- | bash --noprofile --norc"
+    # No quotes around %s or the b64 payload — b64 is [A-Za-z0-9+/=], all shell-safe.
+    result = f"printf %s {b64_cmd} | base64 -d -- | bash --noprofile --norc"
     if quoted:
         return quote(result)
     return result
@@ -57,7 +74,7 @@ def b64_wrap_python(script: str, quoted: bool = True) -> str:
     further shell commands.
     """
     b64_script = b64_encode_cmd(script)
-    result = f"printf '%s' '{b64_script}' | base64 -d -- | python3"
+    result = f"printf %s {b64_script} | base64 -d -- | python3"
     if quoted:
         return quote(result)
     return result

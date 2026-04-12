@@ -40,11 +40,11 @@ def test_b64_wrap_bash():
     cmd = 'vllm serve --hf-overrides \'{"rope": "yarn"}\''
     wrapped = b64_wrap_bash(cmd, quoted=False)
 
-    assert wrapped.startswith("printf '%s' '")
-    assert wrapped.endswith("' | base64 -d -- | bash --noprofile --norc")
+    assert wrapped.startswith("printf %s ")
+    assert wrapped.endswith(" | base64 -d -- | bash --noprofile --norc")
 
     # Extract the encoded part and verify
-    match = re.search(r"printf '%s' '([^']+)'", wrapped)
+    match = re.search(r"printf %s (\S+)", wrapped)
     assert match
     encoded = match.group(1)
 
