@@ -11,26 +11,12 @@ import shlex
 from typing import Any
 
 
-class Quoted(str):
-    """A string that has already been shell-quoted.
-
-    Used as a sentinel to prevent double-quoting when a value passes through
-    multiple layers that each call :func:`quote`.  Long-term the goal is to
-    quote only at the shell-assembly boundary, making this unnecessary.
-    """
-
-
-def quote(value: str) -> Quoted:
+def quote(value: str) -> str:
     """Return a shell-safe quoted version of *value*.
-
-    If *value* is already a :class:`Quoted` instance it is returned unchanged,
-    making this function idempotent.
 
     Wraps :func:`shlex.quote` for convenience.
     """
-    if isinstance(value, Quoted):
-        return value
-    return Quoted(shlex.quote(value))
+    return shlex.quote(value)
 
 
 def b64_encode_cmd(cmd: str) -> str:
@@ -45,18 +31,15 @@ def b64_encode_cmd(cmd: str) -> str:
 def b64_wrap_bash(cmd: str, quoted: bool = True) -> str:
     """Wrap a command in a base64 pipeline that decodes and executes via bash.
 
-    Produces a string like: `printf %s <b64> | base64 -d -- | bash`
+    Produces a string like: `printf '%s' <b64> | base64 -d -- | bash`
 
     If quoted is True, then the result is properly shell quoted as well.
-    The b64 payload is inherently shell-safe ([A-Za-z0-9+/=]) so quoting
-    around the printf args is unnecessary and avoids ugly escaped output.
     """
     b64_cmd = b64_encode_cmd(cmd)
     # Using printf instead of echo is safer against strings starting with dashes.
     # Adding -- to base64 -d prevents interpretation of the b64 string as flags.
     # Using --noprofile --norc with bash ensures a clean execution environment.
-    # No quotes around %s or the b64 payload — b64 is [A-Za-z0-9+/=], all shell-safe.
-    result = f"printf %s {b64_cmd} | base64 -d -- | bash --noprofile --norc"
+    result = f"printf '%s' '{b64_cmd}' | base64 -d -- | bash --noprofile --norc"
     if quoted:
         return quote(result)
     return result
@@ -74,7 +57,7 @@ def b64_wrap_python(script: str, quoted: bool = True) -> str:
     further shell commands.
     """
     b64_script = b64_encode_cmd(script)
-    result = f"printf %s {b64_script} | base64 -d -- | python3"
+    result = f"printf '%s' '{b64_script}' | base64 -d -- | python3"
     if quoted:
         return quote(result)
     return result
@@ -115,52 +98,6 @@ def validate_unix_username(user: str) -> str:
     if not re.fullmatch(r"[a-z_][a-z0-9_-]*\$?", user):
         raise ValueError("Invalid username: %r" % user)
     return user
-
-
-# Characters that can perform command injection when a path is interpolated
-# into a shell script (even inside double quotes).  Tilde, slash, dot, dash,
-# underscore, plus, at, colon, comma, equals, and spaces are intentionally
-# allowed — they are safe inside double-quoted shell strings and common in
-# legitimate paths.
-_SHELL_INJECTION_RE = re.compile(r"[;&|`$!\"'<>()\{\}\n\\]")
-
-
-def assert_safe_path(value: str) -> str:
-    """Validate that *value* is free of shell-injection metacharacters.
-
-    Intended for paths that will be interpolated into shell scripts inside
-    double quotes.  Raises :class:`ValueError` if dangerous characters are
-    found.
-
-    Returns *value* unchanged on success so it can be used inline::
-
-        script = 'rsync "%s"/ dest/' % assert_safe_path(source)
-    """
-    match = _SHELL_INJECTION_RE.search(value)
-    if match:
-        raise ValueError("Unsafe character %r in path %r — possible shell injection" % (match.group(), value))
-    return value
-
-
-def safe_remote_path(value: str) -> str:
-    """Validate and prepare a path for interpolation into a remote shell script.
-
-    1. Validates that *value* contains no injection metacharacters (via
-       :func:`assert_safe_path`).
-    2. Converts a leading ``~/`` to ``$HOME/`` so the path expands correctly
-       inside double-quoted shell strings.  (Tilde expansion only works in
-       unquoted contexts in bash, but ``$HOME`` expands inside double quotes.)
-
-    Returns the transformed path, ready for ``"%(path)s"`` interpolation::
-
-        script = 'docker cp "%s"/. ctr:dest/' % safe_remote_path(source)
-    """
-    assert_safe_path(value)
-    if value.startswith("~/"):
-        return "$HOME/" + value[2:]
-    if value == "~":
-        return "$HOME"
-    return value
 
 
 def render_args_as_flags(args: dict[str, Any]) -> list[str]:

@@ -369,7 +369,7 @@ def _run_copy_command(
     from sparkrun.orchestration.primitives import run_script_on_host, should_run_locally
 
     source = cmd["copy"]
-    source_path = Path(source).expanduser()
+    source_path = Path(source)
     basename = source_path.name
     dest = cmd.get("dest", "/workspace/mods/%s" % basename)
     source_host = cmd.get("source_host")
@@ -382,15 +382,10 @@ def _run_copy_command(
 
     if source_host is not None:
         # Delegated mode: source files live on source_host, not locally.
-        # Validate against injection, then convert ~/… to $HOME/… so the
-        # path expands correctly inside double-quoted remote shell scripts.
-        from sparkrun.utils.shell import safe_remote_path
-
-        remote_source = safe_remote_path(source)
         result = _run_delegated_copy(
             host,
             container_name,
-            remote_source,
+            source,
             dest,
             source_host,
             ssh_kwargs=ssh_kwargs,
@@ -400,7 +395,7 @@ def _run_copy_command(
         # Local: docker cp directly
         script = ("set -e\ndocker exec --user root %(c)s mkdir -p %(dest)s\ndocker cp %(src)s/. %(c)s:%(dest)s/\n") % {
             "c": container_name,
-            "src": source_path,
+            "src": source,
             "dest": dest,
         }
         result = run_script_on_host(host, script, ssh_kwargs=ssh_kwargs, timeout=120)
@@ -461,7 +456,7 @@ def _run_delegated_copy(
 
     if host == source_host:
         # Files already on this host — docker cp directly
-        script = ('set -e\ndocker exec --user root %(c)s mkdir -p %(dest)s\ndocker cp "%(src)s"/. %(c)s:%(dest)s/\n') % {
+        script = ("set -e\ndocker exec --user root %(c)s mkdir -p %(dest)s\ndocker cp %(src)s/. %(c)s:%(dest)s/\n") % {
             "c": container_name,
             "src": source,
             "dest": dest,
@@ -486,7 +481,7 @@ def _run_delegated_copy(
         script = (
             "set -e\n"
             "mkdir -p %(tmp)s\n"
-            'rsync -a --no-times %(rsync_ssh)s %(user)s%(src_host)s:"%(src)s"/ %(tmp)s/\n'
+            "rsync -a --no-times %(rsync_ssh)s %(user)s%(src_host)s:%(src)s/ %(tmp)s/\n"
             "docker exec --user root %(c)s mkdir -p %(dest)s\n"
             "docker cp %(tmp)s/. %(c)s:%(dest)s/\n"
             "rm -rf %(tmp)s\n"

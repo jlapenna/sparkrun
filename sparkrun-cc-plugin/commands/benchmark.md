@@ -59,7 +59,7 @@ The benchmark command handles the complete lifecycle:
 | `--skip-run` | Skip launching inference (benchmark existing instance) |
 | `--sync-tuning` | Sync tuning configs from registries before benchmarking |
 | `--timeout` | Benchmark timeout in seconds (default: 14400) |
-| `--out, --output` | Output file for results YAML |
+| `--output` | Output file for results YAML |
 | `--dry-run` | Show what would be done |
 
 ## Benchmark Profiles
