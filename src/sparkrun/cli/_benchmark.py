@@ -416,7 +416,6 @@ def _run_benchmark(
                 registry_mgr=registry_mgr,
                 auto_port=True,
                 sync_tuning=sync_tuning,
-                skip_keys={"served_model_name"},
                 dry_run=dry_run,
                 detached=True,
                 rootless=not rootful,
