@@ -4,7 +4,7 @@ AI-assisted inference on NVIDIA DGX Spark -- run, manage, and stop LLM workloads
 
 ## What It Does
 
-This plugin teaches Claude Code how to use [sparkrun](https://github.com/spark-arena/sparkrun) to manage LLM inference
+This plugin teaches Claude Code how to use [sparkrun](https://github.com/scitrera/sparkrun) to manage LLM inference
 workloads on NVIDIA DGX Spark systems. It provides:
 
 - **Slash Commands** -- Quick actions for running, stopping, benchmarking, monitoring, and managing inference jobs
@@ -16,7 +16,7 @@ workloads on NVIDIA DGX Spark systems. It provides:
 
 ```bash
 # Add the marketplace (one-time setup)
-claude plugin marketplace add spark-arena/sparkrun
+claude plugin marketplace add scitrera/sparkrun
 
 # Install the plugin
 claude plugin install sparkrun@sparkrun
@@ -132,8 +132,8 @@ Or just describe what you want in natural language -- Claude will use the skills
 
 ## Links
 
-- [sparkrun Documentation](https://github.com/spark-arena/sparkrun)
-- [Recipe Format Specification](https://github.com/spark-arena/sparkrun/blob/main/RECIPES.md)
+- [sparkrun Documentation](https://github.com/scitrera/sparkrun)
+- [Recipe Format Specification](https://github.com/scitrera/sparkrun/blob/main/RECIPES.md)
 
 ## License
 

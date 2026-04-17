@@ -17,7 +17,7 @@
       },
       "source": "./sparkrun-cc-plugin",
       "category": "development",
-      "homepage": "https://github.com/spark-arena/sparkrun",
+      "homepage": "https://github.com/scitrera/sparkrun",
       "tags": [
         "inference",
         "llm",

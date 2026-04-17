@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-git clone https://github.com/spark-arena/sparkrun.git -b develop
+git clone https://github.com/scitrera/sparkrun.git -b develop
 cd sparkrun
 source dev.sh
 sparkrun --help

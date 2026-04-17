@@ -6,6 +6,8 @@ import sys
 
 import click
 
+from sparkrun.utils.shell import quote
+
 from ._common import (
     CLUSTER_NAME,
     TARGET,
@@ -870,9 +872,8 @@ def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_
         'sr_exists="no"; hf_exists="no"; sr_du="-"; hf_du="-"; '
         'if [ -d "$sr_dir" ]; then sr_exists="yes"; sr_du=$(du -sh "$sr_dir" 2>/dev/null | cut -f1); fi; '
         'if [ -d "$hf_dir" ]; then hf_exists="yes"; hf_du=$(du -sh "$hf_dir" 2>/dev/null | cut -f1); fi; '
-        'free_space=$(df -h / 2>/dev/null | awk "NR==2{print \\$4}"); '
-        'echo "sr_exists=$sr_exists|sr_du=$sr_du|hf_exists=$hf_exists|hf_du=$hf_du|sr_dir=$sr_dir|hf_dir=$hf_dir|free_space=${free_space:--}"'
-    ) % (remote_sparkrun, remote_hf)
+        'echo "sr_exists=$sr_exists|sr_du=$sr_du|hf_exists=$hf_exists|hf_du=$hf_du|sr_dir=$sr_dir|hf_dir=$hf_dir"'
+    ) % (quote(remote_sparkrun), quote(remote_hf))
 
     # Query all hosts in parallel
     host_info: dict[str, dict] = {}
@@ -912,14 +913,6 @@ def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_
     local_sr_exists, local_sr_du = _local_dir_info(local_sparkrun)
     local_hf_exists, local_hf_du = _local_dir_info(local_hf)
 
-    # Local free space on root partition
-    _df_result = _sp.run(["df", "-h", "/"], capture_output=True, text=True)
-    local_free_space = "-"
-    if _df_result.returncode == 0 and _df_result.stdout.strip():
-        _df_lines = _df_result.stdout.strip().splitlines()
-        if len(_df_lines) >= 2:
-            local_free_space = _df_lines[1].split()[3]
-
     # Collect effective config summary
     effective_config = {
         "cluster": cluster_cfg.name,
@@ -942,7 +935,6 @@ def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_
             "local": {
                 "sparkrun_cache": {"path": local_sparkrun, "exists": local_sr_exists == "yes", "size": local_sr_du},
                 "hf_cache": {"path": local_hf, "exists": local_hf_exists == "yes", "size": local_hf_du},
-                "free_space": local_free_space,
             },
             "remote": {},
         }
@@ -958,7 +950,6 @@ def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_
                         "size": info.get("sr_du", "-"),
                     },
                     "hf_cache": {"path": info.get("hf_dir", "?"), "exists": info.get("hf_exists") == "yes", "size": info.get("hf_du", "-")},
-                    "free_space": info.get("free_space", "-"),
                 }
         print_json(data)
         return
@@ -1005,14 +996,9 @@ def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_
 
     # Directory status table
     click.echo("Directory Status:")
-    click.echo(
-        "  %-30s %-10s %-10s %-10s %-10s %-12s %s" % ("Host", "SR exists", "SR size", "HF exists", "HF size", "Free Space", "HF path")
-    )
-    click.echo("  " + "-" * 112)
-    click.echo(
-        "  %-30s %-10s %-10s %-10s %-10s %-12s %s"
-        % ("(local)", local_sr_exists, local_sr_du, local_hf_exists, local_hf_du, local_free_space, local_hf)
-    )
+    click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % ("Host", "SR exists", "SR size", "HF exists", "HF size", "HF path"))
+    click.echo("  " + "-" * 100)
+    click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % ("(local)", local_sr_exists, local_sr_du, local_hf_exists, local_hf_du, local_hf))
     for h in host_list:
         info = host_info.get(h, {})
         if "error" in info:
@@ -1022,6 +1008,5 @@ def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_
             sr_du = info.get("sr_du", "-")
             hf_exists = info.get("hf_exists", "?")
             hf_du = info.get("hf_du", "-")
-            free_space = info.get("free_space", "-")
             hf_dir = info.get("hf_dir", "?")
-            click.echo("  %-30s %-10s %-10s %-10s %-10s %-12s %s" % (h, sr_exists, sr_du, hf_exists, hf_du, free_space, hf_dir))
+            click.echo("  %-30s %-10s %-10s %-10s %-10s %s" % (h, sr_exists, sr_du, hf_exists, hf_du, hf_dir))

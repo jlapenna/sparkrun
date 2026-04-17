@@ -171,9 +171,6 @@ def generate_nccl_env(ib_info: dict[str, str], topology: str | None = None) -> d
     if ib_info.get("DETECTED_UCX_LIST"):
         env["UCX_NET_DEVICES"] = ib_info["DETECTED_UCX_LIST"]
 
-    # add NODE_IP for management interface for ray script compatibility
-    env["NODE_IP"] = ib_info.get("DETECTED_MGMT_IP", "")
-
     if topology == "ring":
         env.update(generate_ring_nccl_overrides(ib_info))
     elif ib_info.get("DETECTED_GID_INDEX"):  # only do group ID for non-mesh topologies
