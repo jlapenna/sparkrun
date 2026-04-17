@@ -1,0 +1,633 @@
+/home/jlapenna/services/sparkrun/src/sparkrun/arena/auth.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/arena/auth.py:256:12 - error: Type "tuple[str, str]" is not assignable to return type "str | None"
+    Type "tuple[str, str]" is not assignable to type "str | None"
+      "tuple[str, str]" is not assignable to "str"
+      "tuple[str, str]" is not assignable to "None" (reportReturnType)
+/home/jlapenna/services/sparkrun/src/sparkrun/builders/eugr.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/builders/eugr.py:121:21 - error: Type "None" is not assignable to declared type "Variables"
+    "None" is not assignable to "Variables" (reportAssignmentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/builders/eugr.py:124:9 - error: Method "initialize" overrides class "BuilderPlugin" in an incompatible manner
+    Parameter 3 name mismatch: base parameter is named "logger", override parameter is named "logger_arg" (reportIncompatibleMethodOverride)
+  /home/jlapenna/services/sparkrun/src/sparkrun/builders/eugr.py:346:13 - error: Argument of type "str | None" cannot be assigned to parameter "ghcr_pkg" of type "str" in function "_match_via_ghcr_api"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/builders/eugr.py:738:24 - error: Operator "/" not supported for "None" (reportOptionalOperand)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_arena.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_arena.py:295:27 - error: Argument of type "str | None" cannot be assigned to parameter "refresh_token" of type "str" in function "upload_benchmark_results"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:301:21 - error: "validate" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:306:38 - error: "runtime" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:311:46 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "validate_recipe"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:326:31 - error: "build_config_chain" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:332:42 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "generate_cluster_id"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:334:49 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "resolve_container"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:337:27 - error: "build_config_chain" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:348:53 - error: "qualified_name" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:349:53 - error: "model" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:383:27 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "generate_cluster_id"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:401:24 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "launch_inference"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:458:96 - error: "serve_port" is possibly unbound (reportPossiblyUnboundVariable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:462:17 - error: "serve_port" is possibly unbound (reportPossiblyUnboundVariable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:475:65 - error: "serve_port" is possibly unbound (reportPossiblyUnboundVariable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:490:91 - error: "serve_port" is possibly unbound (reportPossiblyUnboundVariable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:492:52 - error: "serve_port" is possibly unbound (reportPossiblyUnboundVariable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:504:31 - error: "build_config_chain" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:505:101 - error: "model" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:545:29 - error: Object of type "None" cannot be used as iterable value (reportOptionalIterable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:551:43 - error: "read" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:573:17 - error: "proc" is possibly unbound (reportPossiblyUnboundVariable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:609:40 - error: "name" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_benchmark.py:618:28 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "export_results"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_cluster.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_cluster.py:497:37 - error: Argument of type "NvMonitorClusterMonitor | ClusterMonitor" cannot be assigned to parameter "monitor" of type "ClusterMonitor" in function "__init__"
+    Type "NvMonitorClusterMonitor | ClusterMonitor" is not assignable to type "ClusterMonitor"
+      "NvMonitorClusterMonitor" is not assignable to "ClusterMonitor" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_cluster.py:711:34 - error: Argument of type "str | None" cannot be assigned to parameter "cluster_id" of type "str" in function "load_job_metadata"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_export.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_export.py:119:30 - error: Argument of type "str | None" cannot be assigned to parameter "cluster_id" of type "str" in function "load_job_metadata"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_export.py:419:34 - error: Argument of type "str | None" cannot be assigned to parameter "cluster_id" of type "str" in function "load_job_metadata"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_export.py:561:35 - error: "slug" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_export.py:576:26 - error: "export" is not a known attribute of "None" (reportOptionalMemberAccess)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_monitor_tui.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_monitor_tui.py:93:24 - error: Type "MonitorSample | None" is not assignable to declared type "MonitorSample"
+    Type "MonitorSample | None" is not assignable to type "MonitorSample"
+      "None" is not assignable to "MonitorSample" (reportAssignmentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_monitor_tui.py:366:46 - error: Object of type "object" is not callable
+    Attribute "__call__" is unknown (reportCallIssue)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_proxy.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_proxy.py:560:21 - error: "validate" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_proxy.py:568:38 - error: "runtime" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_proxy.py:586:16 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "launch_inference"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_registry.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_registry.py:378:72 - error: No overloads for "relative_to" match the provided arguments (reportCallIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_registry.py:378:86 - error: Argument of type "Path | None" cannot be assigned to parameter "other" of type "StrPath" in function "relative_to"
+    Type "Path | None" is not assignable to type "StrPath"
+      Type "None" is not assignable to type "StrPath"
+        "None" is not assignable to "str"
+        "None" is incompatible with protocol "PathLike[str]"
+          "__fspath__" is not present (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:184:21 - error: "validate" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:191:38 - error: "runtime" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:197:46 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "validate_recipe"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:219:15 - error: "mode" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:227:36 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "generate_cluster_id"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:246:49 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "resolve_container"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:251:41 - error: "model" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:333:20 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "launch_inference"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:399:34 - error: "post_exec" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_run.py:399:54 - error: "post_commands" is not a known attribute of "None" (reportOptionalMemberAccess)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:76:17 - error: Operator "+" not supported for types "LiteralString | Unbound" and "Literal['\n']"
+    Operator "+" not supported for types "Unbound" and "Literal['\n']" when expected type is "str" (reportOperatorIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:76:17 - error: "snippet" is possibly unbound (reportPossiblyUnboundVariable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1041:42 - error: Argument of type "CX7TopologyResult | None" cannot be assigned to parameter "topology_result" of type "CX7TopologyResult" in function "plan_ring_cx7"
+    Type "CX7TopologyResult | None" is not assignable to type "CX7TopologyResult"
+      "None" is not assignable to "CX7TopologyResult" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1232:20 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1233:72 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1250:80 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1251:86 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1255:24 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1256:50 - error: Cannot access attribute "stderr" for class "object"
+    Attribute "stderr" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1257:22 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1258:72 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1271:55 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1271:55 - error: "stdout" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1441:14 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1442:29 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1444:54 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1447:54 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1450:50 - error: Cannot access attribute "stderr" for class "object"
+    Attribute "stderr" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1605:14 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1607:50 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1610:50 - error: Cannot access attribute "stderr" for class "object"
+    Attribute "stderr" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1705:20 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1706:68 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1731:92 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1755:80 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1756:86 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1760:24 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1761:50 - error: Cannot access attribute "stderr" for class "object"
+    Attribute "stderr" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1772:29 - error: Operator "in" not supported for types "Literal['INSTALLING:']" and "object | Unknown | Literal['']"
+    Operator "in" not supported for types "Literal['INSTALLING:']" and "object" (reportOperatorIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1772:83 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1846:29 - error: Cannot access attribute "get_cluster" for class "ClusterManager"
+    Attribute "get_cluster" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1928:26 - error: Argument of type "Any | None" cannot be assigned to parameter "password" of type "str" in function "run_sudo_script_on_host"
+    Type "Any | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_commands.py:1960:34 - error: Argument of type "Any | None" cannot be assigned to parameter "password" of type "str" in function "run_sudo_script_on_host"
+    Type "Any | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_phases.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_phases.py:152:80 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_phases.py:193:17 - error: Object of type "None" cannot be called (reportOptionalCall)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_phases.py:255:80 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_phases.py:256:25 - error: Operator "in" not supported for types "Literal['INSTALLING:']" and "object | Unknown | Literal['']"
+    Operator "in" not supported for types "Literal['INSTALLING:']" and "object" (reportOperatorIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_phases.py:256:79 - error: Cannot access attribute "stdout" for class "object"
+    Attribute "stdout" is unknown (reportAttributeAccessIssue)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_wizard.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_setup/_wizard.py:20:5 - error: Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths (reportGeneralTypeIssues)
+/home/jlapenna/services/sparkrun/src/sparkrun/cli/_stop_logs.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_stop_logs.py:139:30 - error: Argument of type "str | None" cannot be assigned to parameter "cluster_id" of type "str" in function "load_job_metadata"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_stop_logs.py:152:52 - error: Argument of type "str | None" cannot be assigned to parameter "cluster_id" of type "str" in function "enumerate_cluster_containers"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_stop_logs.py:161:29 - error: Argument of type "str | None" cannot be assigned to parameter "cluster_id" of type "str" in function "remove_job_metadata"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_stop_logs.py:248:34 - error: Argument of type "str | None" cannot be assigned to parameter "cluster_id" of type "str" in function "load_job_metadata"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_stop_logs.py:276:28 - error: Argument of type "str | None" cannot be assigned to parameter "cluster_id" of type "str" in function "follow_logs"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_stop_logs.py:286:30 - error: Operator "+" not supported for "None" (reportOptionalOperand)
+  /home/jlapenna/services/sparkrun/src/sparkrun/cli/_stop_logs.py:286:78 - error: Operator "+" not supported for "None" (reportOptionalOperand)
+/home/jlapenna/services/sparkrun/src/sparkrun/core/bootstrap.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/bootstrap.py:100:12 - error: Type "Variables | None" is not assignable to return type "Variables"
+    Type "Variables | None" is not assignable to type "Variables"
+      "None" is not assignable to "Variables" (reportReturnType)
+/home/jlapenna/services/sparkrun/src/sparkrun/core/cluster_manager.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/cluster_manager.py:236:28 - error: Expression of type "object" cannot be assigned to parameter of type "str | None"
+    Type "object" is not assignable to type "str | None"
+      "object" is not assignable to "str"
+      "object" is not assignable to "None" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/cluster_manager.py:237:33 - error: Expression of type "object" cannot be assigned to parameter of type "str | None"
+    Type "object" is not assignable to type "str | None"
+      "object" is not assignable to "str"
+      "object" is not assignable to "None" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/cluster_manager.py:238:37 - error: Expression of type "object" cannot be assigned to parameter of type "str | None"
+    Type "object" is not assignable to type "str | None"
+      "object" is not assignable to "str"
+      "object" is not assignable to "None" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/cluster_manager.py:239:42 - error: Expression of type "object" cannot be assigned to parameter of type "str | None"
+    Type "object" is not assignable to type "str | None"
+      "object" is not assignable to "str"
+      "object" is not assignable to "None" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/cluster_manager.py:240:32 - error: Expression of type "object" cannot be assigned to parameter of type "str | None"
+    Type "object" is not assignable to type "str | None"
+      "object" is not assignable to "str"
+      "object" is not assignable to "None" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/core/config.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/config.py:58:25 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "args" of type "StrPath" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "StrPath"
+      Type "object" is not assignable to type "StrPath"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "PathLike[str]"
+          "__fspath__" is not present (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/config.py:58:25 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "args" of type "StrPath" in function "__init__"
+    Type "Unknown | Any | str | object" is not assignable to type "StrPath"
+      Type "object" is not assignable to type "StrPath"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "PathLike[str]"
+          "__fspath__" is not present (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/config.py:72:26 - error: Cannot assign to attribute "_data" for class "SparkrunConfig*"
+    Type "Unknown | dict[str, Any] | str | Any | dict[Unknown, Unknown] | tuple[str | Any | Unknown | dict[Unknown, Unknown], str | Any | Unknown]" is not assignable to type "dict[str, Any]"
+      "str" is not assignable to "dict[str, Any]" (reportAttributeAccessIssue)
+/home/jlapenna/services/sparkrun/src/sparkrun/core/hosts.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/hosts.py:41:33 - error: Argument of type "str | int" cannot be assigned to parameter "element" of type "str" in function "add"
+    Type "str | int" is not assignable to type "str"
+      "int" is not assignable to "str" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:155:51 - error: "hf_cache_dir" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:171:28 - error: Argument of type "Unknown | Any | str | object | Literal[8000]" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object | Literal[8000]" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:171:28 - error: Argument of type "Unknown | Any | str | object | Literal[8000]" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object | Literal[8000]" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:182:26 - error: Argument of type "Unknown | Any | str | object | Literal[8000]" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object | Literal[8000]" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:182:26 - error: Argument of type "Unknown | Any | str | object | Literal[8000]" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object | Literal[8000]" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:227:38 - error: "cache_dir" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:256:13 - error: Argument of type "SparkrunConfig | None" cannot be assigned to parameter "config" of type "SparkrunConfig" in function "distribute_resources"
+    Type "SparkrunConfig | None" is not assignable to type "SparkrunConfig"
+      "None" is not assignable to "SparkrunConfig" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:273:42 - error: "cache_dir" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:300:17 - error: Argument of type "RegistryManager | None" cannot be assigned to parameter "registry_manager" of type "RegistryManager" in function "sync_registry_tuning"
+    Type "RegistryManager | None" is not assignable to type "RegistryManager"
+      "None" is not assignable to "RegistryManager" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:487:46 - error: "cache_dir" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:508:16 - error: Argument of type "SparkrunConfig | None" cannot be assigned to parameter "config" of type "SparkrunConfig" in function "__init__"
+    Type "SparkrunConfig | None" is not assignable to type "SparkrunConfig"
+      "None" is not assignable to "SparkrunConfig" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:591:13 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "port" of type "int" in function "wait_for_port"
+    Type "Unknown | Any | str | object" is not assignable to type "int"
+      "object" is not assignable to "int" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/launcher.py:614:14 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "port" of type "int | str | None" in function "build_hook_context"
+    Type "Unknown | Any | str | object" is not assignable to type "int | str | None"
+      Type "object" is not assignable to type "int | str | None"
+        "object" is not assignable to "int"
+        "object" is not assignable to "str"
+        "object" is not assignable to "None" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/core/monitoring.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/monitoring.py:286:24 - error: "write" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/monitoring.py:287:24 - error: "close" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/monitoring.py:318:29 - error: Object of type "None" cannot be used as iterable value (reportOptionalIterable)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/monitoring.py:494:24 - error: "write" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/monitoring.py:495:24 - error: "close" is not a known attribute of "None" (reportOptionalMemberAccess)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/monitoring.py:525:29 - error: Object of type "None" cannot be used as iterable value (reportOptionalIterable)
+/home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:332:64 - error: Cannot access attribute "reason" for class "OSError"
+    Attribute "reason" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:550:20 - error: No overloads for "sub" match the provided arguments (reportCallIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:550:64 - error: Argument of type "str | list[list[Unknown] | str | None] | None" cannot be assigned to parameter "string" of type "str" in function "sub"
+    Type "str | list[list[Unknown] | str | None] | None" is not assignable to type "str"
+      "list[list[Unknown] | str | None]" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:784:33 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:784:33 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:787:31 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:787:31 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:790:33 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:790:33 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:800:40 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToFloat"
+      Type "object" is not assignable to type "ConvertibleToFloat"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsFloat"
+          "__float__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/recipe.py:800:40 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToFloat"
+      Type "object" is not assignable to type "ConvertibleToFloat"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsFloat"
+          "__float__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/core/registry.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/registry.py:322:27 - error: Cannot access attribute "get" for class "str"
+    Attribute "get" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/core/registry.py:322:27 - error: Cannot access attribute "get" for class "tuple[str | Any | Unknown | dict[Unknown, Unknown], str | Any | Unknown]"
+    Attribute "get" is unknown (reportAttributeAccessIssue)
+/home/jlapenna/services/sparkrun/src/sparkrun/diagnostics/run_collector.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/diagnostics/run_collector.py:225:18 - error: Type "list[str]" is not assignable to declared type "str | None"
+    Type "list[str]" is not assignable to type "str | None"
+      "list[str]" is not assignable to "str"
+      "list[str]" is not assignable to "None" (reportAssignmentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/diagnostics/run_collector.py:226:18 - error: No overloads for "join" match the provided arguments (reportCallIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/diagnostics/run_collector.py:226:26 - error: Argument of type "str | None" cannot be assigned to parameter "iterable" of type "Iterable[str]" in function "join"
+    Type "str | None" is not assignable to type "Iterable[str]"
+      "None" is incompatible with protocol "Iterable[str]"
+        "__iter__" is not present (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/models/download.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/download.py:324:43 - error: "enable_progress_bars" is not exported from module "huggingface_hub.utils"
+    Import from "huggingface_hub.utils.tqdm" instead (reportPrivateImportUsage)
+/home/jlapenna/services/sparkrun/src/sparkrun/models/gguf.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/gguf.py:197:12 - error: No overloads for "max" match the provided arguments (reportCallIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/gguf.py:197:34 - error: Argument of type "Overload[(key: str, default: None = None, /) -> (int | None), (key: str, default: int, /) -> int, (key: str, default: _T@get, /) -> (int | _T@get)]" cannot be assigned to parameter "key" of type "(_T@max) -> SupportsRichComparison" in function "max"
+    No overloaded function matches type "(str) -> SupportsRichComparison" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/gguf.py:231:43 - error: "build_hf_headers" is not exported from module "huggingface_hub.utils"
+    Import from "huggingface_hub.utils._headers" instead (reportPrivateImportUsage)
+/home/jlapenna/services/sparkrun/src/sparkrun/models/quantization.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/quantization.py:44:43 - error: "disable_progress_bars" is not exported from module "huggingface_hub.utils"
+    Import from "huggingface_hub.utils.tqdm" instead (reportPrivateImportUsage)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/quantization.py:44:66 - error: "enable_progress_bars" is not exported from module "huggingface_hub.utils"
+    Import from "huggingface_hub.utils.tqdm" instead (reportPrivateImportUsage)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/quantization.py:142:16 - error: No overloads for "max" match the provided arguments (reportCallIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/quantization.py:142:37 - error: Argument of type "Overload[(key: str, default: None = None, /) -> (int | None), (key: str, default: int, /) -> int, (key: str, default: _T@get, /) -> (int | _T@get)]" cannot be assigned to parameter "key" of type "(_T@max) -> SupportsRichComparison" in function "max"
+    No overloaded function matches type "(str) -> SupportsRichComparison" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py:195:43 - error: "disable_progress_bars" is not exported from module "huggingface_hub.utils"
+    Import from "huggingface_hub.utils.tqdm" instead (reportPrivateImportUsage)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py:195:66 - error: "enable_progress_bars" is not exported from module "huggingface_hub.utils"
+    Import from "huggingface_hub.utils.tqdm" instead (reportPrivateImportUsage)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py:238:43 - error: "disable_progress_bars" is not exported from module "huggingface_hub.utils"
+    Import from "huggingface_hub.utils.tqdm" instead (reportPrivateImportUsage)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py:238:66 - error: "enable_progress_bars" is not exported from module "huggingface_hub.utils"
+    Import from "huggingface_hub.utils.tqdm" instead (reportPrivateImportUsage)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py:311:66 - error: Cannot access attribute "rfilename" for class "RepoFolder"
+    Attribute "rfilename" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py:311:101 - error: Cannot access attribute "size" for class "RepoFolder"
+    Attribute "size" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py:311:116 - error: Cannot access attribute "size" for class "RepoFolder"
+    Attribute "size" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/models/vram.py:312:49 - error: Cannot access attribute "size" for class "RepoFolder"
+    Attribute "size" is unknown (reportAttributeAccessIssue)
+/home/jlapenna/services/sparkrun/src/sparkrun/orchestration/hooks.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/hooks.py:97:12 - error: Type "str | list[list[Unknown] | str | None] | None" is not assignable to return type "str"
+    Type "str | list[list[Unknown] | str | None] | None" is not assignable to type "str"
+      "list[list[Unknown] | str | None]" is not assignable to "str" (reportReturnType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/hooks.py:204:37 - error: Argument of type "list[str]" cannot be assigned to parameter "commands" of type "list[str | dict[str, str]]" in function "render_hook_commands"
+    "list[str]" is not assignable to "list[str | dict[str, str]]"
+      Type parameter "_T@list" is invariant, but "str" is not the same as "str | dict[str, str]"
+      Consider switching from "list" to "Sequence" which is covariant (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/hooks.py:260:37 - error: Argument of type "list[str]" cannot be assigned to parameter "commands" of type "list[str | dict[str, str]]" in function "render_hook_commands"
+    "list[str]" is not assignable to "list[str | dict[str, str]]"
+      Type parameter "_T@list" is invariant, but "str" is not the same as "str | dict[str, str]"
+      Consider switching from "list" to "Sequence" which is covariant (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/orchestration/job_metadata.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/job_metadata.py:95:17 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/job_metadata.py:96:19 - error: Argument of type "Unknown | list[str] | None" cannot be assigned to parameter "obj" of type "Sized" in function "len"
+    Type "Unknown | list[str] | None" is not assignable to type "Sized"
+      "None" is incompatible with protocol "Sized"
+        "__len__" is not present (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/job_metadata.py:129:15 - error: Argument of type "Unknown | list[str] | None" cannot be assigned to parameter "hosts" of type "list[str]" in function "__init__"
+    Type "Unknown | list[str] | None" is not assignable to type "list[str]"
+      "None" is not assignable to "list[str]" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/orchestration/networking.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/networking.py:695:62 - error: Argument of type "str | None" cannot be assigned to parameter "password" of type "str" in function "run_remote_sudo_script"
+    Type "str | None" is not assignable to type "str"
+      "None" is not assignable to "str" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/networking.py:1483:23 - error: Operator "+" not supported for "None" (reportOptionalOperand)
+/home/jlapenna/services/sparkrun/src/sparkrun/orchestration/sudo.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/orchestration/sudo.py:369:89 - error: Cannot access attribute "success" for class "object"
+    Attribute "success" is unknown (reportAttributeAccessIssue)
+/home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_cluster_ops.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_cluster_ops.py:436:16 - error: Argument of type "Recipe | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "generate_node_command"
+    Type "Recipe | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_cluster_ops.py:437:19 - error: Argument of type "dict[str, Any] | None" cannot be assigned to parameter "overrides" of type "dict[str, Any]" in function "generate_node_command"
+    Type "dict[str, Any] | None" is not assignable to type "dict[str, Any]"
+      "None" is not assignable to "dict[str, Any]" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_cluster_ops.py:557:28 - error: Argument of type "Recipe | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "generate_node_command"
+    Type "Recipe | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_cluster_ops.py:558:31 - error: Argument of type "dict[str, Any] | None" cannot be assigned to parameter "overrides" of type "dict[str, Any]" in function "generate_node_command"
+    Type "dict[str, Any] | None" is not assignable to type "dict[str, Any]"
+      "None" is not assignable to "dict[str, Any]" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_util.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_util.py:1:50 - error: Expression of type "None" cannot be assigned to parameter of type "dict[str, str]"
+    "None" is not assignable to "dict[str, str]" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_vllm_common.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_vllm_common.py:28:23 - error: Cannot access attribute "get_extra_env" for class "object"
+    Attribute "get_extra_env" is unknown (reportAttributeAccessIssue)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/_vllm_common.py:33:24 - error: Cannot access attribute "version_commands" for class "object"
+    Attribute "version_commands" is unknown (reportAttributeAccessIssue)
+/home/jlapenna/services/sparkrun/src/sparkrun/runtimes/eugr_vllm_ray.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/eugr_vllm_ray.py:39:21 - error: Type "None" is not assignable to declared type "Variables"
+    "None" is not assignable to "Variables" (reportAssignmentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/eugr_vllm_ray.py:44:9 - error: Method "initialize" overrides class "RuntimePlugin" in an incompatible manner
+    Parameter 3 name mismatch: base parameter is named "logger", override parameter is named "logger_arg" (reportIncompatibleMethodOverride)
+/home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:152:34 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:152:34 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:152:43 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:152:43 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:160:24 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:160:24 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:162:24 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:162:24 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/llama_cpp.py:578:13 - error: Argument of type "Unknown | None" cannot be assigned to parameter "recipe" of type "Recipe" in function "_build_rpc_head_command"
+    Type "Unknown | None" is not assignable to type "Recipe"
+      "None" is not assignable to "Recipe" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/runtimes/trtllm.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/trtllm.py:264:58 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToFloat"
+      Type "object" is not assignable to type "ConvertibleToFloat"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsFloat"
+          "__float__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/trtllm.py:264:58 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToFloat" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToFloat"
+      Type "object" is not assignable to type "ConvertibleToFloat"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsFloat"
+          "__float__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/trtllm.py:281:48 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex"
+    ... (reportArgumentType)
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/trtllm.py:281:48 - error: Argument of type "Unknown | Any | str | object" cannot be assigned to parameter "x" of type "ConvertibleToInt" in function "__new__"
+    Type "Unknown | Any | str | object" is not assignable to type "ConvertibleToInt"
+      Type "object" is not assignable to type "ConvertibleToInt"
+        "object" is not assignable to "str"
+        "object" is incompatible with protocol "Buffer"
+          "__buffer__" is not present
+        "object" is incompatible with protocol "SupportsInt"
+          "__int__" is not present
+        "object" is incompatible with protocol "SupportsIndex" (reportArgumentType)
+/home/jlapenna/services/sparkrun/src/sparkrun/runtimes/vllm_ray.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/runtimes/vllm_ray.py:383:9 - error: Method "_print_connection_info" overrides class "RuntimePlugin" in an incompatible manner
+    Parameter "per_node_logs" is missing in override (reportIncompatibleMethodOverride)
+/home/jlapenna/services/sparkrun/src/sparkrun/tuning/_common.py
+  /home/jlapenna/services/sparkrun/src/sparkrun/tuning/_common.py:36:20 - error: Expected class but received "(obj: object, /) -> TypeIs[(...) -> object]" (reportGeneralTypeIssues)
+  /home/jlapenna/services/sparkrun/src/sparkrun/tuning/_common.py:55:17 - error: Expected class but received "(obj: object, /) -> TypeIs[(...) -> object]" (reportGeneralTypeIssues)
+193 errors, 0 warnings, 0 informations

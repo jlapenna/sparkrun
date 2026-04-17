@@ -1,0 +1,1617 @@
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/arena/auth.py:79:11
+   |
+77 |       url = "%s/exchange" % AUTH_PROXY_BASE
+78 |       payload = json.dumps({"refresh_token": refresh_token}).encode()
+79 |       req = Request(
+   |  ___________^
+80 | |         url,
+81 | |         data=payload,
+82 | |         headers={
+83 | |             "Content-Type": "application/json",
+84 | |             "User-Agent": _user_agent(),
+85 | |         },
+86 | |     )
+   | |_____^
+87 |       try:
+88 |           with urlopen(req, timeout=15) as resp:
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/arena/auth.py:88:14
+   |
+86 |     )
+87 |     try:
+88 |         with urlopen(req, timeout=15) as resp:
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^
+89 |             data = json.loads(resp.read())
+90 |     except HTTPError as e:
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/arena/auth.py:268:11
+    |
+266 |       # Request a device code
+267 |       url = "%s/device/code" % AUTH_PROXY_BASE
+268 |       req = Request(
+    |  ___________^
+269 | |         url,
+270 | |         data=b"{}",
+271 | |         headers={
+272 | |             "Content-Type": "application/json",
+273 | |             "User-Agent": _user_agent(),
+274 | |         },
+275 | |         method="POST",
+276 | |     )
+    | |_____^
+277 |       try:
+278 |           with urlopen(req, timeout=15) as resp:
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/arena/auth.py:278:14
+    |
+276 |     )
+277 |     try:
+278 |         with urlopen(req, timeout=15) as resp:
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+279 |             data = json.loads(resp.read())
+280 |     except (URLError, HTTPError) as e:
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/arena/auth.py:312:20
+    |
+311 |           payload = json.dumps({"device_code": device_code}).encode()
+312 |           poll_req = Request(
+    |  ____________________^
+313 | |             poll_url,
+314 | |             data=payload,
+315 | |             headers={
+316 | |                 "Content-Type": "application/json",
+317 | |                 "User-Agent": _user_agent(),
+318 | |             },
+319 | |             method="POST",
+320 | |         )
+    | |_________^
+321 |           try:
+322 |               with urlopen(poll_req, timeout=15) as resp:
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/arena/auth.py:322:18
+    |
+320 |         )
+321 |         try:
+322 |             with urlopen(poll_req, timeout=15) as resp:
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+323 |                 poll_data = json.loads(resp.read())
+324 |         except HTTPError as e:
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/arena/upload.py:43:11
+   |
+41 |     )
+42 |
+43 |     req = Request(upload_url, data=file_data, method="POST")
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+44 |     req.add_header("Authorization", "Bearer %s" % id_token)
+45 |     req.add_header("Content-Type", "application/octet-stream")
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/arena/upload.py:49:14
+   |
+48 |     try:
+49 |         with urlopen(req, timeout=60) as resp:
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^
+50 |             if resp.status == 200:
+51 |                 logger.debug("Uploaded %s -> %s", file_name, object_name)
+   |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/benchmarking/base.py:302:9
+    |
+300 |                   "version": sparkrun_version,
+301 |               }
+302 | /         except Exception:
+303 | |             pass
+    | |________________^
+304 |
+305 |           return metadata
+    |
+
+S105 Possible hardcoded password assigned to: "_GHCR_TOKEN_URL"
+  --> src/sparkrun/builders/_ghcr.py:23:19
+   |
+22 | # GHCR token endpoint for anonymous bearer auth
+23 | _GHCR_TOKEN_URL = "https://ghcr.io/token?scope=repository:{package}:pull&service=ghcr.io"
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+24 |
+25 | # Timeout for HTTP requests (seconds)
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/builders/_ghcr.py:37:15
+   |
+35 |     url = _GHCR_TOKEN_URL.format(package=package)
+36 |     try:
+37 |         req = urllib.request.Request(url, headers={"User-Agent": "sparkrun"})
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+38 |         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+39 |             data = json.loads(resp.read().decode("utf-8"))
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/builders/_ghcr.py:38:14
+   |
+36 |     try:
+37 |         req = urllib.request.Request(url, headers={"User-Agent": "sparkrun"})
+38 |         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+39 |             data = json.loads(resp.read().decode("utf-8"))
+40 |         return data.get("token")
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/builders/_ghcr.py:79:15
+   |
+78 |       try:
+79 |           req = urllib.request.Request(
+   |  _______________^
+80 | |             url,
+81 | |             headers={"Accept": "application/json", "User-Agent": "sparkrun"},
+82 | |         )
+   | |_________^
+83 |           with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+84 |               body = resp.read().decode("utf-8")
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/builders/_ghcr.py:83:14
+   |
+81 |             headers={"Accept": "application/json", "User-Agent": "sparkrun"},
+82 |         )
+83 |         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+84 |             body = resp.read().decode("utf-8")
+85 |         data = json.loads(body)
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/builders/_ghcr.py:119:15
+    |
+117 |         if token:
+118 |             headers["Authorization"] = "Bearer %s" % token
+119 |         req = urllib.request.Request(url, headers=headers)
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+120 |         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+121 |             data = json.loads(resp.read().decode("utf-8"))
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/builders/_ghcr.py:120:14
+    |
+118 |             headers["Authorization"] = "Bearer %s" % token
+119 |         req = urllib.request.Request(url, headers=headers)
+120 |         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+121 |             data = json.loads(resp.read().decode("utf-8"))
+122 |         tags = data.get("tags", [])
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/builders/_ghcr.py:143:15
+    |
+142 |           # Fetch manifest (request OCI or Docker manifest)
+143 |           req = urllib.request.Request(
+    |  _______________^
+144 | |             manifest_url,
+145 | |             headers={
+146 | |                 **headers,
+147 | |                 "Accept": ("application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"),
+148 | |             },
+149 | |         )
+    | |_________^
+150 |           with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+151 |               manifest = json.loads(resp.read().decode("utf-8"))
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/builders/_ghcr.py:150:14
+    |
+148 |             },
+149 |         )
+150 |         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+151 |             manifest = json.loads(resp.read().decode("utf-8"))
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/builders/_ghcr.py:170:15
+    |
+168 |         # Fetch config blob
+169 |         blob_url = "%s/%s/blobs/%s" % (_GHCR_API, image_name, config_digest)
+170 |         req = urllib.request.Request(blob_url, headers=headers)
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+171 |         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+172 |             config_data = json.loads(resp.read().decode("utf-8"))
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/builders/_ghcr.py:171:14
+    |
+169 |         blob_url = "%s/%s/blobs/%s" % (_GHCR_API, image_name, config_digest)
+170 |         req = urllib.request.Request(blob_url, headers=headers)
+171 |         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+172 |             config_data = json.loads(resp.read().decode("utf-8"))
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/builders/eugr.py:95:19
+   |
+93 |         ]:
+94 |             url = _GITHUB_RELEASE_URL % tag
+95 |             req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+96 |             with urllib.request.urlopen(req, timeout=15) as resp:
+97 |                 data = json.loads(resp.read())
+   |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+  --> src/sparkrun/builders/eugr.py:96:18
+   |
+94 |             url = _GITHUB_RELEASE_URL % tag
+95 |             req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+96 |             with urllib.request.urlopen(req, timeout=15) as resp:
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+97 |                 data = json.loads(resp.read())
+98 |             name = data.get("name", "")
+   |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/builders/eugr.py:408:9
+    |
+407 |               cache_dir = resolve_sparkrun_cache_dir()
+408 | /         except Exception:
+409 | |             pass
+    | |________________^
+410 |
+411 |           entries = fetch_build_index(
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:619:26
+    |
+617 |         else:
+618 |             try:
+619 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+620 |                     ["git", "-C", str(self._repo_dir), "rev-parse", "HEAD"],
+621 |                     capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/builders/eugr.py:620:21
+    |
+618 |             try:
+619 |                 result = subprocess.run(
+620 |                     ["git", "-C", str(self._repo_dir), "rev-parse", "HEAD"],
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+621 |                     capture_output=True,
+622 |                     text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:666:30
+    |
+664 |             else:
+665 |                 try:
+666 |                     result = subprocess.run(
+    |                              ^^^^^^^^^^^^^^
+667 |                         ["git", "-C", str(self._repo_dir), "rev-parse", "HEAD"],
+668 |                         capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/builders/eugr.py:667:25
+    |
+665 |                 try:
+666 |                     result = subprocess.run(
+667 |                         ["git", "-C", str(self._repo_dir), "rev-parse", "HEAD"],
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+668 |                         capture_output=True,
+669 |                         text=True,
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/builders/eugr.py:673:17
+    |
+671 |                       if result.returncode == 0:
+672 |                           repo_commit = result.stdout.strip()
+673 | /                 except Exception:
+674 | |                     pass
+    | |________________________^
+675 |
+676 |           # Extract build-metadata.yaml from the built image
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:694:26
+    |
+692 |         else:
+693 |             try:
+694 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+695 |                     ["docker", "run", "--rm", quote(image), "cat", "/workspace/build-metadata.yaml"],
+696 |                     capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/builders/eugr.py:695:21
+    |
+693 |             try:
+694 |                 result = subprocess.run(
+695 |                     ["docker", "run", "--rm", quote(image), "cat", "/workspace/build-metadata.yaml"],
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+696 |                     capture_output=True,
+697 |                     text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:751:22
+    |
+749 |         stream = logging.getLogger().isEnabledFor(logging.INFO)
+750 |         if stream:
+751 |             result = subprocess.run(cmd, cwd=str(self._repo_dir))
+    |                      ^^^^^^^^^^^^^^
+752 |         else:
+753 |             result = subprocess.run(cmd, cwd=str(self._repo_dir), capture_output=True, text=True)
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:753:22
+    |
+751 |             result = subprocess.run(cmd, cwd=str(self._repo_dir))
+752 |         else:
+753 |             result = subprocess.run(cmd, cwd=str(self._repo_dir), capture_output=True, text=True)
+    |                      ^^^^^^^^^^^^^^
+754 |             if result.stdout and isinstance(result.stdout, str):
+755 |                 logger.debug("Build stdout:\n%s", result.stdout[-2000:])
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:936:22
+    |
+934 |                 cmd += ["-b", quote(branch)]
+935 |             cmd += [EUGR_REPO_URL, str(repo_dir)]
+936 |             result = subprocess.run(cmd, capture_output=True, text=True)
+    |                      ^^^^^^^^^^^^^^
+937 |             if result.returncode != 0:
+938 |                 raise RuntimeError("Failed to clone eugr repo: %s" % result.stderr.strip())
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:949:9
+    |
+947 |             return  # not sparse, nothing to do
+948 |         logger.debug("Disabling sparse checkout on %s", repo_dir)
+949 |         subprocess.run(
+    |         ^^^^^^^^^^^^^^
+950 |             ["git", "-C", str(repo_dir), "sparse-checkout", "disable"],
+951 |             capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/builders/eugr.py:950:13
+    |
+948 |         logger.debug("Disabling sparse checkout on %s", repo_dir)
+949 |         subprocess.run(
+950 |             ["git", "-C", str(repo_dir), "sparse-checkout", "disable"],
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+951 |             capture_output=True,
+952 |             text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:964:13
+    |
+962 |         if branch:
+963 |             logger.info("Updating eugr/spark-vllm-docker repo (branch: %s)...", branch)
+964 |             subprocess.run(
+    |             ^^^^^^^^^^^^^^
+965 |                 ["git", "-C", str(repo_dir), "fetch", "origin"],
+966 |                 capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/builders/eugr.py:965:17
+    |
+963 |             logger.info("Updating eugr/spark-vllm-docker repo (branch: %s)...", branch)
+964 |             subprocess.run(
+965 |                 ["git", "-C", str(repo_dir), "fetch", "origin"],
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+966 |                 capture_output=True,
+967 |                 text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:969:24
+    |
+967 |                 text=True,
+968 |             )
+969 |             checkout = subprocess.run(
+    |                        ^^^^^^^^^^^^^^
+970 |                 ["git", "-C", str(repo_dir), "checkout", quote(branch)],
+971 |                 capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/builders/eugr.py:970:17
+    |
+968 |             )
+969 |             checkout = subprocess.run(
+970 |                 ["git", "-C", str(repo_dir), "checkout", quote(branch)],
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+971 |                 capture_output=True,
+972 |                 text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/builders/eugr.py:984:18
+    |
+982 |             logger.info("Updating eugr/spark-vllm-docker repo...")
+983 |
+984 |         result = subprocess.run(
+    |                  ^^^^^^^^^^^^^^
+985 |             ["git", "-C", str(repo_dir), "pull", "--ff-only"],
+986 |             capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/builders/eugr.py:985:13
+    |
+984 |         result = subprocess.run(
+985 |             ["git", "-C", str(repo_dir), "pull", "--ff-only"],
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+986 |             capture_output=True,
+987 |             text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/__init__.py:126:17
+    |
+124 |     upgraded = False
+125 |     if uv:
+126 |         check = subprocess.run(
+    |                 ^^^^^^^^^^^^^^
+127 |             [uv, "tool", "list"],
+128 |             capture_output=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/__init__.py:133:22
+    |
+131 |         if check.returncode == 0 and "sparkrun" in check.stdout:
+132 |             click.echo("Checking for sparkrun updates (current: %s)..." % old_version)
+133 |             result = subprocess.run(
+    |                      ^^^^^^^^^^^^^^
+134 |                 [uv, "tool", "upgrade", "sparkrun"],
+135 |                 capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/__init__.py:140:21
+    |
+138 |             if result.returncode == 0:
+139 |                 ver_result = subprocess.run(
+140 |                     ["sparkrun", "--version"],
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+141 |                     capture_output=True,
+142 |                     text=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/__init__.py:168:13
+    |
+166 |         click.echo("Updating recipe registries...")
+167 |         reg_result = subprocess.run(
+168 |             ["sparkrun", "registry", "update"],
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+169 |             capture_output=False,
+170 |         )
+    |
+
+S306 Use of insecure and deprecated function (`mktemp`)
+   --> src/sparkrun/cli/_benchmark.py:376:19
+    |
+374 |     head_host = host_list[0]
+375 |
+376 |     result_file = tempfile.mktemp(suffix=".json", prefix="sparkrun_bench_")
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+377 |
+378 |     # Pre-compute cluster_id so we can clean up containers even if
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_benchmark.py:535:24
+    |
+533 |                 bench_env = os.environ.copy()
+534 |                 bench_env["PYTHONUNBUFFERED"] = "1"
+535 |                 proc = subprocess.Popen(
+    |                        ^^^^^^^^^^^^^^^^
+536 |                     bench_cmd,
+537 |                     stdout=subprocess.PIPE,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_cluster.py:908:21
+    |
+906 |         if not os.path.isdir(path):
+907 |             return "no", "-"
+908 |         du_result = _sp.run(["du", "-sh", path], capture_output=True, text=True)
+    |                     ^^^^^^^
+909 |         size = du_result.stdout.split()[0] if du_result.returncode == 0 and du_result.stdout.strip() else "-"
+910 |         return "yes", size
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/_cluster.py:908:29
+    |
+906 |         if not os.path.isdir(path):
+907 |             return "no", "-"
+908 |         du_result = _sp.run(["du", "-sh", path], capture_output=True, text=True)
+    |                             ^^^^^^^^^^^^^^^^^^^
+909 |         size = du_result.stdout.split()[0] if du_result.returncode == 0 and du_result.stdout.strip() else "-"
+910 |         return "yes", size
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/cli/_common.py:361:9
+    |
+359 |               entry = registry_mgr.get_registry(recipe.source_registry)
+360 |               recipe.source_registry_url = entry.url
+361 | /         except Exception:
+362 | |             pass
+    | |________________^
+363 |       return recipe, recipe_path, registry_mgr
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:109:14
+    |
+108 |     click.echo("Installing sparkrun via uv tool install...")
+109 |     result = subprocess.run(
+    |              ^^^^^^^^^^^^^^
+110 |         [uv, "tool", "install", "sparkrun", "--force"],
+111 |         capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/_setup/_commands.py:142:13
+    |
+140 |         click.echo("Updating recipe registries...")
+141 |         reg_result = subprocess.run(
+142 |             ["sparkrun", "registry", "update"],
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+143 |             capture_output=False,
+144 |         )
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:171:13
+    |
+169 |         sys.exit(1)
+170 |
+171 |     check = subprocess.run(
+    |             ^^^^^^^^^^^^^^
+172 |         [uv, "tool", "list"],
+173 |         capture_output=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:185:14
+    |
+184 |     click.echo("Checking for updates (current: %s)..." % old_version)
+185 |     result = subprocess.run(
+    |              ^^^^^^^^^^^^^^
+186 |         [uv, "tool", "upgrade", "sparkrun"],
+187 |         capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/_setup/_commands.py:198:9
+    |
+196 |     # Ask the newly installed binary instead.
+197 |     ver_result = subprocess.run(
+198 |         ["sparkrun", "--version"],
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+199 |         capture_output=True,
+200 |         text=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/_setup/_commands.py:217:13
+    |
+215 |         click.echo("Updating recipe registries...")
+216 |         reg_result = subprocess.run(
+217 |             ["sparkrun", "registry", "update"],
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+218 |             capture_output=False,
+219 |         )
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:251:24
+    |
+249 |     # Ask SSH which identity files it would use for the first host
+250 |     try:
+251 |         ssh_g_result = subprocess.run(
+    |                        ^^^^^^^^^^^^^^
+252 |             ["ssh", "-G", "%s@%s" % (user, host_list[0])],
+253 |             capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/_setup/_commands.py:252:13
+    |
+250 |     try:
+251 |         ssh_g_result = subprocess.run(
+252 |             ["ssh", "-G", "%s@%s" % (user, host_list[0])],
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+253 |             capture_output=True,
+254 |             text=True,
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/cli/_setup/_commands.py:267:5
+    |
+265 |                           local_pubkey_source = pub
+266 |                           break
+267 | /     except Exception:
+268 | |         pass
+    | |____________^
+269 |
+270 |       # Fallback: check standard key filenames
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:307:25
+    |
+305 |         # Use -v (verbose) so we can show WHY the key was rejected on failure.
+306 |         click.echo("  [1/4] Testing pubkey authentication (BatchMode)...")
+307 |         pubkey_result = subprocess.run(
+    |                         ^^^^^^^^^^^^^^
+308 |             ["ssh", "-v"]
+309 |             + ssh_opts
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:361:21
+    |
+359 |         # Step 2: Establish ControlMaster (interactive — may prompt for password)
+360 |         click.echo("  [2/4] Establishing authenticated connection (may prompt for password)...")
+361 |         cm_result = subprocess.run(
+    |                     ^^^^^^^^^^^^^^
+362 |             ["ssh"]
+363 |             + ssh_opts
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:445:23
+    |
+443 | printf 'ak_key_types=%s\n' "$(awk '{print $1}' ~/.ssh/authorized_keys 2>/dev/null | sort -u | tr '\n' ',' || echo none)"
+444 | """
+445 |         diag_result = subprocess.run(
+    |                       ^^^^^^^^^^^^^^
+446 |             cm_ssh + [diag_script],
+447 |             capture_output=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:467:31
+    |
+465 |             if len(key_parts) >= 2:
+466 |                 key_match = "%s %s" % (key_parts[0], key_parts[1])
+467 |                 grep_result = subprocess.run(
+    |                               ^^^^^^^^^^^^^^
+468 |                     cm_ssh + ["grep -cF '%s' ~/.ssh/authorized_keys 2>/dev/null || echo 0" % key_match],
+469 |                     capture_output=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_commands.py:659:9
+    |
+658 |         # Clean up ControlMaster
+659 |         subprocess.run(
+    |         ^^^^^^^^^^^^^^
+660 |             ["ssh"]
+661 |             + ssh_opts
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+    --> src/sparkrun/cli/_setup/_commands.py:1159:9
+     |
+1157 |               mgr = _get_cluster_manager()
+1158 |               effective_cluster = mgr.get_default() if mgr else None
+1159 | /         except Exception:
+1160 | |             pass
+     | |________________^
+1161 |       if effective_cluster and effective_topology != CX7Topology.UNKNOWN:
+1162 |           try:
+     |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+    --> src/sparkrun/cli/_setup/_commands.py:1848:13
+     |
+1846 |                   cdata = mgr.get_cluster(default_cluster)
+1847 |                   cluster_hosts = cdata.get("hosts", [])
+1848 | /             except Exception:
+1849 | |                 pass
+     | |____________________^
+1850 |
+1851 |           if cluster_hosts:
+     |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_ssh.py:166:18
+    |
+165 |         # Run interactively — the script prompts for passwords
+166 |         result = subprocess.run(cmd)
+    |                  ^^^^^^^^^^^^^^
+167 |         if result.returncode != 0:
+168 |             return False
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+  --> src/sparkrun/cli/_setup/_sudo.py:87:5
+   |
+85 |           if all(r.success for r in test_results):
+86 |               return None, None
+87 | /     except Exception:
+88 | |         pass
+   | |____________^
+89 |
+90 |       # Prompt for sudo password
+   |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/_setup/_sudo.py:101:13
+    |
+100 |         proc = subprocess.run(
+101 |             ["sudo", "-S", "true"],
+    |             ^^^^^^^^^^^^^^^^^^^^^^
+102 |             input=sudo_password + "\n",
+103 |             capture_output=True,
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/cli/_setup/_uninstall.py:331:9
+    |
+329 |               if all(r.success for r in test_results):
+330 |                   return None
+331 | /         except Exception:
+332 | |             pass
+    | |________________^
+333 |
+334 |           sudo_password = click.prompt("[sudo] password for %s" % user, hide_input=True)
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/cli/_setup/_wizard.py:100:25
+    |
+ 98 |         if uv:
+ 99 |             try:
+100 |                 check = subprocess.run(
+    |                         ^^^^^^^^^^^^^^
+101 |                     [uv, "tool", "list"],
+102 |                     capture_output=True,
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/cli/_setup/_wizard.py:114:13
+    |
+112 |                           results["install"] = "failed (non-fatal)"
+113 |                       click.echo()
+114 | /             except Exception:
+115 | |                 pass  # uv check failed, skip install
+    | |____________________^
+116 |           else:
+117 |               logger.debug("uv not found, skipping tool install check")
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/cli/_setup/_wizard.py:223:13
+    |
+221 |                       user = _cluster_def.user
+222 |                       click.echo("Using cluster SSH user: %s" % user)
+223 | /             except Exception:
+224 | |                 pass
+    | |____________________^
+225 |
+226 |           if not host_list:
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/_setup/_wizard.py:233:21
+    |
+231 |                 script = generate_cx7_detect_script()
+232 |                 det_result = subprocess.run(
+233 |                     ["bash", "-s"],
+    |                     ^^^^^^^^^^^^^^
+234 |                     input=script,
+235 |                     capture_output=True,
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/cli/_setup/_wizard.py:509:13
+    |
+507 |                   if all(r.success for r in test_results):
+508 |                       return None
+509 | /             except Exception:
+510 | |                 pass
+    | |____________________^
+511 |
+512 |               # Prompt for sudo password
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/cli/_setup/_wizard.py:520:33
+    |
+518 |                 import subprocess as _sp
+519 |
+520 |                 _proc = _sp.run(["sudo", "-S", "true"], input=sudo_password + "\n", capture_output=True, text=True, timeout=10)
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^
+521 |                 test_r = RemoteResult(host=test_host, returncode=_proc.returncode, stdout=_proc.stdout, stderr=_proc.stderr)
+522 |             else:
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+  --> src/sparkrun/containers/registry.py:26:14
+   |
+25 |     logger.info("Pulling image: %s...", image)
+26 |     result = subprocess.run(
+   |              ^^^^^^^^^^^^^^
+27 |         ["docker", "pull", image],
+28 |         capture_output=True,
+   |
+
+S607 Starting a process with a partial executable path
+  --> src/sparkrun/containers/registry.py:27:9
+   |
+25 |     logger.info("Pulling image: %s...", image)
+26 |     result = subprocess.run(
+27 |         ["docker", "pull", image],
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+28 |         capture_output=True,
+29 |         text=True,
+   |
+
+S603 `subprocess` call: check for execution of untrusted input
+  --> src/sparkrun/containers/registry.py:45:14
+   |
+43 |         True if the image exists in the local Docker image store.
+44 |     """
+45 |     result = subprocess.run(
+   |              ^^^^^^^^^^^^^^
+46 |         ["docker", "image", "inspect", image],
+47 |         capture_output=True,
+   |
+
+S607 Starting a process with a partial executable path
+  --> src/sparkrun/containers/registry.py:46:9
+   |
+44 |     """
+45 |     result = subprocess.run(
+46 |         ["docker", "image", "inspect", image],
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+47 |         capture_output=True,
+48 |         text=True,
+   |
+
+S603 `subprocess` call: check for execution of untrusted input
+  --> src/sparkrun/containers/registry.py:63:14
+   |
+61 |         image does not exist locally.
+62 |     """
+63 |     result = subprocess.run(
+   |              ^^^^^^^^^^^^^^
+64 |         ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+65 |         capture_output=True,
+   |
+
+S607 Starting a process with a partial executable path
+  --> src/sparkrun/containers/registry.py:64:9
+   |
+62 |     """
+63 |     result = subprocess.run(
+64 |         ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+65 |         capture_output=True,
+66 |         text=True,
+   |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/monitoring.py:279:20
+    |
+278 |         try:
+279 |             proc = subprocess.Popen(
+    |                    ^^^^^^^^^^^^^^^^
+280 |                 cmd,
+281 |                 stdin=subprocess.PIPE,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/monitoring.py:487:20
+    |
+486 |         try:
+487 |             proc = subprocess.Popen(
+    |                    ^^^^^^^^^^^^^^^^
+488 |                 cmd,
+489 |                 stdin=subprocess.PIPE,
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/core/recipe.py:324:15
+    |
+323 |     try:
+324 |         req = Request(url, headers={"User-Agent": "sparkrun"})
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+325 |         with urlopen(req, timeout=30) as resp:
+326 |             content = resp.read()
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/core/recipe.py:325:14
+    |
+323 |     try:
+324 |         req = Request(url, headers={"User-Agent": "sparkrun"})
+325 |         with urlopen(req, timeout=30) as resp:
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+326 |             content = resp.read()
+327 |         cache_path.parent.mkdir(parents=True, exist_ok=True)
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/core/registry.py:180:5
+    |
+178 |                   if org in RESERVED_PREFIX_ALLOWED_ORGS:
+179 |                       return
+180 | /     except Exception:
+181 | |         pass
+    | |____________^
+182 |
+183 |       allowed = ", ".join(RESERVED_PREFIX_ALLOWED_ORGS)
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:451:26
+    |
+449 |                 # Fetch + hard reset to ensure deleted files are removed
+450 |                 # and rebased histories are handled correctly
+451 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+452 |                     ["git", "-C", str(clone_dir), "fetch", "origin"],
+453 |                     capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/core/registry.py:452:21
+    |
+450 |                 # and rebased histories are handled correctly
+451 |                 result = subprocess.run(
+452 |                     ["git", "-C", str(clone_dir), "fetch", "origin"],
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+453 |                     capture_output=True,
+454 |                     text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:463:26
+    |
+461 |                     logger.warning("git fetch failed for %s: %s", url, result.stderr.strip())
+462 |                     return False
+463 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+464 |                     ["git", "-C", str(clone_dir), "reset", "--hard", "FETCH_HEAD"],
+465 |                     capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/core/registry.py:464:21
+    |
+462 |                     return False
+463 |                 result = subprocess.run(
+464 |                     ["git", "-C", str(clone_dir), "reset", "--hard", "FETCH_HEAD"],
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+465 |                     capture_output=True,
+466 |                     text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:478:26
+    |
+476 |                 # Fresh sparse clone
+477 |                 clone_dir.mkdir(parents=True, exist_ok=True)
+478 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+479 |                     ["git", "clone", "--filter=blob:none", "--sparse", str(url), str(clone_dir)],
+480 |                     capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/core/registry.py:479:21
+    |
+477 |                 clone_dir.mkdir(parents=True, exist_ok=True)
+478 |                 result = subprocess.run(
+479 |                     ["git", "clone", "--filter=blob:none", "--sparse", str(url), str(clone_dir)],
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+480 |                     capture_output=True,
+481 |                     text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:493:26
+    |
+491 |             # Update sparse-checkout paths
+492 |             if sparse_paths:
+493 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+494 |                     ["git", "-C", str(clone_dir), "sparse-checkout", "set"] + sparse_paths,
+495 |                     capture_output=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:551:17
+    |
+549 |                 # the initial clone)
+550 |                 sparse_paths = self._build_sparse_paths(entry)
+551 |                 subprocess.run(
+    |                 ^^^^^^^^^^^^^^
+552 |                     ["git", "-C", str(cache_dir), "sparse-checkout", "set"] + sparse_paths,
+553 |                     capture_output=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:563:26
+    |
+561 |                 # Fetch + hard reset to ensure deleted files are removed
+562 |                 # and rebased histories are handled correctly
+563 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+564 |                     ["git", "-C", str(cache_dir), "fetch", "--depth=1", "origin"],
+565 |                     capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/core/registry.py:564:21
+    |
+562 |                 # and rebased histories are handled correctly
+563 |                 result = subprocess.run(
+564 |                     ["git", "-C", str(cache_dir), "fetch", "--depth=1", "origin"],
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+565 |                     capture_output=True,
+566 |                     text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:575:26
+    |
+573 |                     logger.debug("Git fetch failed for %s: %s", entry.name, result.stderr)
+574 |                     return False
+575 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+576 |                     ["git", "-C", str(cache_dir), "reset", "--hard", "FETCH_HEAD"],
+577 |                     capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/core/registry.py:576:21
+    |
+574 |                     return False
+575 |                 result = subprocess.run(
+576 |                     ["git", "-C", str(cache_dir), "reset", "--hard", "FETCH_HEAD"],
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+577 |                     capture_output=True,
+578 |                     text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:593:26
+    |
+592 |                 # Shallow clone with blob filtering
+593 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+594 |                     [
+595 |                         "git",
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/core/registry.py:594:21
+    |
+592 |                   # Shallow clone with blob filtering
+593 |                   result = subprocess.run(
+594 | /                     [
+595 | |                         "git",
+596 | |                         "clone",
+597 | |                         "--depth",
+598 | |                         "1",
+599 | |                         "--filter=blob:none",
+600 | |                         "--sparse",
+601 | |                         entry.url,
+602 | |                         str(cache_dir),
+603 | |                     ],
+    | |_____________________^
+604 |                       capture_output=True,
+605 |                       text=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:617:26
+    |
+615 |                 # Configure sparse checkout for all subpaths
+616 |                 sparse_paths = self._build_sparse_paths(entry)
+617 |                 result = subprocess.run(
+    |                          ^^^^^^^^^^^^^^
+618 |                     [
+619 |                         "git",
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/core/registry.py:702:22
+    |
+700 |             tmp_path = Path(tmp) / "repo"
+701 |             git_env = self._git_env()
+702 |             result = subprocess.run(
+    |                      ^^^^^^^^^^^^^^
+703 |                 ["git", "clone", "--depth=1", "--single-branch", str(url), str(tmp_path)],
+704 |                 capture_output=True,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/core/registry.py:703:17
+    |
+701 |             git_env = self._git_env()
+702 |             result = subprocess.run(
+703 |                 ["git", "clone", "--depth=1", "--single-branch", str(url), str(tmp_path)],
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+704 |                 capture_output=True,
+705 |                 text=True,
+    |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+    --> src/sparkrun/core/registry.py:1368:17
+     |
+1366 |                           if metadata.get("name") and not data.get("name"):
+1367 |                               profile_name = metadata["name"]
+1368 | /                 except Exception:
+1369 | |                     pass
+     | |________________________^
+1370 |                   profiles.append(
+1371 |                       {
+     |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/models/gguf.py:248:19
+    |
+246 |             headers = dict(hf_headers)
+247 |             headers["Range"] = "bytes=0-%d" % (n - 1)
+248 |             req = Request(url, headers=headers)
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+249 |             with urlopen(req, timeout=timeout) as resp:
+250 |                 content = resp.read()
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/models/gguf.py:249:18
+    |
+247 |             headers["Range"] = "bytes=0-%d" % (n - 1)
+248 |             req = Request(url, headers=headers)
+249 |             with urlopen(req, timeout=timeout) as resp:
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+250 |                 content = resp.read()
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/orchestration/health.py:131:19
+    |
+129 |     for attempt in range(1, max_retries + 1):
+130 |         try:
+131 |             req = urllib.request.Request(url, method="GET")
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+132 |             with urllib.request.urlopen(req, timeout=5) as resp:
+133 |                 if resp.status == 200:
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/orchestration/health.py:132:18
+    |
+130 |         try:
+131 |             req = urllib.request.Request(url, method="GET")
+132 |             with urllib.request.urlopen(req, timeout=5) as resp:
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+133 |                 if resp.status == 200:
+134 |                     logger.info(
+    |
+
+S602 `subprocess` call with `shell=True` identified, security issue
+   --> src/sparkrun/orchestration/hooks.py:275:18
+    |
+273 |             continue
+274 |
+275 |         result = subprocess.run(
+    |                  ^^^^^^^^^^^^^^
+276 |             cmd,
+277 |             shell=True,
+    |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/sparkrun_hook_%s"
+   --> src/sparkrun/orchestration/hooks.py:408:22
+    |
+406 |         kw = ssh_kwargs or {}
+407 |
+408 |         remote_tmp = "/tmp/sparkrun_hook_%s" % basename
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^
+409 |         run_script_on_host(host, "mkdir -p %s" % remote_tmp, ssh_kwargs=ssh_kwargs, timeout=30)
+    |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/sparkrun_hook_%s"
+   --> src/sparkrun/orchestration/hooks.py:468:22
+    |
+466 |     else:
+467 |         # rsync FROM source_host to target host, then docker cp
+468 |         remote_tmp = "/tmp/sparkrun_hook_%s" % basename
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^
+469 |         ssh_user = kw.get("ssh_user", "")
+470 |         ssh_user_prefix = "%s@" % ssh_user if ssh_user else ""
+    |
+
+S607 Starting a process with a partial executable path
+    --> src/sparkrun/orchestration/networking.py:1482:17
+     |
+1480 |             # Pipe password to sudo -S bash -s for local hosts without NOPASSWD
+1481 |             proc = subprocess.run(
+1482 |                 ["sudo", "-S", "bash", "-s"],
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1483 |                 input=sudo_password + "\n" + script,
+1484 |                 capture_output=True,
+     |
+
+S607 Starting a process with a partial executable path
+    --> src/sparkrun/orchestration/networking.py:1490:17
+     |
+1488 |         elif not sudo_password:
+1489 |             proc = subprocess.run(
+1490 |                 ["bash", "-s"],
+     |                 ^^^^^^^^^^^^^^
+1491 |                 input=script,
+1492 |                 capture_output=True,
+     |
+
+S603 `subprocess` call: check for execution of untrusted input
+    --> src/sparkrun/orchestration/networking.py:1692:13
+     |
+1690 |     if not dry_run:
+1691 |         try:
+1692 |             subprocess.run(
+     |             ^^^^^^^^^^^^^^
+1693 |                 ["bash", "-c", script],
+1694 |                 timeout=30,
+     |
+
+S607 Starting a process with a partial executable path
+    --> src/sparkrun/orchestration/networking.py:1693:17
+     |
+1691 |         try:
+1692 |             subprocess.run(
+1693 |                 ["bash", "-c", script],
+     |                 ^^^^^^^^^^^^^^^^^^^^^^
+1694 |                 timeout=30,
+1695 |                 capture_output=True,
+     |
+
+S603 `subprocess` call: check for execution of untrusted input
+    --> src/sparkrun/orchestration/networking.py:1763:18
+     |
+1761 |     script = read_script("cx7_discover_peers.sh")
+1762 |     try:
+1763 |         result = subprocess.run(
+     |                  ^^^^^^^^^^^^^^
+1764 |             ["bash", "-s"] + subnets,
+1765 |             input=script,
+     |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/orchestration/nv_monitor.py:215:16
+    |
+214 |     try:
+215 |         proc = subprocess.Popen(
+    |                ^^^^^^^^^^^^^^^^
+216 |             cmd,
+217 |             stdout=subprocess.PIPE,
+    |
+
+S607 Starting a process with a partial executable path
+   --> src/sparkrun/orchestration/primitives.py:518:9
+    |
+517 |     proc = subprocess.run(
+518 |         ["bash", "-s"],
+    |         ^^^^^^^^^^^^^^
+519 |         input=script,
+520 |         capture_output=True,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+  --> src/sparkrun/orchestration/ssh.py:71:16
+   |
+69 |     t0 = time.monotonic()
+70 |     try:
+71 |         proc = subprocess.run(
+   |                ^^^^^^^^^^^^^^
+72 |             cmd,
+73 |             input=input_data,
+   |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/orchestration/ssh.py:240:20
+    |
+238 |     try:
+239 |         if quiet:
+240 |             proc = subprocess.run(
+    |                    ^^^^^^^^^^^^^^
+241 |                 cmd,
+242 |                 input=script,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/orchestration/ssh.py:248:20
+    |
+246 |             )
+247 |         else:
+248 |             proc = subprocess.run(
+    |                    ^^^^^^^^^^^^^^
+249 |                 cmd,
+250 |                 input=script,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/orchestration/ssh.py:372:9
+    |
+370 |     logger.info("Following logs for container '%s' on %s (Ctrl-C to stop)...", container_name, host or "localhost")
+371 |     try:
+372 |         subprocess.run(cmd)
+    |         ^^^^^^^^^^^^^^
+373 |     except KeyboardInterrupt:
+374 |         logger.info("\nLog following stopped.")
+    |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/sparkrun_serve.log"
+   --> src/sparkrun/orchestration/ssh.py:380:21
+    |
+378 |     host: str,
+379 |     container_name: str,
+380 |     log_file: str = "/tmp/sparkrun_serve.log",
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+381 |     ssh_user: str | None = None,
+382 |     ssh_key: str | None = None,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/orchestration/ssh.py:428:9
+    |
+426 |     logger.info("Following serve logs in container '%s' on %s (Ctrl-C to stop)...", container_name, host or "localhost")
+427 |     try:
+428 |         subprocess.run(cmd)
+    |         ^^^^^^^^^^^^^^
+429 |     except KeyboardInterrupt:
+430 |         logger.info("\nLog following stopped.")
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/orchestration/ssh.py:470:16
+    |
+469 |     try:
+470 |         return subprocess.Popen(
+    |                ^^^^^^^^^^^^^^^^
+471 |             cmd,
+472 |             stdout=subprocess.PIPE,
+    |
+
+S604 Function call with `shell=True` parameter identified, security issue
+   --> src/sparkrun/orchestration/ssh.py:743:14
+    |
+741 |     logger.debug("Pipeline command: %s", pipeline)
+742 |
+743 |     result = _run_subprocess(pipeline, host, "Pipeline", timeout=timeout, shell=True)
+    |              ^^^^^^^^^^^^^^^
+744 |     if result.success:
+745 |         logger.info("  Pipeline <- %s OK", host)
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+  --> src/sparkrun/orchestration/sudo.py:47:16
+   |
+46 |     try:
+47 |         proc = subprocess.run(
+   |                ^^^^^^^^^^^^^^
+48 |             cmd,
+49 |             input=full_input,
+   |
+
+S104 Possible binding to all interfaces
+ --> src/sparkrun/proxy/__init__.py:4:22
+  |
+3 | DEFAULT_PROXY_PORT = 4000
+4 | DEFAULT_PROXY_HOST = "0.0.0.0"
+  |                      ^^^^^^^^^
+5 | DEFAULT_MASTER_KEY = None  # No auth by default — avoids LiteLLM DB requirement
+6 | DEFAULT_DISCOVER_INTERVAL = 30
+  |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/proxy/discovery.py:315:15
+    |
+313 |     url = "http://%s:%d/v1/models" % (ep.host, ep.port)
+314 |     try:
+315 |         req = urllib.request.Request(url, method="GET")
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+316 |         with urllib.request.urlopen(req, timeout=_HEALTH_TIMEOUT) as resp:
+317 |             if resp.status == 200:
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/proxy/discovery.py:316:14
+    |
+314 |     try:
+315 |         req = urllib.request.Request(url, method="GET")
+316 |         with urllib.request.urlopen(req, timeout=_HEALTH_TIMEOUT) as resp:
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+317 |             if resp.status == 200:
+318 |                 body = json.loads(resp.read())
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/proxy/engine.py:198:20
+    |
+197 |         if foreground:
+198 |             proc = subprocess.Popen(cmd, env=env)
+    |                    ^^^^^^^^^^^^^^^^
+199 |             self._save_state(proc.pid)
+200 |             if autodiscover_kwargs:
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/proxy/engine.py:219:24
+    |
+217 |             log_path = self.state_dir / "litellm.log"
+218 |             with open(log_path, "w") as log_file:
+219 |                 proc = subprocess.Popen(
+    |                        ^^^^^^^^^^^^^^^^
+220 |                     cmd,
+221 |                     stdout=log_file,
+    |
+
+S603 `subprocess` call: check for execution of untrusted input
+   --> src/sparkrun/proxy/engine.py:296:24
+    |
+294 |         try:
+295 |             with open(log_path, "w") as log_file:
+296 |                 proc = subprocess.Popen(
+    |                        ^^^^^^^^^^^^^^^^
+297 |                     [sys.executable, "-m", "sparkrun.proxy.autodiscover", str(self._autodiscover_config_path)],
+298 |                     stdout=log_file,
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/proxy/engine.py:624:15
+    |
+623 |         data = json.dumps(payload).encode() if payload else None
+624 |         req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+625 |
+626 |         with urllib.request.urlopen(req, timeout=10) as resp:
+    |
+
+S310 Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.
+   --> src/sparkrun/proxy/engine.py:626:14
+    |
+624 |         req = urllib.request.Request(url, data=data, headers=headers, method=method)
+625 |
+626 |         with urllib.request.urlopen(req, timeout=10) as resp:
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+627 |             return json.loads(resp.read())
+    |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/extra-llm-api-config.yml"
+  --> src/sparkrun/runtimes/trtllm.py:50:22
+   |
+49 | # Fixed container-internal path for the extra LLM API config YAML
+50 | _EXTRA_CONFIG_PATH = "/tmp/extra-llm-api-config.yml"
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+51 | _EXTRA_CONFIG_FLAG = "--extra_llm_api_options"
+   |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/sparkrun-rsh-wrapper.sh"
+   --> src/sparkrun/runtimes/trtllm.py:173:13
+    |
+171 |             "--mca",
+172 |             "plm_rsh_agent",
+173 |             "/tmp/sparkrun-rsh-wrapper.sh",
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+174 |             "--mca",
+175 |             "rmaps_ppr_n_pernode",
+    |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/.ssh/id_ed25519"
+   --> src/sparkrun/runtimes/trtllm.py:210:29
+    |
+208 |         host_ip_map: dict[str, str],
+209 |         cluster_id: str,
+210 |         ssh_key_path: str = "/tmp/.ssh/id_ed25519",
+    |                             ^^^^^^^^^^^^^^^^^^^^^^
+211 |     ) -> str:
+212 |         """Generate the bash rsh wrapper script for mpirun.
+    |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/.ssh:ro"
+   --> src/sparkrun/runtimes/trtllm.py:324:35
+    |
+322 |         ssh_dir = Path.home() / ".ssh"
+323 |         if ssh_dir.is_dir():
+324 |             return {str(ssh_dir): "/tmp/.ssh:ro"}
+    |                                   ^^^^^^^^^^^^^^
+325 |         return {}
+    |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/.ssh/id_ed25519"
+   --> src/sparkrun/runtimes/trtllm.py:553:24
+    |
+552 |         # Determine SSH key path inside container
+553 |         ssh_key_path = "/tmp/.ssh/id_ed25519"
+    |                        ^^^^^^^^^^^^^^^^^^^^^^
+554 |
+555 |         # Generate rsh wrapper
+    |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/sglang_src/benchmark/kernels/fused_moe_triton/common_utils.py"
+  --> src/sparkrun/scripts/sglang_patch_common_utils.py:26:23
+   |
+24 | import sys
+25 |
+26 | TARGET = pathlib.Path("/tmp/sglang_src/benchmark/kernels/fused_moe_triton/common_utils.py")
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+27 |
+28 | NORMALIZER_FN = '''\
+   |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/sglang_src"
+  --> src/sparkrun/tuning/sglang.py:32:20
+   |
+31 | TUNE_CONTAINER_NAME = "sparkrun_tune"
+32 | SGLANG_CLONE_DIR = "/tmp/sglang_src"
+   |                    ^^^^^^^^^^^^^^^^^
+   |
+
+S108 Probable insecure usage of temporary file or directory: "/tmp/vllm_src"
+  --> src/sparkrun/tuning/vllm.py:31:18
+   |
+30 | TUNE_VLLM_CONTAINER_NAME = "sparkrun_tune_vllm"
+31 | VLLM_CLONE_DIR = "/tmp/vllm_src"
+   |                  ^^^^^^^^^^^^^^^
+   |
+
+S110 `try`-`except`-`pass` detected, consider logging the exception
+   --> src/sparkrun/utils/__init__.py:124:5
+    |
+122 |           if host == socket.gethostname() or host == socket.getfqdn():
+123 |               return True
+124 | /     except Exception:
+125 | |         pass
+    | |____________^
+126 |
+127 |       # Try to bind to the address — succeeds only for local IPs
+    |
+
+Found 145 errors.

@@ -850,9 +850,7 @@ def cluster_inspect(ctx, name, hosts, hosts_file, cluster_name, dry_run, output_
     # auto (None) → cx7 if IB is available and validated, else mgmt
     if xfer_iface == "mgmt":
         resolved_iface = "mgmt"
-    elif xfer_result.ib_validated:
-        resolved_iface = "cx7"
-    elif ib_result and ib_result.ib_ip_map:
+    elif xfer_result.ib_validated or ib_result and ib_result.ib_ip_map:
         resolved_iface = "cx7"
     elif ib_result:
         resolved_iface = "mgmt"

@@ -720,7 +720,9 @@ class RegistryNameType(click.ParamType):
         try:
             _, registry_mgr = _get_config_and_registry()
             return [
-                click.shell_completion.CompletionItem(reg.name) for reg in registry_mgr.list_registries() if reg.name.startswith(incomplete)  # type: ignore
+                click.shell_completion.CompletionItem(reg.name)
+                for reg in registry_mgr.list_registries()
+                if reg.name.startswith(incomplete)  # type: ignore
             ]
         except Exception:
             return []

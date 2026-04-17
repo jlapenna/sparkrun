@@ -1,0 +1,5 @@
+{
+  "venvPath": "/home/jlapenna/services",
+  "venv": ".venv",
+  "include": ["src"]
+}

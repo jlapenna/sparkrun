@@ -145,6 +145,7 @@ def launch_inference(
             progress = sctx.progress
     if config is None:
         from sparkrun.core.config import SparkrunConfig
+
         config = SparkrunConfig()
     p = progress  # short alias
 

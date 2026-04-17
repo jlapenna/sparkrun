@@ -223,7 +223,7 @@ class BenchmarkResult:
         if recipe is None:
             logger.warning("No recipe associated with benchmark result.")
             return {}
-        
+
         # Resolve container image to a pinned long-term reference when possible
         container_pinned = False
         recipe_container = container_image or recipe.container
