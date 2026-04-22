@@ -71,6 +71,7 @@ VLLM_FLAG_MAP = {
     "data_parallel": "--data-parallel-size",
     "kv_cache_dtype": "--kv-cache-dtype",
     "otlp_traces_endpoint": "--otlp-traces-endpoint",
+    "collect_detailed_traces": "--collect-detailed-traces",
 }
 
 # Boolean flags (present = True, absent = False)
