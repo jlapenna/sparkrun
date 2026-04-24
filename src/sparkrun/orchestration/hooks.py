@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
+
 from vpd.legacy.arguments import arg_substitute
 
 logger = logging.getLogger(__name__)
@@ -314,11 +315,12 @@ def _run_exec_command(
     Raises:
         RuntimeError: If the command exits with non-zero status.
     """
+    # Use base64 encoding to safely pass the command through bash -c
     from sparkrun.orchestration.primitives import run_script_on_host
+    from sparkrun.utils.shell import b64_wrap_bash, quote
 
-    # Escape single quotes in command for bash -c
-    escaped = cmd.replace("'", "'\\''")
-    script = "docker exec --user root %s bash -c '%s'" % (container_name, escaped)
+    # TODO: this should delegate via executor implementation; this should allow control over user
+    script = "docker exec --user root %s bash -c %s" % (quote(container_name), b64_wrap_bash(cmd))
 
     logger.info("  %s on %s/%s: %s", label, host, container_name, cmd)
 
@@ -367,7 +369,7 @@ def _run_copy_command(
     from sparkrun.orchestration.primitives import run_script_on_host, should_run_locally
 
     source = cmd["copy"]
-    source_path = Path(source)
+    source_path = Path(source).expanduser()
     basename = source_path.name
     dest = cmd.get("dest", "/workspace/mods/%s" % basename)
     source_host = cmd.get("source_host")
@@ -380,10 +382,15 @@ def _run_copy_command(
 
     if source_host is not None:
         # Delegated mode: source files live on source_host, not locally.
+        # Validate against injection, then convert ~/… to $HOME/… so the
+        # path expands correctly inside double-quoted remote shell scripts.
+        from sparkrun.utils.shell import safe_remote_path
+
+        remote_source = safe_remote_path(source)
         result = _run_delegated_copy(
             host,
             container_name,
-            source,
+            remote_source,
             dest,
             source_host,
             ssh_kwargs=ssh_kwargs,
@@ -393,7 +400,7 @@ def _run_copy_command(
         # Local: docker cp directly
         script = ("set -e\ndocker exec --user root %(c)s mkdir -p %(dest)s\ndocker cp %(src)s/. %(c)s:%(dest)s/\n") % {
             "c": container_name,
-            "src": source,
+            "src": source_path,
             "dest": dest,
         }
         result = run_script_on_host(host, script, ssh_kwargs=ssh_kwargs, timeout=120)
@@ -454,7 +461,7 @@ def _run_delegated_copy(
 
     if host == source_host:
         # Files already on this host — docker cp directly
-        script = ("set -e\ndocker exec --user root %(c)s mkdir -p %(dest)s\ndocker cp %(src)s/. %(c)s:%(dest)s/\n") % {
+        script = ('set -e\ndocker exec --user root %(c)s mkdir -p %(dest)s\ndocker cp "%(src)s"/. %(c)s:%(dest)s/\n') % {
             "c": container_name,
             "src": source,
             "dest": dest,
@@ -479,7 +486,7 @@ def _run_delegated_copy(
         script = (
             "set -e\n"
             "mkdir -p %(tmp)s\n"
-            "rsync -a --no-times %(rsync_ssh)s %(user)s%(src_host)s:%(src)s/ %(tmp)s/\n"
+            'rsync -a --no-times %(rsync_ssh)s %(user)s%(src_host)s:"%(src)s"/ %(tmp)s/\n'
             "docker exec --user root %(c)s mkdir -p %(dest)s\n"
             "docker cp %(tmp)s/. %(c)s:%(dest)s/\n"
             "rm -rf %(tmp)s\n"
