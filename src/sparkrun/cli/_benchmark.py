@@ -500,6 +500,13 @@ def _run_benchmark(
         if est_tests is not None:
             logger.info("Estimated test iterations: %d", est_tests)
 
+        # Pass served_model_name as an argument if defined, satisfying llama-benchy's
+        # requirement to maintain the original huggingface model ID for tokenization.
+        # Check config_chain to capture both CLI overrides and recipe definitions natively.
+        served_model_name = config_chain.get("served_model_name")
+        if served_model_name and "served_model_name" not in bench_args:
+            bench_args["served_model_name"] = served_model_name
+
         bench_cmd = fw.build_benchmark_command(
             target_url=base_url,
             model=recipe.model,
