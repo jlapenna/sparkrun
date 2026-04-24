@@ -119,6 +119,12 @@ def _stop_all(hosts, hosts_file, cluster_name, config, dry_run):
             solo_cid = entry.name.removesuffix("_solo") if entry.name.endswith("_solo") else entry.name
             remove_job_metadata(solo_cid, cache_dir=str(config.cache_dir))
 
+    # Tear down daemonized telemetry tunnels for all stopped hosts.
+    if not dry_run:
+        from sparkrun.orchestration.ssh import TelemetryTunnel
+        for host in host_containers:
+            TelemetryTunnel.cleanup(host)
+
     hosts_touched = len(host_containers)
     click.echo("Stopped %d job(s) across %d host(s)." % (stopped_count, hosts_touched))
 
@@ -160,6 +166,9 @@ def _stop_by_cluster_id(target, hosts, hosts_file, cluster_name, config, dry_run
 
     if not dry_run:
         remove_job_metadata(cluster_id, cache_dir=str(config.cache_dir))
+        from sparkrun.orchestration.ssh import TelemetryTunnel
+        for host in host_list:
+            TelemetryTunnel.cleanup(host)
 
     click.echo("Workload stopped on %d host(s)." % len(host_list))
 
@@ -209,6 +218,11 @@ def _stop_recipe(recipe_name, hosts, hosts_file, cluster_name, config, tp_overri
         cleanup_containers_local(container_names, dry_run=dry_run)
     else:
         cleanup_containers(host_list, container_names, ssh_kwargs=ssh_kwargs, dry_run=dry_run)
+
+    if not dry_run:
+        from sparkrun.orchestration.ssh import TelemetryTunnel
+        for host in host_list:
+            TelemetryTunnel.cleanup(host)
 
     click.echo("Workload stopped on %d host(s)." % len(host_list))
 

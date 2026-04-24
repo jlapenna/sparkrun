@@ -331,53 +331,50 @@ def run(
     if diag:
         diag.phase_start("launch")
         
-    from contextlib import ExitStack
     from sparkrun.orchestration.ssh import TelemetryTunnel
     from sparkrun.orchestration.primitives import build_ssh_kwargs
 
     try:
-        with ExitStack() as stack:
-            # Set up a telemetry tunnel for each host in the cluster
-            if not dry_run:
-                tunnel_ssh_kw = build_ssh_kwargs(config)
-                for host in host_list:
-                    stack.enter_context(
-                        TelemetryTunnel(
-                            host=host,
-                            ssh_user=tunnel_ssh_kw.get("ssh_user"),
-                            ssh_key=tunnel_ssh_kw.get("ssh_key"),
-                            ssh_options=tunnel_ssh_kw.get("ssh_options"),
-                        )
-                    )
+        # Set up a daemonized telemetry tunnel for each host in the cluster.
+        # Tunnels outlive this process — cleanup happens in sparkrun stop.
+        if not dry_run:
+            tunnel_ssh_kw = build_ssh_kwargs(config)
+            for host in host_list:
+                TelemetryTunnel(
+                    host=host,
+                    ssh_user=tunnel_ssh_kw.get("ssh_user"),
+                    ssh_key=tunnel_ssh_kw.get("ssh_key"),
+                    ssh_options=tunnel_ssh_kw.get("ssh_options"),
+                ).establish_detached()
 
-            result = launch_inference(
-                recipe=recipe,
-                runtime=runtime,
-                host_list=host_list,
-                overrides=overrides,
-                sctx=sctx,
-                is_solo=is_solo,
-                cache_dir=remote_cache_dir,
-                local_cache_dir=local_cache_dir,
-                transfer_mode=effective_transfer_mode,
-                transfer_interface=effective_transfer_interface,
-                recipe_ref=recipe_ref,
-                registry_mgr=registry_mgr,
-                sync_tuning=not no_sync_tuning,
-                dry_run=dry_run,
-                detached=not foreground,
-                follow=not no_follow,
-                ray_port=ray_port,
-                dashboard_port=dashboard_port,
-                dashboard=dashboard,
-                init_port=init_port,
-                topology=cluster_cfg.topology,
-                cluster_id_override=cluster_id_override,
-                executor_config=cli_executor_opts,
-                extra_docker_opts=list(executor_args) if executor_args else None,
-                rootless=not rootful,
-                auto_user=not rootful,
-            )
+        result = launch_inference(
+            recipe=recipe,
+            runtime=runtime,
+            host_list=host_list,
+            overrides=overrides,
+            sctx=sctx,
+            is_solo=is_solo,
+            cache_dir=remote_cache_dir,
+            local_cache_dir=local_cache_dir,
+            transfer_mode=effective_transfer_mode,
+            transfer_interface=effective_transfer_interface,
+            recipe_ref=recipe_ref,
+            registry_mgr=registry_mgr,
+            sync_tuning=not no_sync_tuning,
+            dry_run=dry_run,
+            detached=not foreground,
+            follow=not no_follow,
+            ray_port=ray_port,
+            dashboard_port=dashboard_port,
+            dashboard=dashboard,
+            init_port=init_port,
+            topology=cluster_cfg.topology,
+            cluster_id_override=cluster_id_override,
+            executor_config=cli_executor_opts,
+            extra_docker_opts=list(executor_args) if executor_args else None,
+            rootless=not rootful,
+            auto_user=not rootful,
+        )
     except DistributionError as e:
         if diag:
             diag.phase_end("launch", error=str(e))

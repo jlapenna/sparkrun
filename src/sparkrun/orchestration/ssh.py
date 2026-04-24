@@ -8,6 +8,9 @@ No files are ever copied to remote hosts.
 from __future__ import annotations
 
 import logging
+import os
+import signal
+import socket
 import subprocess
 import time
 from dataclasses import dataclass
@@ -999,65 +1002,153 @@ def run_rsync_parallel(
     return results
 
 class TelemetryTunnel:
-    """Context manager to establish a forward tunnel for remote Docker telemetry."""
+    """Manages daemonized SSH forward tunnels for remote Docker telemetry.
 
-    def __init__(self, host, ssh_user: str | None = None, ssh_key: str | None = None, ssh_options: list[str] | None = None):
+    Unlike a context manager, tunnels are daemonized (fire-and-forget) so they
+    survive the lifetime of ``sparkrun run``. A PID file written to
+    ``/tmp/sparkrun-telemetry-<host>.pid`` lets ``sparkrun stop`` locate and
+    terminate the tunnel later.
+
+    Usage::
+
+        TelemetryTunnel(host, ...).establish_detached()
+        # … container runs indefinitely …
+        TelemetryTunnel.cleanup(host)   # called by sparkrun stop
+    """
+
+    _PID_DIR = "/tmp"
+
+    def __init__(
+        self,
+        host,
+        ssh_user: str | None = None,
+        ssh_key: str | None = None,
+        ssh_options: list[str] | None = None,
+    ):
         self.host = getattr(host, "name", str(host))
         self.ssh_user = ssh_user
         self.ssh_key = ssh_key
         self.ssh_options = ssh_options
-        self.local_port: int | None = None
-        self.tunnel_proc: subprocess.Popen | None = None
 
-    def __enter__(self):
-        import socket
-        import urllib.request
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _pid_file(cls, host: str) -> str:
+        safe = host.replace("/", "_").replace(":", "_")
+        return f"{cls._PID_DIR}/sparkrun-telemetry-{safe}.pid"
+
+    @classmethod
+    def _port_file(cls, host: str) -> str:
+        safe = host.replace("/", "_").replace(":", "_")
+        return f"{cls._PID_DIR}/sparkrun-telemetry-{safe}.port"
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def establish_detached(self) -> int | None:
+        """Establish a daemonized SSH forward tunnel and register with the Fleet Multiplexer.
+
+        Returns the local port that was allocated, or None on failure.
+        The SSH process is detached (its PID is written to a state file) so
+        it continues running after ``sparkrun run`` exits.
+        """
         import json
+        import urllib.request
 
-        # 1. Find an open ephemeral port
+        # 1. Find a free ephemeral port bound to all interfaces so the
+        #    containerised Fleet Multiplexer can reach it via host.docker.internal.
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind(("0.0.0.0", 0))
-            self.local_port = s.getsockname()[1]
+            local_port: int = s.getsockname()[1]
 
-        # 2. Start SSH forward tunnel: ssh -N -L local_port:/var/run/docker.sock host
+        # 2. Build and launch the SSH tunnel as a detached background process.
         cmd = build_ssh_cmd(self.host, self.ssh_user, self.ssh_key, self.ssh_options)
-        cmd.extend(["-N", "-L", f"0.0.0.0:{self.local_port}:/var/run/docker.sock"])
-        
-        logger.info("Establishing telemetry tunnel to %s via local port %d", self.host, self.local_port)
-        self.tunnel_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cmd.extend(["-N", "-L", f"0.0.0.0:{local_port}:/var/run/docker.sock"])
 
-        # Give the tunnel a moment to establish
-        time.sleep(1)
+        logger.info(
+            "Establishing telemetry tunnel to %s on local port %d (daemonized)",
+            self.host,
+            local_port,
+        )
+        tunnel_proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            # Detach from the current process group so the tunnel survives
+            # the parent process exiting.
+            start_new_session=True,
+        )
 
-        # 3. Register with Fleet Multiplexer API
+        # Persist state so sparkrun stop can find and kill the tunnel.
+        with open(self._pid_file(self.host), "w") as f:
+            f.write(str(tunnel_proc.pid))
+        with open(self._port_file(self.host), "w") as f:
+            f.write(str(local_port))
+
+        # Give the tunnel a moment to finish the SSH handshake.
+        time.sleep(1.5)
+
+        # 3. Register the new endpoint with the Fleet Multiplexer API.
+        #    The multiplexer is a Docker container, so it reaches the host-side
+        #    tunnel via host.docker.internal.
+        docker_url = f"tcp://host.docker.internal:{local_port}"
         try:
             req = urllib.request.Request("http://127.0.0.1:8126/api/nodes", method="POST")
             req.add_header("Content-Type", "application/json")
-            # The Fleet Multiplexer runs inside Docker, so it needs to access the host via host.docker.internal
-            data = json.dumps({"host_id": self.host, "docker_url": f"tcp://host.docker.internal:{self.local_port}"}).encode("utf-8")
-            urllib.request.urlopen(req, data=data, timeout=2.0)
-            logger.debug("Successfully registered %s with Fleet Multiplexer", self.host)
+            payload = json.dumps({"host_id": self.host, "docker_url": docker_url}).encode()
+            urllib.request.urlopen(req, data=payload, timeout=3.0)
+            logger.info(
+                "Registered %s with Fleet Multiplexer (docker_url=%s)", self.host, docker_url
+            )
         except Exception as e:
             logger.warning("Failed to register %s with Fleet Multiplexer: %s", self.host, e)
 
-        return self
+        return local_port
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    @classmethod
+    def cleanup(cls, host: str) -> None:
+        """Deregister a node from the Fleet Multiplexer and terminate its SSH tunnel.
+
+        Reads the PID from the state file written by :meth:`establish_detached`.
+        Safe to call even if the tunnel has already been killed.
+        """
         import urllib.request
 
-        # 1. Deregister from Fleet Multiplexer
-        try:
-            req = urllib.request.Request(f"http://127.0.0.1:8126/api/nodes/{self.host}", method="DELETE")
-            urllib.request.urlopen(req, timeout=2.0)
-            logger.debug("Successfully deregistered %s from Fleet Multiplexer", self.host)
-        except Exception as e:
-            logger.debug("Failed to deregister %s from Fleet Multiplexer: %s", self.host, e)
+        host_name = getattr(host, "name", str(host))
 
-        # 2. Kill the SSH tunnel
-        if self.tunnel_proc:
-            logger.info("Tearing down telemetry tunnel to %s", self.host)
-            self.tunnel_proc.terminate()
+        # 1. Deregister from Fleet Multiplexer (best-effort).
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:8126/api/nodes/{host_name}", method="DELETE"
+            )
+            urllib.request.urlopen(req, timeout=2.0)
+            logger.info("Deregistered %s from Fleet Multiplexer", host_name)
+        except Exception as e:
+            logger.debug("Deregister %s skipped: %s", host_name, e)
+
+        # 2. Kill the SSH tunnel process.
+        pid_file = cls._pid_file(host_name)
+        if os.path.exists(pid_file):
             try:
-                self.tunnel_proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                self.tunnel_proc.kill()
+                with open(pid_file) as f:
+                    pid = int(f.read().strip())
+                logger.info("Terminating telemetry tunnel for %s (PID %d)", host_name, pid)
+                os.kill(pid, signal.SIGTERM)
+                time.sleep(0.5)
+                try:
+                    os.kill(pid, 0)  # probe: still alive?
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            except (ValueError, ProcessLookupError, PermissionError) as e:
+                logger.debug("Could not kill tunnel PID for %s: %s", host_name, e)
+            finally:
+                os.remove(pid_file)
+
+        port_file = cls._port_file(host_name)
+        if os.path.exists(port_file):
+            os.remove(port_file)
