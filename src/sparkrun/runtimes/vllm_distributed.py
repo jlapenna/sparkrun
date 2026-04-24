@@ -15,6 +15,7 @@ from sparkrun.runtimes._vllm_common import VllmMixin, VLLM_FLAG_MAP, VLLM_BOOL_F
 
 if TYPE_CHECKING:
     from sparkrun.core.recipe import Recipe
+    from sparkrun.orchestration.comm_env import ClusterCommEnv
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,14 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
                 "--served-model-name",
                 skip_keys,
             )
+            # Augment OTel flags if present in config but missing from rendered command
+            for key in ["otlp_traces_endpoint", "collect_detailed_traces"]:
+                if key in skip_keys:
+                    continue
+                val = config.get(key)
+                if val is not None and VLLM_FLAG_MAP[key] not in rendered:
+                    rendered += f" {VLLM_FLAG_MAP[key]} {val}"
+
             if skip_keys:
                 rendered = self.strip_flags_from_command(
                     rendered,
@@ -102,6 +111,14 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
                 "--served-model-name",
                 skip_keys,
             )
+            # Augment OTel flags if present in config but missing from rendered command
+            for key in ["otlp_traces_endpoint", "collect_detailed_traces"]:
+                if key in skip_keys:
+                    continue
+                val = config.get(key)
+                if val is not None and VLLM_FLAG_MAP[key] not in rendered:
+                    rendered += f" {VLLM_FLAG_MAP[key]} {val}"
+
             if skip_keys:
                 rendered = self.strip_flags_from_command(
                     rendered,
@@ -211,7 +228,7 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
         config=None,
         dry_run: bool = False,
         detached: bool = True,
-        nccl_env: dict[str, str] | None = None,
+        comm_env: "ClusterCommEnv | None" = None,
         init_port: int = 25000,
         skip_keys: set[str] | frozenset[str] = frozenset(),
         **kwargs,
@@ -229,7 +246,7 @@ class VllmDistributedRuntime(VllmMixin, RuntimePlugin):
             config=config,
             dry_run=dry_run,
             detached=detached,
-            nccl_env=nccl_env,
+            comm_env=comm_env,
             init_port=init_port,
             skip_keys=skip_keys,
             banner_title="vLLM Distributed Cluster Launcher",

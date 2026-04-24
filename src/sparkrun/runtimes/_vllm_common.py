@@ -53,6 +53,8 @@ VLLM_FLAG_MAP = {
     "distributed_executor_backend": "--distributed-executor-backend",
     "pipeline_parallel": "-pp",
     "kv_cache_dtype": "--kv-cache-dtype",
+    "otlp_traces_endpoint": "--otlp-traces-endpoint",
+    "collect_detailed_traces": "--collect-detailed-traces",
 }
 
 # Boolean flags (present = True, absent = False)

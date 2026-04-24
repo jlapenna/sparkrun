@@ -6,8 +6,8 @@
     "name": "scitrera.ai",
     "email": "open-source-team@scitrera.com"
   },
-  "homepage": "https://github.com/scitrera/sparkrun",
-  "repository": "https://github.com/scitrera/sparkrun",
+  "homepage": "https://sparkrun.dev",
+  "repository": "https://github.com/spark-arena/sparkrun",
   "license": "Apache-2.0",
   "keywords": [
     "inference",

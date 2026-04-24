@@ -27,6 +27,7 @@ from ._common import (
     recipe_override_options,
     resolve_cluster_config,
     validate_and_prepare_hosts,
+    HIDE_ADVANCED_OPTIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,13 @@ if TYPE_CHECKING:
     help="Benchmark timeout in seconds (default: %d, or from profile)" % DEFAULT_BENCHMARK_TIMEOUT,
 )
 @dry_run_option
+@click.option(
+    "--executor-args",
+    multiple=True,
+    hidden=HIDE_ADVANCED_OPTIONS,
+    help="Arguments passed directly to the container executor (e.g. docker run)",
+)
+@click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def benchmark(
     ctx,
@@ -91,6 +99,8 @@ def benchmark(
     rootful,
     bench_timeout,
     dry_run,
+    executor_args,
+    extra_args,
 ):
     """Benchmark an inference recipe.
 
@@ -138,6 +148,8 @@ def benchmark(
         rootful,
         bench_timeout,
         dry_run,
+        executor_args,
+        extra_args,
     )
 
 
@@ -156,7 +168,7 @@ def _run_benchmark(
     solo,
     port,
     profile,
-    framework_name,
+    framework,
     output_file,
     bench_options,
     exit_on_first_fail,
@@ -166,6 +178,8 @@ def _run_benchmark(
     rootful,
     bench_timeout,
     dry_run,
+    executor_args,
+    extra_args,
     export_results_files=True,
 ):
     """Execute the full benchmark flow: launch inference -> benchmark -> stop.
@@ -215,20 +229,21 @@ def _run_benchmark(
             sys.exit(1)
         bench_spec = BenchmarkSpec.load(profile_path)
         bench_args = dict(bench_spec.args)
-        if not framework_name and bench_spec.framework:
-            framework_name = bench_spec.framework
+        if not framework and bench_spec.framework:
+            framework = bench_spec.framework
     else:
         bench_spec = BenchmarkSpec.from_recipe(recipe)
         if bench_spec:
             bench_args = dict(bench_spec.args)
-            if not framework_name and bench_spec.framework:
-                framework_name = bench_spec.framework
+            if not framework and bench_spec.framework:
+                framework = bench_spec.framework
 
-    if not framework_name:
-        framework_name = "llama-benchy"
+    if not framework:
+        framework = "llama-benchy"
 
     try:
-        fw = get_benchmarking_framework(framework_name, v)
+        fw = get_benchmarking_framework(framework)
+
     except ValueError as e:
         click.echo("Error: %s" % e, err=True)
         sys.exit(1)
@@ -396,11 +411,11 @@ def _run_benchmark(
                 registry_mgr=registry_mgr,
                 auto_port=True,
                 sync_tuning=sync_tuning,
-                skip_keys={"served_model_name"},
                 dry_run=dry_run,
                 detached=True,
                 rootless=not rootful,
                 auto_user=not rootful,
+                extra_docker_opts=list(executor_args) if executor_args else None,
             )
 
             if launch_result.rc != 0 and not dry_run:
@@ -484,6 +499,13 @@ def _run_benchmark(
         est_tests = fw.estimate_test_count(bench_args)
         if est_tests is not None:
             logger.info("Estimated test iterations: %d", est_tests)
+
+        # Pass served_model_name as an argument if defined, satisfying llama-benchy's
+        # requirement to maintain the original huggingface model ID for tokenization.
+        # Check config_chain to capture both CLI overrides and recipe definitions natively.
+        served_model_name = config_chain.get("served_model_name")
+        if served_model_name and "served_model_name" not in bench_args:
+            bench_args["served_model_name"] = served_model_name
 
         bench_cmd = fw.build_benchmark_command(
             target_url=base_url,
