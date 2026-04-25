@@ -163,6 +163,7 @@ class RuntimePlugin(Plugin):
         node_rank: int,
         init_port: int = 25000,
         skip_keys: set[str] | frozenset[str] = frozenset(),
+        hosts: list[str] | None = None,
     ) -> str:
         """Generate the serve command for a specific node in native clustering.
 
@@ -176,6 +177,10 @@ class RuntimePlugin(Plugin):
             node_rank: This node's rank (0 = head).
             init_port: Coordination port for distributed init.
             skip_keys: Config keys to omit from the generated command.
+            hosts: Optional full host list (ordered by rank).  Runtimes that
+                support hybrid tp+dp rank math (e.g. vLLM) use this to
+                compute per-replica master addresses.  Ignored by runtimes
+                without that support.
 
         Returns:
             The full command string for this node.
@@ -288,7 +293,7 @@ class RuntimePlugin(Plugin):
         """Compute the number of nodes required to run this recipe.
 
         On DGX Spark (1 GPU per node), the total node count is the
-        product of tensor and pipeline parallelism: ``tp * pp``.
+        product of tensor, pipeline, and data parallelism: ``tp * pp * dp``.
 
         Args:
             recipe: The loaded recipe.
@@ -304,10 +309,11 @@ class RuntimePlugin(Plugin):
         # Check raw values first — return None when nothing is configured
         tp_val = config.get("tensor_parallel")
         pp_val = config.get("pipeline_parallel")
-        if tp_val is None and pp_val is None:
+        dp_val = config.get("data_parallel")
+        if tp_val is None and pp_val is None and dp_val is None:
             return None
         p = extract_parallelism(config)
-        return p.total_gpus
+        return p.total_nodes
 
     @staticmethod
     def _augment_served_model_name(

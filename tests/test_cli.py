@@ -1880,6 +1880,38 @@ class TestTensorParallelValidation:
             call_kwargs = mock_run.call_args.kwargs
             assert len(call_kwargs["hosts"]) == 2
 
+    def test_dp_override_scales_required_nodes(self, runner, reset_bootstrap):
+        """--dp 2 with a tp=1 recipe requires 2 hosts (tp*pp*dp)."""
+        with mock.patch.object(SglangRuntime, "run", return_value=0) as mock_run:
+            result = runner.invoke(
+                main,
+                [
+                    "run",
+                    _TEST_RECIPE_NAME,
+                    "--tp",
+                    "1",
+                    "--dp",
+                    "2",
+                    "--dry-run",
+                    "--hosts",
+                    "10.0.0.1,10.0.0.2,10.0.0.3",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "2 nodes required" in result.output
+            assert "using 2 of 3 hosts" in result.output
+            mock_run.assert_called_once()
+            call_kwargs = mock_run.call_args.kwargs
+            assert len(call_kwargs["hosts"]) == 2
+
+    def test_dp_hidden_from_help(self, runner, reset_bootstrap):
+        """`sparkrun run --help` must not expose --dp (hidden advanced flag)."""
+        result = runner.invoke(main, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--data-parallel" not in result.output
+        assert "--dp " not in result.output
+
     def test_tp_trims_to_one_becomes_solo(self, runner, reset_bootstrap):
         """tensor_parallel=1 with multiple hosts should trim to 1 host and run solo."""
         with mock.patch.object(SglangRuntime, "run", return_value=0) as mock_run:

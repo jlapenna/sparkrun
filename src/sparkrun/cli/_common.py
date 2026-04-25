@@ -803,21 +803,43 @@ def host_options(f):
 
 
 def recipe_override_options(f):
-    """Common recipe override options: --tp, --pp, --gpu-mem, --max-model-len, --option/-o, --image."""
+    """Common recipe override options: --tp, --pp, --gpu-mem, --max-model-len, --option/-o, --image.
+
+    ``--dp`` / ``--data-parallel`` is registered but hidden — DP recipes are
+    unusual and the flag is primarily for advanced users / tests; novice
+    users should drive DP via recipe defaults.
+    """
     f = click.option("--option", "-o", "options", multiple=True, help="Override any recipe default: -o key=value (repeatable)")(f)
     f = click.option("--image", default=None, help="Override container image")(f)
     f = click.option("--max-model-len", type=int, default=None, help="Override maximum model context length")(f)
     f = click.option(
         "--gpu-mem", "--gpu-memory-utilization", "--mem-fraction-static", type=float, default=None, help="Override GPU memory utilization"
     )(f)
+    f = click.option(
+        "--dp",
+        "--data-parallel",
+        "data_parallel",
+        type=int,
+        default=None,
+        hidden=True,
+        help="Override data parallelism (advanced)",
+    )(f)
     f = click.option("--pp", "--pipeline-parallel", "pipeline_parallel", type=int, default=None, help="Override pipeline parallelism")(f)
     f = click.option("--tp", "--tensor-parallel", "tensor_parallel", type=int, default=None, help="Override tensor parallelism")(f)
-    # TODO: add options for expert parallel and data parallel and context parallel ??? and runtime arg validation
+    # TODO: add options for expert parallel and context parallel ??? and runtime arg validation
     return f
 
 
 def _apply_recipe_overrides(
-    options, tensor_parallel=None, pipeline_parallel=None, gpu_mem=None, max_model_len=None, image=None, recipe=None, **kwargs
+    options,
+    tensor_parallel=None,
+    pipeline_parallel=None,
+    data_parallel=None,
+    gpu_mem=None,
+    max_model_len=None,
+    image=None,
+    recipe=None,
+    **kwargs,
 ):
     """Build overrides dict, apply to recipe, and resolve runtime.
 
@@ -834,6 +856,8 @@ def _apply_recipe_overrides(
         overrides["tensor_parallel"] = tensor_parallel
     if pipeline_parallel is not None:
         overrides["pipeline_parallel"] = pipeline_parallel
+    if data_parallel is not None:
+        overrides["data_parallel"] = data_parallel
     if gpu_mem is not None:
         overrides["gpu_memory_utilization"] = gpu_mem
     if max_model_len is not None:
@@ -925,6 +949,7 @@ def build_cluster_id_overrides(
     served_model_name: str | None = None,
     tp_override: int | None = None,
     pp_override: int | None = None,
+    dp_override: int | None = None,
 ) -> dict | None:
     """Build overrides dict for cluster_id generation from CLI flags.
 
@@ -939,6 +964,8 @@ def build_cluster_id_overrides(
         overrides["tensor_parallel"] = tp_override
     if pp_override is not None:
         overrides["pipeline_parallel"] = pp_override
+    if dp_override is not None:
+        overrides["data_parallel"] = dp_override
     return overrides or None
 
 
