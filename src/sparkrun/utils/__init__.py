@@ -108,10 +108,17 @@ def merge_env(*env_dicts: dict[str, str] | None) -> dict[str, str]:
 
 
 def extract_env_overrides(overrides: dict[str, Any] | None) -> dict[str, str]:
-    """Extract env.* items from overrides into a plain env dict."""
+    """Extract env.* items or an "env" map from overrides into a plain env dict."""
     env: dict[str, str] = {}
     if not overrides:
         return env
+
+    # Support nested "env" map: { "env": { "KEY": "VAL" } }
+    if "env" in overrides and isinstance(overrides["env"], dict):
+        for key, value in overrides["env"].items():
+            env[str(key)] = str(value)
+
+    # Support prefixed keys: { "env.KEY": "VAL" }
     for key, value in overrides.items():
         if key.startswith("env."):
             var_name = key[4:]
