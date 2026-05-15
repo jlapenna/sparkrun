@@ -267,6 +267,9 @@ def _resume_benchmark_run(ctx, benchmark_id: str, dry_run: bool, *, sctx=None):
     recipe_name = state.recipe_qualified_name
     try:
         recipe, _recipe_path, _registry_mgr = _load_recipe(config, recipe_name, resolve=False)
+        if recipe is None:
+            click.echo("Error: could not reload recipe %r: returned None" % recipe_name, err=True)
+            sys.exit(1)
     except Exception as e:
         click.echo("Error: could not reload recipe %r: %s" % (recipe_name, e), err=True)
         sys.exit(1)
@@ -502,6 +505,9 @@ def _run_benchmark(
     # 1. Load recipe
     # ---------------------------------------------------------------
     recipe, _recipe_path, registry_mgr = _load_recipe(config, recipe_name, resolve=False)
+    if recipe is None:
+        click.echo("Error: could not load recipe %r" % recipe_name, err=True)
+        sys.exit(1)
 
     _resolved_name = _expand_recipe_shortcut(recipe_name)
     recipe_ref = _simplify_recipe_ref(_resolved_name) if _is_recipe_url(_resolved_name) else None
@@ -638,6 +644,7 @@ def _run_benchmark(
     local_cache_dir, remote_cache_dir, effective_transfer_mode, effective_transfer_interface = cluster_cfg.resolve_transfer_config(config)
 
     # For --skip-run, resolve port without auto-increment (server already listening)
+    serve_port = 8000
     if skip_run:
         config_chain = recipe.build_config_chain(overrides)
         serve_port = int(config_chain.get("port") or 8000)
@@ -712,6 +719,10 @@ def _run_benchmark(
     # ---------------------------------------------------------------
     cache_dir = str(config.cache_dir) if config else None
     tasks = fw.build_task_list(bench_args, bench_spec.schedule if bench_spec else None)
+
+    benchmark_id = ""
+    state_dir = None
+    state = None
 
     if tasks is not None:
         from sparkrun.benchmarking.run_state import BenchmarkRunState, derive_benchmark_id
@@ -903,6 +914,7 @@ def _run_benchmark(
 
         stdout_text = ""
         stderr_text = ""
+        result_file_for_parse = result_file
 
         if tasks is not None:
             # -----------------------------------------------------------
@@ -983,6 +995,7 @@ def _run_benchmark(
                 click.echo("--- benchmark output ---")
                 bench_start = time.monotonic()
                 bench_result.start_time = datetime.now(tz=timezone.utc)
+                proc = None
                 try:
                     import os
 
@@ -1026,7 +1039,8 @@ def _run_benchmark(
                     else:
                         click.echo("Benchmark completed successfully (%.0fs elapsed)." % elapsed)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
+                    if proc:
+                        proc.kill()
                     click.echo("Error: benchmark timed out after %d seconds" % effective_timeout, err=True)
                     stdout_text = ""
                     stderr_text = ""
