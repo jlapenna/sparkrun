@@ -30,12 +30,12 @@ class VllmMixin:
         """Set VLLM_TUNED_CONFIG_FOLDER if tuning configs exist."""
         from sparkrun.tuning.vllm import get_vllm_tuning_env
 
-        env = super().get_extra_env()
+        env = super().get_extra_env()  # pyright: ignore[reportAttributeAccessIssue]
         env.update(get_vllm_tuning_env() or {})
         return env
 
     def version_commands(self) -> dict[str, str]:
-        cmds = super().version_commands()
+        cmds = super().version_commands()  # pyright: ignore[reportAttributeAccessIssue]
         cmds["vllm"] = "python3 -c 'import vllm; print(vllm.__version__)' 2>/dev/null || echo unknown"
         return cmds
 
@@ -43,9 +43,22 @@ class VllmMixin:
         try:
             # TODO: support various ways that speculative config can be specified
             # noinspection PyProtectedMember
-            spec_cfg = recipe._effective_default("speculative_config")
+            spec_cfg = recipe._effective_default("speculative_config") or recipe._effective_default("speculative_config_json")
+            if not spec_cfg:
+                return None
             spec_cfg_dict = json.loads(spec_cfg)
-            if spec_cfg_dict["method"] == "dflash":
+            supported_methods = {
+                "dflash",
+                "eagle",
+                "eagle3",
+                "deepseek_mtp",
+                "mimo_mtp",
+                "mimo_v2_mtp",
+                "glm4_moe_mtp",
+                "glm4_moe_lite_mtp",
+                "mtp",
+            }
+            if spec_cfg_dict.get("method") in supported_methods:
                 return spec_cfg_dict.get("model", None)
         except Exception:
             return None
@@ -72,6 +85,7 @@ VLLM_FLAG_MAP = {
     "kv_cache_dtype": "--kv-cache-dtype",
     "otlp_traces_endpoint": "--otlp-traces-endpoint",
     "collect_detailed_traces": "--collect-detailed-traces",
+    "speculative_config": "--speculative-config",
 }
 
 # Boolean flags (present = True, absent = False)
